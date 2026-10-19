@@ -23,11 +23,6 @@ public interface FileStorage {
     InputStream get(String key);
 
     /**
-     * 是否为可选的签名直链存储（对象存储返回 true）。
-     */
-    default boolean presigned() { return false; }
-
-    /**
      * 删除文件；文件不存在时视为成功。
      */
     void delete(String key);

@@ -47,16 +47,11 @@ public class AttachmentController {
         AttachmentService.AttachmentFile file = service.download(id);
         Map<String, Object> row = file.row();
         String name = String.valueOf(row.get("originalName"));
-        String contentType = row.get("contentType") == null ? null : row.get("contentType").toString();
+        String stored = row.get("contentType") == null ? null : row.get("contentType").toString();
         long size = ((Number) row.get("sizeBytes")).longValue();
-        boolean inline = contentType != null
-                && (contentType.startsWith("image/") || "application/pdf".equals(contentType) || contentType.startsWith("text/"));
-        MediaType mediaType;
-        try {
-            mediaType = contentType == null ? MediaType.APPLICATION_OCTET_STREAM : MediaType.parseMediaType(contentType);
-        } catch (Exception ex) {
-            mediaType = MediaType.APPLICATION_OCTET_STREAM;
-        }
+        // 只有图片与 PDF 内联展示，其余一律强制下载，且媒体类型以服务端推导值为准
+        boolean inline = MediaTypes.inlineAllowed(stored);
+        MediaType mediaType = inline ? MediaType.parseMediaType(stored) : MediaType.APPLICATION_OCTET_STREAM;
         String encoded = URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20");
         String asciiName = name.replaceAll("[^\\x20-\\x7E]", "_").replace("\"", "_");
         return ResponseEntity.ok()
@@ -64,6 +59,8 @@ public class AttachmentController {
                 .contentLength(size)
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         (inline ? "inline" : "attachment") + "; filename=\"" + asciiName + "\"; filename*=UTF-8''" + encoded)
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+                .header("X-Content-Type-Options", "nosniff")
                 .body(new InputStreamResource(file.stream()));
     }
 

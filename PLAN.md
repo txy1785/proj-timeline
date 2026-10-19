@@ -159,3 +159,15 @@ Playwright 覆盖匿名跳转、管理员账号页、PM、成员、VIEWER 项目
 - 部署：`deploy/nginx.conf` 增 `client_max_body_size 60m` 与 `proxy_request_buffering off`；Compose 新增 `file-data` 卷挂 `/app/data/files`；后端镜像预建该目录并 chown 给 `timeline` 用户；`.gitignore` 忽略本地 `data/`。
 - 验证：后端 `mvn test` 9 个用例通过；前端 `lint`、`typecheck`、`build` 通过。未验证：真实 MySQL 上 V4 迁移与上传下载全链路（需可用的本机库），Docker 构建仍需目标机执行。
 
+### 独立审核后的修复（同日）
+
+- 审核结论：有条件通过；阻塞项是下载接口的同源存储型 XSS——`content_type` 直接取客户端 multipart 声明，且 `inline` 判定覆盖 `text/*` 与全部 `image/*`，低权限账号可上传声明为 `text/html` 的文件诱导管理员打开。
+- 修复：新增 `MediaTypes` 由服务端按扩展名推导类型；仅 pdf/png/jpg/jpeg/gif/webp 内联，其余强制 `attachment` + `octet-stream`；下载响应补 `X-Content-Type-Options: nosniff`、`Cache-Control: private, no-store`；Nginx 全站补 nosniff 与 `X-Frame-Options`。
+- 修复：上传失败清理只包住 `db.insert`，清理异常记录日志而不掩盖原始异常；`put` 按实际写入字节数校验，不符即删除并返回 4000。
+- 修复：`V4` 补 `uk_attachment_version` 唯一键、`uploader_id` 外键与 `SET NAMES`，缓解并发同名上传的版本竞态。
+- 修复：删除模块时同步软删除其模块级文档（原先留下不可见却可按 id 下载的孤儿附件）；删除权限与上传口径统一为「上传者本人或对应管理者」。
+- 修复：`BusinessException.internal()` 工厂替代直接构造；前端删除按钮按行判断上传者、`download()` 延迟释放 blob URL、错误提示解析 blob 中的 JSON、上传前预检 50MB、只读场景不再拉分类字典。
+- 新增单测 `LocalDiskStorageTest` / `MediaTypesTest` / `StoragePropertiesTest`，后端用例 9 → 17。
+- 端到端复验：独立测试库 `proj_timeline_upload_test` 跑通 V1–V4 迁移、上传、版本递增、列表、下载内容一致、模块级上传、未知分类与非法 ownerType 拒绝、软删除清空列表，以及 VIEWER 可读不可写、非成员不可读、无 token 401，共 16 项用例全通过；验证后已删除测试库与临时文件，未触碰开发库。
+
+

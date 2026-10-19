@@ -3,10 +3,12 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadFile } from 'element-plus'
 import { api, download, upload } from '../api/client'
-import type { Attachment, AttachmentCategory } from '../api/types'
+import type { Attachment, AttachmentCategory, AttachmentOwnerType } from '../api/types'
+import { useAuthStore } from '../stores/auth'
 
+const auth = useAuthStore()
 const props = withDefaults(defineProps<{
-  ownerType: 'PROJECT' | 'MODULE'
+  ownerType: AttachmentOwnerType
   ownerId: number
   canManage: boolean
   archived?: boolean
@@ -28,16 +30,26 @@ const groupCategories = (group: string) => ownCategories.value.filter(item => it
 const visibleFiles = computed(() => activeCode.value ? files.value.filter(item => item.category === activeCode.value) : files.value)
 const canUpload = computed(() => props.canManage && !props.archived)
 const activeName = computed(() => ownCategories.value.find(item => item.code === activeCode.value)?.name || '全部文件')
+const canDeleteRow = (row: Attachment) => canUpload.value && (props.canManage || row.uploaderId === auth.user?.id)
+const MAX_BYTES = 50 * 1024 * 1024
 
 async function load() {
   loading.value = true
   try {
-    if (!categories.value.length) categories.value = await api<AttachmentCategory[]>('GET', '/attachments/categories')
     files.value = await api<Attachment[]>('GET', '/attachments', undefined, { ownerType: props.ownerType, ownerId: props.ownerId })
   } catch (error) {
     ElMessage.error((error as Error).message)
   } finally {
     loading.value = false
+  }
+}
+
+async function loadCategories() {
+  if (categories.value.length) return
+  try {
+    categories.value = await api<AttachmentCategory[]>('GET', '/attachments/categories')
+  } catch (error) {
+    ElMessage.error((error as Error).message)
   }
 }
 
@@ -58,6 +70,7 @@ function onPick(file: UploadFile) {
 async function submit() {
   if (!form.code) { ElMessage.warning('请选择文档分类'); return }
   if (!form.raw) { ElMessage.warning('请选择要上传的文件'); return }
+  if (form.raw.size > MAX_BYTES) { ElMessage.warning('单个文件不能超过 50MB'); return }
   const body = new FormData()
   body.append('ownerType', props.ownerType)
   body.append('ownerId', String(props.ownerId))
@@ -88,7 +101,7 @@ async function save(row: Attachment) {
 
 async function remove(row: Attachment) {
   try {
-    await ElMessageBox.confirm(`确定删除「${row.title}」？记录会保留在痕迹中。`, '删除文件', { type: 'warning' })
+    await ElMessageBox.confirm(`确定删除「${row.title}」？删除后不再显示在列表中。`, '删除文件', { type: 'warning' })
   } catch { return }
   try {
     await api<void>('DELETE', `/attachments/${row.id}`)
@@ -105,7 +118,10 @@ function size(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  if (props.showCategoryNav || props.canManage) void loadCategories()
+})
 </script>
 
 <template>
@@ -149,7 +165,7 @@ onMounted(load)
           <el-table-column label="操作" width="130">
             <template #default="scope">
               <el-button link type="primary" @click="save(scope.row)">下载</el-button>
-              <el-button v-if="canUpload" link type="danger" @click="remove(scope.row)">删除</el-button>
+              <el-button v-if="canDeleteRow(scope.row)" link type="danger" @click="remove(scope.row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>

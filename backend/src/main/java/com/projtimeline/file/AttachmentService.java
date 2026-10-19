@@ -6,6 +6,8 @@ import com.projtimeline.security.CurrentUser;
 import com.projtimeline.security.PermissionService;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,6 +28,7 @@ import java.util.Map;
  */
 @Service
 public class AttachmentService {
+    private static final Logger log = LoggerFactory.getLogger(AttachmentService.class);
     private static final String LIST_SQL = """
             SELECT a.id, a.project_id, a.owner_type, a.owner_id, a.category, a.title, a.original_name,
                    a.content_type, a.size_bytes, a.sha256, a.version, a.remark, a.uploader_id,
@@ -78,6 +81,8 @@ public class AttachmentService {
         if (target == null) throw BusinessException.badRequest("未知的文档分类：" + category);
         String docTitle = title == null || title.isBlank() ? originalName : title.trim();
         if (docTitle.length() > 200) throw BusinessException.badRequest("文件标题不能超过 200 字");
+        String note = remark == null || remark.isBlank() ? null : remark.trim();
+        if (note != null && note.length() > 500) throw BusinessException.badRequest("说明不能超过 500 字");
 
         MessageDigest digest;
         try {
@@ -91,36 +96,41 @@ public class AttachmentService {
         } catch (IOException ex) {
             throw BusinessException.badRequest("文件读取失败");
         }
+        long previous = db.count("""
+                SELECT COALESCE(MAX(version),0) FROM attachments
+                WHERE owner_type=:type AND owner_id=:owner AND title=:title AND deleted=0
+                """, Map.of("type", type, "owner", ownerId, "title", docTitle));
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("project", projectId);
+        params.put("type", type);
+        params.put("owner", ownerId);
+        params.put("category", category);
+        params.put("title", docTitle);
+        params.put("originalName", originalName);
+        params.put("storedKey", storedKey);
+        params.put("contentType", MediaTypes.of(extension));
+        params.put("size", file.getSize());
+        params.put("sha", HexFormat.of().formatHex(digest.digest()));
+        params.put("version", previous + 1);
+        params.put("remark", note);
+        params.put("uploader", permissions.current().id());
+        long id;
         try {
-            long previous = db.count("""
-                    SELECT COALESCE(MAX(version),0) FROM attachments
-                    WHERE owner_type=:type AND owner_id=:owner AND title=:title AND deleted=0
-                    """, Map.of("type", type, "owner", ownerId, "title", docTitle));
-            Map<String, Object> params = new LinkedHashMap<>();
-            params.put("project", projectId);
-            params.put("type", type);
-            params.put("owner", ownerId);
-            params.put("category", category);
-            params.put("title", docTitle);
-            params.put("originalName", originalName);
-            params.put("storedKey", storedKey);
-            params.put("contentType", file.getContentType());
-            params.put("size", file.getSize());
-            params.put("sha", HexFormat.of().formatHex(digest.digest()));
-            params.put("version", previous + 1);
-            params.put("remark", remark == null || remark.isBlank() ? null : remark.trim());
-            params.put("uploader", permissions.current().id());
-            long id = db.insert("""
+            id = db.insert("""
                     INSERT INTO attachments(project_id,owner_type,owner_id,category,title,original_name,stored_key,
                                             content_type,size_bytes,sha256,version,remark,uploader_id,deleted)
                     VALUES(:project,:type,:owner,:category,:title,:originalName,:storedKey,
                            :contentType,:size,:sha,:version,:remark,:uploader,0)
                     """, params);
-            return decorate(List.of(db.one(LIST_SQL + " WHERE a.id=:id", Map.of("id", id), "附件不存在"))).get(0);
         } catch (RuntimeException ex) {
-            storage.delete(storedKey);
+            try {
+                storage.delete(storedKey);
+            } catch (RuntimeException cleanupFailure) {
+                log.warn("Upload rollback failed for key {}: {}", storedKey, cleanupFailure.getMessage());
+            }
             throw ex;
         }
+        return decorate(List.of(db.one(LIST_SQL + " WHERE a.id=:id", Map.of("id", id), "附件不存在"))).get(0);
     }
 
     public AttachmentFile download(long id) {
@@ -136,9 +146,15 @@ public class AttachmentService {
         long projectId = PermissionService.number(row.get("projectId"));
         permissions.requireProjectActive(projectId);
         CurrentUser user = permissions.current();
-        boolean uploader = PermissionService.number(row.get("uploaderId")) == user.id();
-        if (!user.isAdmin() && !permissions.isPm(projectId) && !uploader) {
-            throw BusinessException.forbidden("只有上传者或项目经理可以删除");
+        if (PermissionService.number(row.get("uploaderId")) == user.id()) {
+            db.update("UPDATE attachments SET deleted=1 WHERE id=:id", Map.of("id", id));
+            return;
+        }
+        // 与上传口径一致：模块文档由模块负责人管理，项目文档由项目经理管理
+        if (DocumentCatalog.OWNER_MODULE.equals(String.valueOf(row.get("ownerType")))) {
+            permissions.requireModuleManager(PermissionService.number(row.get("ownerId")));
+        } else if (!user.isAdmin()) {
+            permissions.requireProjectManager(projectId);
         }
         db.update("UPDATE attachments SET deleted=1 WHERE id=:id", Map.of("id", id));
     }

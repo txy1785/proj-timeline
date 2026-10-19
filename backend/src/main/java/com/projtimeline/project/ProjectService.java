@@ -178,6 +178,8 @@ public class ProjectService {
         Map<String, Object> module = db.one("SELECT id,project_id FROM modules WHERE id=:id", Map.of("id", id), "模块不存在");
         permissions.requireProjectManager(number(module.get("projectId")));
         if (db.count("SELECT COUNT(*) FROM nodes WHERE module_id=:id", Map.of("id", id)) > 0) throw BusinessException.conflict("含节点的模块不能删除");
+        // 模块文档随之软删除，避免不可见却仍可按 id 下载的孤儿附件
+        db.update("UPDATE attachments SET deleted=1 WHERE owner_type='MODULE' AND owner_id=:id", Map.of("id", id));
         db.update("DELETE FROM modules WHERE id=:id", Map.of("id", id));
     }
 

@@ -1,7 +1,6 @@
 package com.projtimeline.file;
 
 import com.projtimeline.common.BusinessException;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -39,13 +38,17 @@ public class LocalDiskStorage implements FileStorage {
                 today.getYear(), today.getMonthValue(), UUID.randomUUID(),
                 extension == null || extension.isBlank() ? "" : "." + extension.toLowerCase(Locale.ROOT));
         Path target = resolve(relative);
+        long written;
         try {
             Files.createDirectories(target.getParent());
-            Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+            written = Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException ex) {
-            throw new BusinessException(5000, HttpStatus.INTERNAL_SERVER_ERROR, "文件写入失败");
+            throw BusinessException.internal("文件写入失败");
         }
-        if (size > 0 && !Files.exists(target)) throw new BusinessException(5000, HttpStatus.INTERNAL_SERVER_ERROR, "文件写入失败");
+        if (size > 0 && written != size) {
+            try { Files.deleteIfExists(target); } catch (IOException ignored) { /* 磁盘异常交由运维清理 */ }
+            throw BusinessException.badRequest("文件写入不完整，请重试");
+        }
         return relative;
     }
 
@@ -56,7 +59,7 @@ public class LocalDiskStorage implements FileStorage {
         try {
             return Files.newInputStream(target);
         } catch (IOException ex) {
-            throw new BusinessException(5000, HttpStatus.INTERNAL_SERVER_ERROR, "文件读取失败");
+            throw BusinessException.internal("文件读取失败");
         }
     }
 
@@ -65,14 +68,14 @@ public class LocalDiskStorage implements FileStorage {
         try {
             Files.deleteIfExists(resolve(key));
         } catch (IOException ex) {
-            throw new BusinessException(5000, HttpStatus.INTERNAL_SERVER_ERROR, "文件删除失败");
+            throw BusinessException.internal("文件删除失败");
         }
     }
 
     private Path resolve(String key) {
         if (key == null || key.isBlank()) throw BusinessException.badRequest("文件 key 不能为空");
         Path target = root.resolve(key).normalize();
-        if (!target.startsWith(root)) throw BusinessException.badRequest("非法的文件路径");
+        if (!target.startsWith(root) || target.equals(root)) throw BusinessException.badRequest("非法的文件路径");
         return target;
     }
 }

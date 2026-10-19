@@ -65,10 +65,6 @@ public final class DocumentCatalog {
 
     public static List<Category> all() { return CATEGORIES; }
 
-    public static List<Category> of(String ownerType) {
-        return CATEGORIES.stream().filter(item -> item.ownerType().equals(ownerType)).toList();
-    }
-
     public static Category find(String ownerType, String code) {
         return CATEGORIES.stream()
                 .filter(item -> item.ownerType().equals(ownerType) && item.code().equals(code))
