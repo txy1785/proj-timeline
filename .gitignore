@@ -28,4 +28,5 @@ tmp/
 
 # 本地上传目录（app.storage.root 默认值）
 /data/
+/backend/data/
 

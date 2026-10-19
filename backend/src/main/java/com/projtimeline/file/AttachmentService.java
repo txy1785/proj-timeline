@@ -4,6 +4,7 @@ import com.projtimeline.common.BusinessException;
 import com.projtimeline.data.DataAccess;
 import com.projtimeline.security.CurrentUser;
 import com.projtimeline.security.PermissionService;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.slf4j.Logger;
@@ -96,26 +97,27 @@ public class AttachmentService {
         } catch (IOException ex) {
             throw BusinessException.badRequest("文件读取失败");
         }
-        long previous = db.count("""
-                SELECT COALESCE(MAX(version),0) FROM attachments
-                WHERE owner_type=:type AND owner_id=:owner AND title=:title AND deleted=0
-                """, Map.of("type", type, "owner", ownerId, "title", docTitle));
-        Map<String, Object> params = new LinkedHashMap<>();
-        params.put("project", projectId);
-        params.put("type", type);
-        params.put("owner", ownerId);
-        params.put("category", category);
-        params.put("title", docTitle);
-        params.put("originalName", originalName);
-        params.put("storedKey", storedKey);
-        params.put("contentType", MediaTypes.of(extension));
-        params.put("size", file.getSize());
-        params.put("sha", HexFormat.of().formatHex(digest.digest()));
-        params.put("version", previous + 1);
-        params.put("remark", note);
-        params.put("uploader", permissions.current().id());
         long id;
         try {
+            // 版本号对已软删除的记录同样占位、不复用，避免与唯一键 uk_attachment_version 冲突
+            long previous = db.count("""
+                    SELECT COALESCE(MAX(version),0) FROM attachments
+                    WHERE owner_type=:type AND owner_id=:owner AND title=:title
+                    """, Map.of("type", type, "owner", ownerId, "title", docTitle));
+            Map<String, Object> params = new LinkedHashMap<>();
+            params.put("project", projectId);
+            params.put("type", type);
+            params.put("owner", ownerId);
+            params.put("category", category);
+            params.put("title", docTitle);
+            params.put("originalName", originalName);
+            params.put("storedKey", storedKey);
+            params.put("contentType", MediaTypes.of(extension));
+            params.put("size", file.getSize());
+            params.put("sha", HexFormat.of().formatHex(digest.digest()));
+            params.put("version", previous + 1);
+            params.put("remark", note);
+            params.put("uploader", permissions.current().id());
             id = db.insert("""
                     INSERT INTO attachments(project_id,owner_type,owner_id,category,title,original_name,stored_key,
                                             content_type,size_bytes,sha256,version,remark,uploader_id,deleted)
@@ -127,6 +129,9 @@ public class AttachmentService {
                 storage.delete(storedKey);
             } catch (RuntimeException cleanupFailure) {
                 log.warn("Upload rollback failed for key {}: {}", storedKey, cleanupFailure.getMessage());
+            }
+            if (ex instanceof DataIntegrityViolationException) {
+                throw BusinessException.conflict("同名文件正在上传，请稍后重试");
             }
             throw ex;
         }

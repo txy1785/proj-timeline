@@ -43,6 +43,7 @@ public class LocalDiskStorage implements FileStorage {
             Files.createDirectories(target.getParent());
             written = Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException ex) {
+            try { Files.deleteIfExists(target); } catch (IOException ignored) { /* 交由运维清理残片 */ }
             throw BusinessException.internal("文件写入失败");
         }
         if (size > 0 && written != size) {
