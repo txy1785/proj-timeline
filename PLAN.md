@@ -136,6 +136,7 @@ Playwright 覆盖匿名跳转、管理员账号页、PM、成员、VIEWER 项目
 
 - 定义分支模型：`master` 版本上线；`develop` 开发主线；`feature/<描述>` 功能分支从 `develop` 拉出；`fix/` 用于紧急修复。文档/规范类变更可直接提交 `develop`，功能代码必须走 `feature/` 分支。
 - 本地 `main` 更名为 `master`，新建 `develop` 并推送；远程因 `main` 仍为 GitHub 默认分支而拒绝删除，待默认分支切换为 `master` 后删除。
+- 远程 `main` 清理完成：通过 GitHub API 将默认分支切换为 `master` 后删除 `main`；当前远程仅 `master`（`ce5233c`）与 `develop`（`0a5d11d`）。
 - `AGENTS.md` 新增「Git 分支与提交流程」：PR 由管理者在 GitHub 创建（base `develop`）；提交者 AI 必须用独立会话/子代理（review 模式）审核，含 6 项审核清单，通过后合并 `develop`；发布从 `develop` 合并 `master` 并打 `vX.Y.Z` tag。
 - `README.md` 增加分支协作说明；`PROJECT_MEMORY.md` 更新分支模型。
 - 本次只做分支与规则文档变更，未改业务代码；未重新执行构建或测试。
