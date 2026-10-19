@@ -16,6 +16,7 @@ const router = createRouter({
     { path: '/notifications', component: () => import('./views/NotificationsView.vue') },
     { path: '/projects/:id/reports', component: () => import('./views/WeeklyReportView.vue') },
     { path: '/projects/:id/settings', component: () => import('./views/ProjectSettingsView.vue') },
+    { path: '/projects/:id/docs', component: () => import('./views/ProjectDocsView.vue') },
     { path: '/admin/users', component: () => import('./views/AdminUsersView.vue'), meta: { admin: true } },
     { path: '/:pathMatch(.*)*', redirect: '/projects' }
   ]

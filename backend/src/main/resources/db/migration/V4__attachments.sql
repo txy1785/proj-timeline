@@ -1,0 +1,22 @@
+CREATE TABLE attachments (
+  id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  project_id    BIGINT UNSIGNED NOT NULL,
+  owner_type    VARCHAR(16) NOT NULL,
+  owner_id      BIGINT UNSIGNED NOT NULL,
+  category      VARCHAR(40) NOT NULL,
+  title         VARCHAR(200) NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  stored_key    VARCHAR(255) NOT NULL,
+  content_type  VARCHAR(160) NULL,
+  size_bytes    BIGINT NOT NULL DEFAULT 0,
+  sha256        CHAR(64) NULL,
+  version       INT NOT NULL DEFAULT 1,
+  remark        VARCHAR(500) NULL,
+  uploader_id   BIGINT UNSIGNED NOT NULL,
+  deleted       TINYINT(1) NOT NULL DEFAULT 0,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_attachment_owner (owner_type, owner_id, category),
+  KEY idx_attachment_project (project_id, created_at),
+  CONSTRAINT fk_attachment_project FOREIGN KEY (project_id) REFERENCES projects(id)
+) ENGINE=InnoDB COMMENT='项目与模块的文档、附件';
