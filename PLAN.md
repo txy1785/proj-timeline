@@ -131,3 +131,11 @@ Playwright 覆盖匿名跳转、管理员账号页、PM、成员、VIEWER 项目
 - `AGENTS.md` 新增「复用库与防重复编码」规则：写码前先查；新建可复用项必须登记；修改同步更新；废弃标注替代方案；禁止复制粘贴平行实现。
 - `README.md` 增加复用库入口。
 - 本次只新增文档与规则，未修改代码；未重新执行构建或测试。
+
+## Git 分支与提交流程（2026-10-19）
+
+- 定义分支模型：`master` 版本上线；`develop` 开发主线；`feature/<描述>` 功能分支从 `develop` 拉出；`fix/` 用于紧急修复。文档/规范类变更可直接提交 `develop`，功能代码必须走 `feature/` 分支。
+- 本地 `main` 更名为 `master`，新建 `develop` 并推送；远程因 `main` 仍为 GitHub 默认分支而拒绝删除，待默认分支切换为 `master` 后删除。
+- `AGENTS.md` 新增「Git 分支与提交流程」：PR 由管理者在 GitHub 创建（base `develop`）；提交者 AI 必须用独立会话/子代理（review 模式）审核，含 6 项审核清单，通过后合并 `develop`；发布从 `develop` 合并 `master` 并打 `vX.Y.Z` tag。
+- `README.md` 增加分支协作说明；`PROJECT_MEMORY.md` 更新分支模型。
+- 本次只做分支与规则文档变更，未改业务代码；未重新执行构建或测试。

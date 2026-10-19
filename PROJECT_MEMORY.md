@@ -49,5 +49,5 @@
 - 基本检查：`mvn -gs .mvn/settings.xml -s .mvn/settings.xml -f backend/pom.xml test`；`npm --prefix frontend run lint`、`typecheck`、`build`。浏览器路径测试在 `frontend/tests/roles.spec.ts`。
 - `PLAN.md` 中早期“47 个接口”“11 个页面”“10/11 张表”是当时版本的验证快照。当前接口为 50 个，页面已新增模块工作页；不能把早期数字当成现状。
 - 当前工作站此前未运行 Docker Compose 的真实构建；部署仍需在具备 Docker 的目标环境验证。
-- Git 仓库已有首个提交 `6557ca6`（98 个文件），已推送到 `origin`（https://github.com/txy1785/proj-timeline.git，分支 `main`，2026-10-19 完成）。后续按常规提交；推送前先 `git status` 核对未被 .gitignore 遗漏的文件。
+- Git 远程：`https://github.com/txy1785/proj-timeline.git`。分支模型（2026-10-19 建立）：`master` 版本上线、`develop` 开发主线、`feature/<描述>` 功能分支从 `develop` 拉出；功能代码必须经独立审核（干净会话/子代理）后合并 `develop`，发布从 `develop` 合并 `master` 并打 tag。原 `main` 仍作为 GitHub 默认分支存在，待默认分支切换为 `master` 后删除。提交前先 `git status` 核对未被 .gitignore 遗漏的文件。
 - 曾在本机启动 Vite 5173 与后端 8080 供用户试用；进程是否仍运行应实时检查，不能依据本文假定。最近浏览器停在登录页，可能只是会话过期。
