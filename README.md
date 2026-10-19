@@ -13,9 +13,9 @@
 
 ## 分支与协作
 
-- `master`：版本上线分支；`develop`：开发主线（实时最新）。
+- `main`：版本上线分支；`develop`：开发主线（实时最新）。
 - 功能开发从 `develop` 拉出 `feature/<描述>` 分支，完成后由管理者在 GitHub 创建 PR（base 指向 `develop`）。
-- 提交代码的 AI 必须用独立会话或子代理开启审核模式，审核通过后合并 `develop`；发布时从 `develop` 合并 `master` 并打 tag。规则详见 [`AGENTS.md`](AGENTS.md) 的「Git 分支与提交流程」。
+- 提交代码的 AI 必须用独立会话或子代理开启审核模式，审核通过后合并 `develop`；发布时从 `develop` 合并 `main` 并打 tag。规则详见 [`AGENTS.md`](AGENTS.md) 的「Git 分支与提交流程」。
 
 ## 本地启动
 

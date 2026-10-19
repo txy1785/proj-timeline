@@ -19,10 +19,10 @@
 ## Git 分支与提交流程
 
 1. 分支模型（固定）：
-   - `master`：版本上线分支，只接收发布合并与热修复，不直接开发；
+   - `main`：版本上线分支，只接收发布合并与热修复，不直接开发；
    - `develop`：开发主线，实时最新，所有功能在此集成；
    - `feature/<简短描述>`：功能分支，必须从最新 `develop` 拉出，一个功能一个分支；
-   - 紧急修复用 `fix/<描述>`：从 `master` 拉出，合并回 `master` 后同步回合 `develop`。
+   - 紧急修复用 `fix/<描述>`：从 `main` 拉出，合并回 `main` 后同步回合 `develop`。
 2. 开发流程：
    - 开工前 `git checkout develop && git pull`，再 `git checkout -b feature/<名称> develop`；
    - 完成后推送功能分支，由**管理者（用户）在 GitHub 创建 PR**（base 指向 `develop`）。
@@ -31,9 +31,9 @@
    - 审核清单：① 与需求/契约一致（实体、权限、日期、统计口径）；② 已复用或登记复用库；③ 权限与数据边界无漏洞；④ `mvn ... test` 与前端 `lint/typecheck/build` 通过；⑤ 迁移/兼容与回滚考虑；⑥ 无凭据或敏感信息泄露；
    - 审核不通过 → 在功能分支修复并复审；通过后由 AI 合并进 `develop`（GitHub PR 合并或本地 `git merge --no-ff` 后推送 `develop`，保留合并记录）。
 4. 发布：
-   - 上线时从 `develop` 合并到 `master` 并打 `vX.Y.Z` tag；`master` 上不得出现未经审核的功能提交。
+   - 上线时从 `develop` 合并到 `main` 并打 `vX.Y.Z` tag；`main` 上不得出现未经审核的功能提交。
 5. 豁免：文档/规范/复用库等非功能代码变更可直接提交 `develop`；功能代码一律走 `feature/` 分支。
-6. 禁止：直接在 `master`/`develop` 上提交功能代码；未审核合并进 `develop`；功能分支合并后未删除。
+6. 禁止：直接在 `main`/`develop` 上提交功能代码；未审核合并进 `develop`；功能分支合并后未删除。
 
 ## 后端与数据库
 

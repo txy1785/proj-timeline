@@ -140,3 +140,10 @@ Playwright 覆盖匿名跳转、管理员账号页、PM、成员、VIEWER 项目
 - `AGENTS.md` 新增「Git 分支与提交流程」：PR 由管理者在 GitHub 创建（base `develop`）；提交者 AI 必须用独立会话/子代理（review 模式）审核，含 6 项审核清单，通过后合并 `develop`；发布从 `develop` 合并 `master` 并打 `vX.Y.Z` tag。
 - `README.md` 增加分支协作说明；`PROJECT_MEMORY.md` 更新分支模型。
 - 本次只做分支与规则文档变更，未改业务代码；未重新执行构建或测试。
+
+## 分支命名统一为 main + develop（2026-10-19）
+
+- proj-timeline 上线分支 `master` 更名为 `main`（本地与 GitHub 远程），GitHub 默认分支切换为 `main`，旧 `master` 已删除；远程现仅保留 `main` 与 `develop`。
+- 文档同步：`AGENTS.md`、`README.md`、`PROJECT_MEMORY.md` 中的上线分支名改为 `main`；分支模型与审核流程不变。
+- candid-eval 侧：`github` 远程由 SSH 改为 HTTPS（本机 SSH 链路不稳定）；`main` 已合并回 `develop`（合并提交 `94efa20`），Gitee/GitHub 双远程同步。
+- 本次只改文档与分支，未改业务代码；未重新执行构建或测试。
