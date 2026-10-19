@@ -2,7 +2,7 @@
 
 面向 10 人以内团队的自托管项目进度管理系统。业务契约见 [`docs/`](docs/)，静态视觉参考见 [`prototype/`](prototype/)。
 
-当前产品决定、实现定位和开发约定见 [`PROJECT_MEMORY.md`](PROJECT_MEMORY.md) 与 [`AGENTS.md`](AGENTS.md)。`PLAN.md` 记录实施历史，其中早期数字属于当时的验证快照。
+当前产品决定、实现定位和开发约定见 [`PROJECT_MEMORY.md`](PROJECT_MEMORY.md) 与 [`AGENTS.md`](AGENTS.md)。可复用方法、封装与设计模式统一登记在 [`docs/复用方法与设计模式.md`](docs/复用方法与设计模式.md)（写代码前先查）。`PLAN.md` 记录实施历史，其中早期数字属于当时的验证快照。
 
 ## 工程结构
 
