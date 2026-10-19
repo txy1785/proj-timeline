@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的项目 · 项目时间线</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">📅 项目时间线</div>
+    <nav class="nav">
+      <a href="projects.html" class="active">📁 我的项目</a>
+      <a href="timeline.html">📅 项目时间线</a>
+      <a href="modules.html">🧩 模块视图</a>
+      <a href="workload.html">👥 人员负载</a>
+      <a href="notifications.html">🔔 通知中心</a>
+      <a href="weekly-report.html">📄 周报</a>
+      <a href="project-settings.html">⚙️ 项目管理</a>
+    </nav>
+    <div class="sidebar-user">
+      <span class="avatar avatar-sm">李</span>
+      <div>李经理<br><span class="role">项目经理</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumbs">首页 / <b>我的项目</b></div>
+      <div class="top-actions">
+        <a class="bell" href="notifications.html">🔔<span class="badge">3</span></a>
+        <span class="avatar">李</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="page-head">
+        <div>
+          <div class="page-title">我的项目</div>
+          <div class="page-desc">共 2 个项目，其中 1 个存在延期/受阻节点</div>
+        </div>
+        <a class="btn btn-primary" href="project-settings.html">＋ 新建项目</a>
+      </div>
+
+      <div class="project-grid">
+
+        <!-- 项目 1：商城系统开发 -->
+        <div class="card project-card">
+          <div class="top">
+            <div class="info">
+              <div class="project-name">商城系统开发 <span class="tag tag-blue">进行中</span></div>
+              <div class="project-code">代号 MALL-2025 ｜ 项目经理：李经理</div>
+              <div class="project-dates">📆 2025-10-06 ~ 2026-01-30</div>
+              <div class="stat-chips">
+                <span class="chip">节点 11</span>
+                <span class="chip chip-ok">完成 4</span>
+                <span class="chip">进行中 4</span>
+                <span class="chip">未开始 3</span>
+              </div>
+              <div class="stat-chips">
+                <span class="chip chip-warn">⚠ 延期 1</span>
+                <span class="chip chip-block">⛔ 受阻 1</span>
+                <span class="chip chip-near">⌛ 临近 1</span>
+              </div>
+            </div>
+            <div class="ring" style="--p:56"><b>56%</b></div>
+          </div>
+          <div class="project-members">
+            <span class="muted small">成员：</span>
+            <span class="avatars">
+              <span class="avatar avatar-sm">张</span>
+              <span class="avatar avatar-sm">李</span>
+              <span class="avatar avatar-sm">王</span>
+              <span class="avatar avatar-sm">赵</span>
+              <span class="avatar avatar-sm">孙</span>
+              <span class="avatar avatar-sm">钱</span>
+            </span>
+          </div>
+          <div class="project-actions">
+            <a class="btn btn-primary btn-small" href="timeline.html">进入时间线</a>
+            <a class="btn btn-plain btn-small" href="modules.html">模块视图</a>
+            <a class="btn btn-plain btn-small" href="weekly-report.html">周报</a>
+          </div>
+        </div>
+
+        <!-- 项目 2：移动端 APP 改版 -->
+        <div class="card project-card">
+          <div class="top">
+            <div class="info">
+              <div class="project-name">移动端 APP 改版 <span class="tag tag-blue">进行中</span></div>
+              <div class="project-code">代号 APP-2026 ｜ 项目经理：李经理</div>
+              <div class="project-dates">📆 2025-12-10 ~ 2026-03-20</div>
+              <div class="stat-chips">
+                <span class="chip">节点 2</span>
+                <span class="chip">完成 0</span>
+                <span class="chip">进行中 1</span>
+                <span class="chip">未开始 1</span>
+              </div>
+              <div class="stat-chips">
+                <span class="chip chip-ok">一切正常</span>
+              </div>
+            </div>
+            <div class="ring" style="--p:15"><b>15%</b></div>
+          </div>
+          <div class="project-members">
+            <span class="muted small">成员：</span>
+            <span class="avatars">
+              <span class="avatar avatar-sm">张</span>
+              <span class="avatar avatar-sm">李</span>
+              <span class="avatar avatar-sm">王</span>
+              <span class="avatar avatar-sm">钱</span>
+            </span>
+          </div>
+          <div class="project-actions">
+            <a class="btn btn-primary btn-small" href="timeline.html">进入时间线</a>
+            <a class="btn btn-plain btn-small" href="modules.html">模块视图</a>
+            <a class="btn btn-plain btn-small" href="weekly-report.html">周报</a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

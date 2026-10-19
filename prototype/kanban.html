@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>任务看板 · 支付渠道接入</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">📅 项目时间线</div>
+    <nav class="nav">
+      <a href="projects.html">📁 我的项目</a>
+      <a href="timeline.html" class="active">📅 项目时间线</a>
+      <a href="modules.html">🧩 模块视图</a>
+      <a href="workload.html">👥 人员负载</a>
+      <a href="notifications.html">🔔 通知中心</a>
+      <a href="weekly-report.html">📄 周报</a>
+      <a href="project-settings.html">⚙️ 项目管理</a>
+    </nav>
+    <div class="sidebar-user">
+      <span class="avatar avatar-sm">赵</span>
+      <div>赵工<br><span class="role">模块负责人</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumbs">商城系统开发 / 订单与支付 / <b>节点：支付渠道接入</b></div>
+      <div class="top-actions">
+        <a class="bell" href="notifications.html">🔔<span class="badge">3</span></a>
+        <span class="avatar">赵</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="page-head">
+        <div>
+          <div class="page-title">任务看板 · 支付渠道接入
+            <span class="tag tag-blue">进行中</span>
+            <span class="tag tag-purple">⛔ 受阻</span>
+          </div>
+          <div class="page-desc">节点负责人 赵工 ｜ 计划 2025-11-15 ~ 12-20 ｜ 进度 40%</div>
+        </div>
+        <a class="btn btn-plain" href="timeline.html">← 返回时间线</a>
+      </div>
+
+      <div class="alert-block" style="margin-bottom:16px">
+        ⛔ 受阻原因：银联支付入网证书审批中（预计 12/22 出证），银联接入任务被阻塞，其余渠道不受影响。
+      </div>
+
+      <div class="kanban-board">
+        <!-- 待办 -->
+        <div class="kanban-col">
+          <div class="kanban-col-head">待办 <span class="tag tag-gray">4</span></div>
+          <div class="task-card">
+            <div class="tname">支付宝接入</div>
+            <div class="tmeta"><span class="avatar avatar-sm">钱</span> 钱工 <span class="spacer"></span><span class="days">计划 3 人天</span></div>
+          </div>
+          <div class="task-card">
+            <div class="tname">支付回调处理</div>
+            <div class="tmeta"><span class="avatar avatar-sm">赵</span> 赵工 <span class="spacer"></span><span class="days">计划 2 人天</span></div>
+          </div>
+          <div class="task-card">
+            <div class="tname">退款流程</div>
+            <div class="tmeta"><span class="avatar avatar-sm">赵</span> 赵工 <span class="spacer"></span><span class="days">计划 2 人天</span></div>
+          </div>
+          <div class="task-card">
+            <div class="tname">沙箱环境测试</div>
+            <div class="tmeta"><span class="avatar avatar-sm">钱</span> 钱工 <span class="spacer"></span><span class="days">计划 2 人天</span></div>
+          </div>
+        </div>
+
+        <!-- 进行中 -->
+        <div class="kanban-col">
+          <div class="kanban-col-head">进行中 <span class="tag tag-blue">2</span></div>
+          <div class="task-card">
+            <div class="tname">微信支付接入</div>
+            <div class="tmeta"><span class="avatar avatar-sm">钱</span> 钱工 <span class="spacer"></span><span class="days">计划 3 人天 · 已花 2</span></div>
+          </div>
+          <div class="task-card" style="border-color:#d9c7f7;background:#fbf8ff">
+            <div class="tname">银联支付申请 <span class="tag tag-purple">⛔ 受阻</span></div>
+            <div class="tmeta"><span class="avatar avatar-sm">赵</span> 赵工 <span class="spacer"></span><span class="days">计划 1 · 已花 1</span></div>
+            <div class="small muted" style="margin-top:8px">等待银联证书审批（预计 12/22）</div>
+          </div>
+        </div>
+
+        <!-- 已完成 -->
+        <div class="kanban-col">
+          <div class="kanban-col-head">已完成 <span class="tag tag-green">2</span></div>
+          <div class="task-card">
+            <div class="tname">支付需求评审</div>
+            <div class="tmeta"><span class="avatar avatar-sm">赵</span> 赵工 <span class="spacer"></span><span class="days">计划 0.5 · 实际 0.5</span></div>
+          </div>
+          <div class="task-card">
+            <div class="tname">渠道调研</div>
+            <div class="tmeta"><span class="avatar avatar-sm">钱</span> 钱工 <span class="spacer"></span><span class="days">计划 1 · 实际 1</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

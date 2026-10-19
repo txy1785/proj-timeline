@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>周报 · 项目时间线</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">📅 项目时间线</div>
+    <nav class="nav">
+      <a href="projects.html">📁 我的项目</a>
+      <a href="timeline.html">📅 项目时间线</a>
+      <a href="modules.html">🧩 模块视图</a>
+      <a href="workload.html">👥 人员负载</a>
+      <a href="notifications.html">🔔 通知中心</a>
+      <a href="weekly-report.html" class="active">📄 周报</a>
+      <a href="project-settings.html">⚙️ 项目管理</a>
+    </nav>
+    <div class="sidebar-user">
+      <span class="avatar avatar-sm">李</span>
+      <div>李经理<br><span class="role">项目经理</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumbs">商城系统开发 / <b>周报</b></div>
+      <div class="top-actions">
+        <a class="bell" href="notifications.html">🔔<span class="badge">3</span></a>
+        <span class="avatar">李</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="page-head">
+        <div>
+          <div class="page-title">项目周报 · 商城系统开发</div>
+          <div class="page-desc">系统按节点/任务变化自动生成草稿，PM 补充说明后发布</div>
+        </div>
+        <a class="btn btn-primary" href="#">发布本周周报</a>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active">本周草稿（12-15 ~ 12-21）</div>
+        <div class="tab">历史周报</div>
+      </div>
+
+      <div class="card">
+        <div class="report-meta">
+          <span>📆 统计周期：2025-12-15 ~ 2025-12-21（第 51 周）</span>
+          <span>👤 起草人：李经理</span>
+          <span><span class="tag tag-amber">草稿</span></span>
+        </div>
+
+        <div class="report-section">
+          <h3>✅ 本周完成节点</h3>
+          <div class="empty">本周暂无完成节点（最近完成：12-12「登录/注册开发」）</div>
+        </div>
+
+        <div class="report-section">
+          <h3>⚠️ 延期 / 受阻节点</h3>
+          <table class="table">
+            <thead><tr><th>节点</th><th>模块</th><th>负责人</th><th>标记</th><th>原因摘要</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><a href="node-detail.html">订单接口开发</a></td><td>订单与支付</td><td>赵工</td>
+                <td><span class="tag tag-red">延期 13 天</span></td>
+                <td>支付渠道资质审批超期，预计 12/19 完成</td>
+              </tr>
+              <tr>
+                <td><a href="kanban.html">支付渠道接入</a></td><td>订单与支付</td><td>赵工</td>
+                <td><span class="tag tag-purple">受阻</span></td>
+                <td>等待银联入网证书审批（预计 12/22）</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="report-section">
+          <h3>⏳ 下周到期节点</h3>
+          <table class="table">
+            <thead><tr><th>节点</th><th>模块</th><th>负责人</th><th>计划结束</th><th>当前进度</th></tr></thead>
+            <tbody>
+              <tr><td><a href="node-detail.html">第三方登录对接</a></td><td>用户与登录</td><td>王工</td><td>12-20 <span class="tag tag-amber">临近</span></td><td>60%</td></tr>
+              <tr><td><a href="kanban.html">支付渠道接入</a></td><td>订单与支付</td><td>赵工</td><td>12-20</td><td>40%</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="report-section">
+          <h3>🆕 本周新增节点与任务</h3>
+          <div class="small" style="color:var(--text-regular);line-height:1.8">
+            · 新增节点 1 个：<a href="node-detail.html">用户中心与安全加固</a>（用户与登录，王工）；<br>
+            · 新增任务 3 个：库存扣减接口、订单查询/列表、沙箱环境测试。
+          </div>
+        </div>
+
+        <div class="report-section">
+          <h3>⏱ 本周工时汇总</h3>
+          <div class="summary-row" style="max-width:420px">
+            <div class="summary-box"><div class="num">21.5</div><div class="lbl">实际投入人天</div></div>
+            <div class="summary-box"><div class="num">25</div><div class="lbl">计划人天</div></div>
+          </div>
+        </div>
+
+        <div class="report-section">
+          <h3>✍️ PM 补充说明（发布前可编辑）</h3>
+          <textarea class="form-textarea" rows="3">本周订单与支付模块风险集中：接口开发延期、银联审批阻塞。已与渠道方确认 12/22 出证，下周完成支付渠道接入和接口联调，全力保障 1 月底上线目标。</textarea>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">📚 历史周报</div>
+        <div class="history-item">
+          <span>📄</span>
+          <div>第 50 周（12-08 ~ 12-14）<span class="muted small">· 完成 1 节点 · 延期 1 · 受阻 1</span></div>
+          <span class="spacer"></span>
+          <span class="tag tag-green">已发布</span>
+          <span class="muted small">12-15 09:00 发布</span>
+        </div>
+        <div class="history-item">
+          <span>📄</span>
+          <div>第 49 周（12-01 ~ 12-07）<span class="muted small">· 完成 0 节点 · 延期 1</span></div>
+          <span class="spacer"></span>
+          <span class="tag tag-green">已发布</span>
+          <span class="muted small">12-08 09:12 发布</span>
+        </div>
+        <div class="history-item">
+          <span>📄</span>
+          <div>第 48 周（11-24 ~ 11-30）<span class="muted small">· 完成 1 节点 · 一切正常</span></div>
+          <span class="spacer"></span>
+          <span class="tag tag-green">已发布</span>
+          <span class="muted small">12-01 09:30 发布</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

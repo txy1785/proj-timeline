@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>通知中心 · 项目时间线</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">📅 项目时间线</div>
+    <nav class="nav">
+      <a href="projects.html">📁 我的项目</a>
+      <a href="timeline.html">📅 项目时间线</a>
+      <a href="modules.html">🧩 模块视图</a>
+      <a href="workload.html">👥 人员负载</a>
+      <a href="notifications.html" class="active">🔔 通知中心</a>
+      <a href="weekly-report.html">📄 周报</a>
+      <a href="project-settings.html">⚙️ 项目管理</a>
+    </nav>
+    <div class="sidebar-user">
+      <span class="avatar avatar-sm">李</span>
+      <div>李经理<br><span class="role">项目经理</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumbs">全局 / <b>通知中心</b></div>
+      <div class="top-actions">
+        <a class="bell" href="notifications.html">🔔<span class="badge">3</span></a>
+        <span class="avatar">李</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="page-head">
+        <div>
+          <div class="page-title">通知中心</div>
+          <div class="page-desc">3 条未读 ｜ 延期/受阻自动推送 PM 与相关模块负责人</div>
+        </div>
+        <a class="btn btn-plain" href="#">全部标为已读</a>
+      </div>
+
+      <div class="notif-list">
+        <div class="notif-item unread">
+          <div class="notif-icon" style="background:#fef0f0">🔴</div>
+          <div class="notif-body">
+            <div class="notif-title"><b>延期预警</b> · 「订单接口开发」已延期 13 天</div>
+            <div class="notif-desc">节点负责人 赵工 已提交延期原因：支付渠道资质审批超期，预计 12/19 完成。<a href="node-detail.html">查看节点 →</a></div>
+          </div>
+          <div class="notif-unread-dot"></div>
+          <div class="notif-time">12-06 09:12</div>
+        </div>
+
+        <div class="notif-item unread">
+          <div class="notif-icon" style="background:#f4ecfd">⛔</div>
+          <div class="notif-body">
+            <div class="notif-title"><b>受阻提醒</b> · 「支付渠道接入」被标记受阻</div>
+            <div class="notif-desc">受阻原因：等待银联入网证书审批（预计 12/22）。<a href="kanban.html">查看节点 →</a></div>
+          </div>
+          <div class="notif-unread-dot"></div>
+          <div class="notif-time">12-10 11:30</div>
+        </div>
+
+        <div class="notif-item unread">
+          <div class="notif-icon" style="background:#ecf5ff">📋</div>
+          <div class="notif-body">
+            <div class="notif-title"><b>任务指派</b> · 赵工 指派任务「库存扣减接口」给你（钱工）</div>
+            <div class="notif-desc">所属节点：订单接口开发 · 计划 2 人天 · 截止 12-10。<a href="node-detail.html">查看任务 →</a></div>
+          </div>
+          <div class="notif-unread-dot"></div>
+          <div class="notif-time">11-25 10:00</div>
+        </div>
+
+        <div class="notif-item">
+          <div class="notif-icon" style="background:#f0f9eb">✅</div>
+          <div class="notif-body">
+            <div class="notif-title"><b>节点完成</b> · 「登录/注册开发」已完成</div>
+            <div class="notif-desc">节点负责人 王工 标记完成，实际结束 12-12（比计划晚 22 天）。<a href="node-detail.html">查看节点 →</a></div>
+          </div>
+          <div class="notif-time">12-12 17:40</div>
+        </div>
+
+        <div class="notif-item">
+          <div class="notif-icon" style="background:#ecf5ff">📄</div>
+          <div class="notif-body">
+            <div class="notif-title"><b>周报发布</b> · 李经理 发布了「商城系统开发」第 50 周周报</div>
+            <div class="notif-desc">本周完成 1 个节点，1 个延期，1 个受阻。<a href="weekly-report.html">查看周报 →</a></div>
+          </div>
+          <div class="notif-time">12-15 09:00</div>
+        </div>
+
+        <div class="notif-item">
+          <div class="notif-icon" style="background:#ecf5ff">📋</div>
+          <div class="notif-body">
+            <div class="notif-title"><b>任务指派</b> · 赵工 指派任务「微信支付接入」给你（钱工）</div>
+            <div class="notif-desc">所属节点：支付渠道接入 · 计划 3 人天。<a href="kanban.html">查看任务 →</a></div>
+          </div>
+          <div class="notif-time">11-20 15:22</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

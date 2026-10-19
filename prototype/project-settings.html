@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>项目管理 · 项目时间线</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">📅 项目时间线</div>
+    <nav class="nav">
+      <a href="projects.html">📁 我的项目</a>
+      <a href="timeline.html">📅 项目时间线</a>
+      <a href="modules.html">🧩 模块视图</a>
+      <a href="workload.html">👥 人员负载</a>
+      <a href="notifications.html">🔔 通知中心</a>
+      <a href="weekly-report.html">📄 周报</a>
+      <a href="project-settings.html" class="active">⚙️ 项目管理</a>
+    </nav>
+    <div class="sidebar-user">
+      <span class="avatar avatar-sm">李</span>
+      <div>李经理<br><span class="role">项目经理</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumbs">商城系统开发 / <b>项目管理</b></div>
+      <div class="top-actions">
+        <a class="bell" href="notifications.html">🔔<span class="badge">3</span></a>
+        <span class="avatar">李</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="page-head">
+        <div>
+          <div class="page-title">项目管理 · 商城系统开发</div>
+          <div class="page-desc">PM 可维护项目信息、成员与模块（含模块负责人）</div>
+        </div>
+      </div>
+
+      <div class="tabs settings-tabs">
+        <div class="tab active">基本信息</div>
+        <div class="tab">成员管理</div>
+        <div class="tab">模块管理</div>
+      </div>
+
+      <div class="card" style="max-width:720px">
+        <div class="form-row">
+          <div class="form-item">
+            <label>项目名称</label>
+            <input class="form-input" type="text" value="商城系统开发">
+          </div>
+          <div class="form-item">
+            <label>项目代号</label>
+            <input class="form-input" type="text" value="MALL-2025">
+          </div>
+        </div>
+        <div class="form-item">
+          <label>项目描述</label>
+          <textarea class="form-textarea" rows="3">自营电商商城，含用户体系、订单支付、后台管理三大模块，目标 2026 年 1 月底上线。</textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-item">
+            <label>计划开始</label>
+            <input class="form-input" type="text" value="2025-10-06">
+          </div>
+          <div class="form-item">
+            <label>计划结束</label>
+            <input class="form-input" type="text" value="2026-01-30">
+          </div>
+          <div class="form-item">
+            <label>项目经理</label>
+            <select class="form-select" style="width:100%">
+              <option>李经理</option>
+              <option>王工</option>
+              <option>赵工</option>
+            </select>
+          </div>
+        </div>
+        <a class="btn btn-primary" href="#">保存</a>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">👥 成员管理</div>
+        <table class="table">
+          <thead>
+            <tr><th>成员</th><th>全局角色</th><th>项目内职务</th><th>加入时间</th><th>操作</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="avatar avatar-sm">李</span> 李经理</td><td>普通用户</td><td><span class="tag tag-blue">PM</span></td><td>10-06</td><td><a href="#">移出</a></td></tr>
+            <tr><td><span class="avatar avatar-sm">王</span> 王工</td><td>普通用户</td><td>模块负责人（用户与登录）</td><td>10-06</td><td><a href="#">移出</a></td></tr>
+            <tr><td><span class="avatar avatar-sm">赵</span> 赵工</td><td>普通用户</td><td>模块负责人（订单与支付）</td><td>10-06</td><td><a href="#">移出</a></td></tr>
+            <tr><td><span class="avatar avatar-sm">孙</span> 孙工</td><td>普通用户</td><td>模块负责人（后台管理）</td><td>10-06</td><td><a href="#">移出</a></td></tr>
+            <tr><td><span class="avatar avatar-sm">钱</span> 钱工</td><td>普通用户</td><td><span class="tag tag-gray">成员</span></td><td>10-13</td><td><a href="#">移出</a></td></tr>
+            <tr><td><span class="avatar avatar-sm">张</span> 张总</td><td>只读观察者</td><td>—（只看不操作）</td><td>10-06</td><td><a href="#">移出</a></td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:12px"><a class="btn btn-plain btn-small" href="#">＋ 添加成员</a></div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">🧩 模块管理（模块负责人 = 新建节点时的默认负责人）</div>
+        <div class="module-row">
+          <span class="mname">用户与登录</span>
+          <span class="muted small">节点 4 · 进度 65%</span>
+          <span class="tag tag-amber">临近 1</span>
+          <select class="form-select">
+            <option selected>负责人：王工</option>
+            <option>赵工</option>
+            <option>孙工</option>
+            <option>钱工</option>
+          </select>
+          <a href="#">↑</a><a href="#">↓</a><a href="#">编辑</a><a href="#">删除</a>
+        </div>
+        <div class="module-row">
+          <span class="mname">订单与支付</span>
+          <span class="muted small">节点 4 · 进度 53%</span>
+          <span class="tag tag-red">延期 1</span>
+          <span class="tag tag-purple">受阻 1</span>
+          <select class="form-select">
+            <option>王工</option>
+            <option selected>负责人：赵工</option>
+            <option>孙工</option>
+            <option>钱工</option>
+          </select>
+          <a href="#">↑</a><a href="#">↓</a><a href="#">编辑</a><a href="#">删除</a>
+        </div>
+        <div class="module-row">
+          <span class="mname">后台管理</span>
+          <span class="muted small">节点 3 · 进度 48%</span>
+          <select class="form-select">
+            <option>王工</option>
+            <option>赵工</option>
+            <option selected>负责人：孙工</option>
+            <option>钱工</option>
+          </select>
+          <a href="#">↑</a><a href="#">↓</a><a href="#">编辑</a><a href="#">删除</a>
+        </div>
+        <div style="margin-top:12px"><a class="btn btn-plain btn-small" href="#">＋ 新建模块</a></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

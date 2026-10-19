@@ -1,0 +1,38 @@
+# 项目时间线
+
+面向 10 人以内团队的自托管项目进度管理系统。业务契约见 [`docs/`](docs/)，静态视觉参考见 [`prototype/`](prototype/)。
+
+当前产品决定、实现定位和开发约定见 [`PROJECT_MEMORY.md`](PROJECT_MEMORY.md) 与 [`AGENTS.md`](AGENTS.md)。`PLAN.md` 记录实施历史，其中早期数字属于当时的验证快照。
+
+## 工程结构
+
+- `backend/`：Java 17 + Spring Boot + MySQL API
+- `frontend/`：Vue 3 + TypeScript 单页应用
+- `docs/database.sql`：数据库契约
+- `docs/demo_seed.sql`：仅用于本地演示的可选数据
+
+## 本地启动
+
+1. 创建 MySQL 8 数据库 `proj_timeline` 和具有该库权限的账号。
+2. 复制 `.env.example` 中的配置到终端环境变量。
+3. 首次启动后端并创建管理员（只执行一次；库中已有 ADMIN 时会拒绝）：
+
+   ```powershell
+   mvn -f backend/pom.xml spring-boot:run "-Dspring-boot.run.arguments=--app.bootstrap-admin=true"
+   ```
+
+4. 正常启动后端：`mvn -f backend/pom.xml spring-boot:run`。
+5. 安装并启动前端：`npm --prefix frontend install`，然后执行 `npm --prefix frontend run dev`。
+
+开发环境访问 `http://localhost:5173`，API 默认位于 `http://localhost:8080/api`。完整部署和演示数据说明见 [`docs/部署与运维.md`](docs/部署与运维.md)。
+
+## 验证
+
+```powershell
+mvn -f backend/pom.xml test
+npm --prefix frontend run lint
+npm --prefix frontend run typecheck
+npm --prefix frontend run build
+npm --prefix frontend run test:e2e
+```
+

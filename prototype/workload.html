@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>人员负载 · 项目时间线</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">📅 项目时间线</div>
+    <nav class="nav">
+      <a href="projects.html">📁 我的项目</a>
+      <a href="timeline.html">📅 项目时间线</a>
+      <a href="modules.html">🧩 模块视图</a>
+      <a href="workload.html" class="active">👥 人员负载</a>
+      <a href="notifications.html">🔔 通知中心</a>
+      <a href="weekly-report.html">📄 周报</a>
+      <a href="project-settings.html">⚙️ 项目管理</a>
+    </nav>
+    <div class="sidebar-user">
+      <span class="avatar avatar-sm">李</span>
+      <div>李经理<br><span class="role">项目经理</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumbs">全局 / <b>人员负载</b></div>
+      <div class="top-actions">
+        <a class="bell" href="notifications.html">🔔<span class="badge">3</span></a>
+        <span class="avatar">李</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="page-head">
+        <div>
+          <div class="page-title">人员负载（跨项目汇总）</div>
+          <div class="page-desc">分配任务前先看谁在忙什么，避免过载 ｜ 数据来自 2 个项目</div>
+        </div>
+        <a class="btn btn-plain" href="#">导出 Excel</a>
+      </div>
+
+      <div class="card" style="padding:0;overflow:hidden">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>成员</th><th>全局角色</th><th>项目内职务</th><th>负责模块</th>
+              <th>负责节点<br><span class="small">(进行中)</span></th><th>任务<br><span class="small">(进行中/待办)</span></th>
+              <th>本周到期</th><th>延期</th><th>计划人天</th><th>负载</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="avatar avatar-sm">李</span> 李经理</td><td>普通用户</td><td>PM × 2 项目</td><td>—</td>
+              <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
+              <td><span class="tag tag-gray">协调中</span></td>
+            </tr>
+            <tr>
+              <td><span class="avatar avatar-sm">王</span> 王工</td><td>普通用户</td><td>模块负责人</td><td>用户与登录 / APP整体设计</td>
+              <td>4 <span class="muted">(2)</span></td><td>3 <span class="muted">(1/0)</span></td>
+              <td><span class="tag tag-amber">1</span></td><td>0</td><td>12.5</td>
+              <td><span class="load-bar"><span class="fill" style="width:60%;background:var(--warning)"></span></span> <span class="small muted">中</span></td>
+            </tr>
+            <tr>
+              <td><span class="avatar avatar-sm">赵</span> 赵工</td><td>普通用户</td><td>模块负责人</td><td>订单与支付</td>
+              <td>4 <span class="muted">(2)</span></td><td>6 <span class="muted">(2/4)</span></td>
+              <td><span class="tag tag-red">2</span></td><td><span class="tag tag-red">1</span></td><td>18</td>
+              <td><span class="load-bar"><span class="fill" style="width:90%;background:var(--danger)"></span></span> <span class="small" style="color:var(--danger)">高</span></td>
+            </tr>
+            <tr>
+              <td><span class="avatar avatar-sm">孙</span> 孙工</td><td>普通用户</td><td>模块负责人</td><td>后台管理</td>
+              <td>3 <span class="muted">(1)</span></td><td>4 <span class="muted">(2/1)</span></td>
+              <td><span class="tag tag-amber">1</span></td><td>0</td><td>10</td>
+              <td><span class="load-bar"><span class="fill" style="width:45%;background:var(--success)"></span></span> <span class="small muted">低</span></td>
+            </tr>
+            <tr>
+              <td><span class="avatar avatar-sm">钱</span> 钱工</td><td>普通用户</td><td>成员（商城）<br>模块负责人（APP）</td><td>购物车重构</td>
+              <td>1 <span class="muted">(0)</span></td><td>6 <span class="muted">(3/2)</span></td>
+              <td><span class="tag tag-amber">1</span></td><td>0</td><td>14</td>
+              <td><span class="load-bar"><span class="fill" style="width:65%;background:var(--warning)"></span></span> <span class="small muted">中</span></td>
+            </tr>
+            <tr>
+              <td><span class="avatar avatar-sm">张</span> 张总</td><td>只读观察者</td><td>—</td><td>—</td>
+              <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
+              <td><span class="tag tag-gray">只读</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">📌 负载说明</div>
+        <div class="small" style="color:var(--text-regular);line-height:1.8">
+          · 负载 = 本周在办任务计划人天 ÷ 团队人均周计划人天（5 人天）；<br>
+          · <span style="color:var(--danger)">高</span>（&gt;80%）建议 PM 重新分配或调整排期；<span style="color:var(--warning)">中</span>（50%~80%）可少量加派；<span style="color:var(--success)">低</span>（&lt;50%）可承接新任务；<br>
+          · 赵工本周负载偏高（延期节点善后 + 受阻节点跟进），是 PM 关注重点。
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

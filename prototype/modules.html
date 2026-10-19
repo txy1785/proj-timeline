@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>模块视图 · 项目时间线</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">📅 项目时间线</div>
+    <nav class="nav">
+      <a href="projects.html">📁 我的项目</a>
+      <a href="timeline.html">📅 项目时间线</a>
+      <a href="modules.html" class="active">🧩 模块视图</a>
+      <a href="workload.html">👥 人员负载</a>
+      <a href="notifications.html">🔔 通知中心</a>
+      <a href="weekly-report.html">📄 周报</a>
+      <a href="project-settings.html">⚙️ 项目管理</a>
+    </nav>
+    <div class="sidebar-user">
+      <span class="avatar avatar-sm">李</span>
+      <div>李经理<br><span class="role">项目经理</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumbs">我的项目 / <b>商城系统开发</b> / 模块视图</div>
+      <div class="top-actions">
+        <a class="bell" href="notifications.html">🔔<span class="badge">3</span></a>
+        <span class="avatar">李</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="page-head">
+        <div>
+          <div class="page-title">模块视图 · 商城系统开发</div>
+          <div class="page-desc">3 个模块，各自有负责人；模块进度 = 模块下节点的平均进度</div>
+        </div>
+        <a class="btn btn-primary" href="project-settings.html">＋ 新建模块</a>
+      </div>
+
+      <div class="module-grid">
+
+        <!-- 模块 1 -->
+        <div class="card module-card">
+          <div class="mhead">
+            <span class="avatar">王</span>
+            <div class="mname">用户与登录</div>
+            <span class="tag tag-blue">负责人 王工</span>
+          </div>
+          <div class="progress-line"><div class="fill" style="width:65%"></div></div>
+          <div class="stats">
+            <span class="chip">进度 65%</span>
+            <span class="chip">节点 4</span>
+            <span class="chip chip-ok">完成 2</span>
+            <span class="chip">进行中 1</span>
+            <span class="chip">未开始 1</span>
+            <span class="chip chip-near">临近 1</span>
+          </div>
+          <div>
+            <a class="module-node" href="node-detail.html">
+              <span class="tag tag-green">已完成</span><span class="nm">需求梳理与原型设计</span><span class="dt">10-06 ~ 10-20</span>
+            </a>
+            <a class="module-node" href="node-detail.html">
+              <span class="tag tag-green">已完成</span><span class="nm">登录/注册开发</span><span class="dt">10-20 ~ 11-20</span>
+            </a>
+            <a class="module-node" href="node-detail.html">
+              <span class="tag tag-amber">临近</span><span class="nm">第三方登录对接</span><span class="dt">11-21 ~ 12-20 · 60%</span>
+            </a>
+            <a class="module-node" href="node-detail.html">
+              <span class="tag tag-gray">未开始</span><span class="nm">用户中心与安全加固</span><span class="dt">12-21 ~ 01-15</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- 模块 2 -->
+        <div class="card module-card">
+          <div class="mhead">
+            <span class="avatar">赵</span>
+            <div class="mname">订单与支付</div>
+            <span class="tag tag-blue">负责人 赵工</span>
+          </div>
+          <div class="progress-line"><div class="fill" style="width:53%"></div></div>
+          <div class="stats">
+            <span class="chip">进度 53%</span>
+            <span class="chip">节点 4</span>
+            <span class="chip chip-ok">完成 1</span>
+            <span class="chip">进行中 2</span>
+            <span class="chip">未开始 1</span>
+            <span class="chip chip-warn">延期 1</span>
+            <span class="chip chip-block">受阻 1</span>
+          </div>
+          <div>
+            <a class="module-node" href="node-detail.html">
+              <span class="tag tag-green">已完成</span><span class="nm">订单流程设计</span><span class="dt">10-13 ~ 10-31</span>
+            </a>
+            <a class="module-node" href="node-detail.html">
+              <span class="tag tag-red">延期</span><span class="nm">订单接口开发</span><span class="dt">11-01 ~ 12-05 · 70%</span>
+            </a>
+            <a class="module-node" href="kanban.html">
+              <span class="tag tag-purple">受阻</span><span class="nm">支付渠道接入</span><span class="dt">11-15 ~ 12-20 · 40%</span>
+            </a>
+            <a class="module-node" href="node-detail.html">
+              <span class="tag tag-gray">未开始</span><span class="nm">对账与结算系统</span><span class="dt">12-21 ~ 01-20</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- 模块 3 -->
+        <div class="card module-card">
+          <div class="mhead">
+            <span class="avatar">孙</span>
+            <div class="mname">后台管理</div>
+            <span class="tag tag-blue">负责人 孙工</span>
+          </div>
+          <div class="progress-line"><div class="fill" style="width:48%"></div></div>
+          <div class="stats">
+            <span class="chip">进度 48%</span>
+            <span class="chip">节点 3</span>
+            <span class="chip chip-ok">完成 1</span>
+            <span class="chip">进行中 1</span>
+            <span class="chip">未开始 1</span>
+          </div>
+          <div>
+            <a class="module-node" href="node-detail.html">
+              <span class="tag tag-green">已完成</span><span class="nm">后台框架搭建</span><span class="dt">10-20 ~ 11-15</span>
+            </a>
+            <a class="module-node" href="node-detail.html">
+              <span class="tag tag-blue">进行中</span><span class="nm">商品管理模块</span><span class="dt">11-16 ~ 12-22 · 45%</span>
+            </a>
+            <a class="module-node" href="node-detail.html">
+              <span class="tag tag-gray">未开始</span><span class="nm">订单管理模块</span><span class="dt">12-23 ~ 01-25</span>
+            </a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

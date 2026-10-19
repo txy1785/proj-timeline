@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>节点详情 · 订单接口开发</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">📅 项目时间线</div>
+    <nav class="nav">
+      <a href="projects.html">📁 我的项目</a>
+      <a href="timeline.html" class="active">📅 项目时间线</a>
+      <a href="modules.html">🧩 模块视图</a>
+      <a href="workload.html">👥 人员负载</a>
+      <a href="notifications.html">🔔 通知中心</a>
+      <a href="weekly-report.html">📄 周报</a>
+      <a href="project-settings.html">⚙️ 项目管理</a>
+    </nav>
+    <div class="sidebar-user">
+      <span class="avatar avatar-sm">赵</span>
+      <div>赵工<br><span class="role">模块负责人</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumbs">商城系统开发 / 订单与支付 / <b>节点：订单接口开发</b></div>
+      <div class="top-actions">
+        <a class="bell" href="notifications.html">🔔<span class="badge">3</span></a>
+        <span class="avatar">赵</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="page-head">
+        <div>
+          <div class="page-title">节点：订单接口开发
+            <span class="tag tag-blue">进行中</span>
+            <span class="tag tag-red">⚠ 延期</span>
+          </div>
+          <div class="page-desc">所属模块：订单与支付（负责人 赵工） ｜ 点击左侧导航可查看其它页面</div>
+        </div>
+        <a class="btn btn-plain" href="timeline.html">← 返回时间线</a>
+      </div>
+
+      <div class="detail-grid">
+        <!-- 左列 -->
+        <div>
+          <div class="card">
+            <div class="card-title">📋 节点信息</div>
+            <div class="info-list">
+              <div><div class="k">节点名称</div>订单接口开发</div>
+              <div><div class="k">节点负责人</div><span class="avatar avatar-sm"></span> 赵工（继承自模块负责人，可改派）</div>
+              <div><div class="k">所属模块</div>订单与支付</div>
+              <div><div class="k">所属项目</div>商城系统开发</div>
+              <div><div class="k">计划起止</div>2025-11-01 ~ 2025-12-05</div>
+              <div><div class="k">实际起止</div>2025-11-01 ~ <span class="tag tag-red">未完成</span></div>
+              <div><div class="k">当前状态</div>进行中</div>
+              <div><div class="k">当前进度</div><b>70%</b>（负责人手动维护）</div>
+            </div>
+            <div class="alert-danger">
+              ⚠ 该节点已延期 13 天（计划结束 12-05）。<b>延期原因</b>（负责人赵工 12-06 提交，已通知 PM）：
+              「支付渠道资质审批超期，导致联调排期顺延；已与渠道方确认 12/22 前完成审批，预计节点 12/19 完成。」
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">✅ 任务列表（6） <span class="muted small" style="font-weight:400">新建任务时负责人自动带出节点负责人，可改派</span></div>
+            <table class="table">
+              <thead>
+                <tr><th>任务</th><th>负责人</th><th>状态</th><th>计划人天</th><th>实际人天</th><th>截止日</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><a href="#">下单接口</a></td><td>赵工</td><td><span class="tag tag-green">已完成</span></td><td>3</td><td>3.5</td><td>11-20</td></tr>
+                <tr><td><a href="#">订单状态机</a></td><td>赵工</td><td><span class="tag tag-green">已完成</span></td><td>2</td><td>2</td><td>11-25</td></tr>
+                <tr><td><a href="#">接口文档输出</a></td><td>赵工</td><td><span class="tag tag-green">已完成</span></td><td>1</td><td>1</td><td>11-28</td></tr>
+                <tr><td><a href="#">库存扣减接口</a></td><td>钱工</td><td><span class="tag tag-blue">进行中</span></td><td>2</td><td>1</td><td>12-10</td></tr>
+                <tr><td><a href="#">订单查询/列表</a></td><td>钱工</td><td><span class="tag tag-blue">进行中</span></td><td>2</td><td>0.5</td><td>12-12</td></tr>
+                <tr><td><a href="#">接口联调（与支付）</a></td><td>赵工</td><td><span class="tag tag-gray">待办</span></td><td>3</td><td>—</td><td>12-19</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 右列 -->
+        <div>
+          <div class="card">
+            <div class="card-title">🎛 操作面板</div>
+            <div class="form-item">
+              <label>状态流转（未开始 → 进行中 → 已完成）</label>
+              <div class="btn-group" style="display:flex;gap:8px;flex-wrap:wrap">
+                <a class="btn btn-small btn-plain" href="#">开始</a>
+                <a class="btn btn-small btn-primary" href="#">标记完成</a>
+                <a class="btn btn-small" href="#">取消节点</a>
+              </div>
+            </div>
+            <div class="form-item">
+              <label>进度百分比</label>
+              <div class="progress-input">
+                <input class="form-input" type="text" value="70">%
+                <a class="btn btn-small btn-primary" href="#">保存</a>
+              </div>
+            </div>
+            <div class="form-item">
+              <label>异常标记</label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <span class="tag tag-red">延期（自动判定）</span>
+                <a class="btn btn-small" href="#">标记受阻</a>
+              </div>
+            </div>
+            <div class="form-item">
+              <label>延期原因（延期后必填，提交后自动通知 PM 与模块负责人）</label>
+              <textarea class="form-textarea" rows="4">支付渠道资质审批超期，导致联调排期顺延；已与渠道方确认 12/22 前完成审批，预计节点 12/19 完成。</textarea>
+            </div>
+            <a class="btn btn-primary btn-block" href="#">更新延期原因</a>
+          </div>
+
+          <div class="card">
+            <div class="card-title">⏱ 工时汇总</div>
+            <div class="summary-row">
+              <div class="summary-box"><div class="num">13</div><div class="lbl">计划人天</div></div>
+              <div class="summary-box"><div class="num">7</div><div class="lbl">实际人天</div></div>
+            </div>
+            <div class="summary-row" style="margin-top:10px">
+              <div class="summary-box"><div class="num">6</div><div class="lbl">剩余人天</div></div>
+              <div class="summary-box"><div class="num" style="color:var(--danger)">+0.5</div><div class="lbl">已超支人天</div></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">📜 变更日志（周报草稿数据来源）</div>
+            <div class="log-list">
+              <div class="log-item"><span class="t">12-06 09:12</span><div>赵工 提交延期原因（系统自动通知 PM 李经理）</div></div>
+              <div class="log-item"><span class="t">12-05 18:00</span><div>系统 节点超过计划结束日，自动标记「延期」</div></div>
+              <div class="log-item"><span class="t">11-20 10:30</span><div>赵工 更新进度 45% → 70%</div></div>
+              <div class="log-item"><span class="t">11-12 14:00</span><div>钱工 完成任务「订单状态机」（实际 2 人天）</div></div>
+              <div class="log-item"><span class="t">11-01 09:00</span><div>赵工 状态流转 未开始 → 进行中</div></div>
+              <div class="log-item"><span class="t">10-28 16:20</span><div>李经理 创建节点，指定负责人 赵工（继承自模块）</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

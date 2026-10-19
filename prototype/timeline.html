@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>项目时间线 · 商城系统开发</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo">📅 项目时间线</div>
+    <nav class="nav">
+      <a href="projects.html">📁 我的项目</a>
+      <a href="timeline.html" class="active">📅 项目时间线</a>
+      <a href="modules.html">🧩 模块视图</a>
+      <a href="workload.html">👥 人员负载</a>
+      <a href="notifications.html">🔔 通知中心</a>
+      <a href="weekly-report.html">📄 周报</a>
+      <a href="project-settings.html">⚙️ 项目管理</a>
+    </nav>
+    <div class="sidebar-user">
+      <span class="avatar avatar-sm">李</span>
+      <div>李经理<br><span class="role">项目经理</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumbs">我的项目 / <b>商城系统开发</b> / 项目时间线</div>
+      <div class="top-actions">
+        <a class="bell" href="notifications.html">🔔<span class="badge">3</span></a>
+        <span class="avatar">李</span>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="page-head">
+        <div>
+          <div class="page-title">项目时间线 · 商城系统开发</div>
+          <div class="page-desc">按模块分组的节点甘特视图 ｜ 今天：2025-12-18 ｜ 总进度 56%</div>
+        </div>
+        <a class="btn btn-plain" href="node-detail.html">＋ 新建节点</a>
+      </div>
+
+      <!-- 筛选栏 -->
+      <div class="filter-bar">
+        <div class="filter-item">模块
+          <select class="form-select">
+            <option>全部模块</option>
+            <option>用户与登录</option>
+            <option>订单与支付</option>
+            <option>后台管理</option>
+          </select>
+        </div>
+        <div class="filter-item">负责人
+          <select class="form-select">
+            <option>全部负责人</option>
+            <option>王工</option>
+            <option>赵工</option>
+            <option>孙工</option>
+            <option>钱工</option>
+          </select>
+        </div>
+        <div class="filter-item">时间范围
+          <select class="form-select">
+            <option>全部时间</option>
+            <option>近 1 个月</option>
+            <option>近 3 个月</option>
+          </select>
+        </div>
+        <div class="filter-spacer"></div>
+        <div class="status-chips">
+          <span class="chip active">全部</span>
+          <span class="chip">未开始</span>
+          <span class="chip">进行中</span>
+          <span class="chip">已完成</span>
+          <span class="chip chip-warn">延期</span>
+          <span class="chip chip-block">受阻</span>
+          <span class="chip chip-near">临近</span>
+        </div>
+      </div>
+
+      <!-- 甘特图 -->
+      <div class="gantt">
+        <!-- 月份表头：总窗口 2025-10-06 ~ 2026-01-31 -->
+        <div class="gantt-head">
+          <div class="month" style="flex:0 0 22.2%">2025年10月</div>
+          <div class="month" style="flex:0 0 25.7%">2025年11月</div>
+          <div class="month" style="flex:0 0 26.5%">2025年12月</div>
+          <div class="month" style="flex:0 0 25.6%;border-right:1px solid var(--border)">2026年1月</div>
+        </div>
+        <!-- 垂直参考线 + 今天线 -->
+        <div class="gantt-vlines">
+          <span style="left:22.2%"></span>
+          <span style="left:47.9%"></span>
+          <span style="left:74.4%"></span>
+          <div class="today-line" style="left:62.4%"><span class="today-label">今天 12-18</span></div>
+        </div>
+
+        <!-- 模块：用户与登录 -->
+        <div class="gantt-module">
+          <div class="gantt-label">🧩 用户与登录 <span class="owner">负责人 王工</span></div>
+          <div class="gantt-track"></div>
+        </div>
+        <div class="gantt-row">
+          <div class="gantt-label"><span class="nm">需求梳理与原型设计</span><span class="owner">王工</span></div>
+          <div class="gantt-track">
+            <a class="bar done" style="left:0%;width:12.0%" href="node-detail.html">需求梳理与原型设计 <span class="pct">100%</span></a>
+          </div>
+        </div>
+        <div class="gantt-row">
+          <div class="gantt-label"><span class="nm">登录/注册开发</span><span class="owner">王工</span></div>
+          <div class="gantt-track">
+            <a class="bar done" style="left:12.0%;width:26.5%" href="node-detail.html">登录/注册开发 <span class="pct">100%</span></a>
+          </div>
+        </div>
+        <div class="gantt-row">
+          <div class="gantt-label"><span class="nm">第三方登录对接</span><span class="owner">王工</span></div>
+          <div class="gantt-track">
+            <a class="bar near" style="left:39.3%;width:24.8%" href="node-detail.html">第三方登录对接 <span class="pct">60%</span></a>
+          </div>
+        </div>
+        <div class="gantt-row">
+          <div class="gantt-label"><span class="nm">用户中心与安全加固</span><span class="owner">王工</span></div>
+          <div class="gantt-track">
+            <a class="bar todo" style="left:65.0%;width:21.4%" href="node-detail.html">未开始</a>
+          </div>
+        </div>
+
+        <!-- 模块：订单与支付 -->
+        <div class="gantt-module">
+          <div class="gantt-label">🧩 订单与支付 <span class="owner">负责人 赵工</span></div>
+          <div class="gantt-track"></div>
+        </div>
+        <div class="gantt-row">
+          <div class="gantt-label"><span class="nm">订单流程设计</span><span class="owner">赵工</span></div>
+          <div class="gantt-track">
+            <a class="bar done" style="left:6.0%;width:15.4%" href="node-detail.html">订单流程设计 <span class="pct">100%</span></a>
+          </div>
+        </div>
+        <div class="gantt-row">
+          <div class="gantt-label"><span class="nm">订单接口开发</span><span class="owner">赵工</span></div>
+          <div class="gantt-track">
+            <a class="bar overdue" style="left:22.2%;width:29.1%" href="node-detail.html">⚠ 订单接口开发 <span class="pct">70%</span></a>
+          </div>
+        </div>
+        <div class="gantt-row">
+          <div class="gantt-label"><span class="nm">支付渠道接入</span><span class="owner">赵工</span></div>
+          <div class="gantt-track">
+            <a class="bar blocked" style="left:34.2%;width:29.9%" href="kanban.html">⛔ 支付渠道接入 <span class="pct">40%</span></a>
+          </div>
+        </div>
+        <div class="gantt-row">
+          <div class="gantt-label"><span class="nm">对账与结算系统</span><span class="owner">赵工</span></div>
+          <div class="gantt-track">
+            <a class="bar todo" style="left:65.0%;width:25.6%" href="node-detail.html">未开始</a>
+          </div>
+        </div>
+
+        <!-- 模块：后台管理 -->
+        <div class="gantt-module">
+          <div class="gantt-label">🧩 后台管理 <span class="owner">负责人 孙工</span></div>
+          <div class="gantt-track"></div>
+        </div>
+        <div class="gantt-row">
+          <div class="gantt-label"><span class="nm">后台框架搭建</span><span class="owner">孙工</span></div>
+          <div class="gantt-track">
+            <a class="bar done" style="left:12.0%;width:22.2%" href="node-detail.html">后台框架搭建 <span class="pct">100%</span></a>
+          </div>
+        </div>
+        <div class="gantt-row">
+          <div class="gantt-label"><span class="nm">商品管理模块</span><span class="owner">孙工</span></div>
+          <div class="gantt-track">
+            <a class="bar doing" style="left:35.0%;width:30.8%" href="node-detail.html">商品管理模块 <span class="pct">45%</span></a>
+          </div>
+        </div>
+        <div class="gantt-row">
+          <div class="gantt-label"><span class="nm">订单管理模块</span><span class="owner">孙工</span></div>
+          <div class="gantt-track">
+            <a class="bar todo" style="left:66.7%;width:28.2%" href="node-detail.html">未开始</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- 图例 -->
+      <div class="legend">
+        <span><i class="dot dot-gray"></i>未开始</span>
+        <span><i class="dot dot-blue"></i>进行中</span>
+        <span><i class="dot dot-green"></i>已完成</span>
+        <span><i class="dot dot-red"></i>延期</span>
+        <span><i class="dot dot-purple"></i>受阻</span>
+        <span><i class="dot dot-amber"></i>临近（≤3天到期）</span>
+        <span style="margin-left:auto">点击节点条进入节点详情</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

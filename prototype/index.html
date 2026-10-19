@@ -1,0 +1,1461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>项目时间线 · 交互原型</title>
+<style>
+/* ================= 基础 ================= */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --primary: #409EFF; --success: #67C23A; --warning: #E6A23C; --danger: #F56C6C;
+  --info: #909399; --blocked: #8B5CF6;
+  --text-main: #303133; --text-regular: #606266; --text-secondary: #909399;
+  --border: #e4e7ed; --bg-page: #f0f2f5; --bg-card: #fff;
+  --sidebar-bg: #263445; --sidebar-text: #bfcbd9;
+}
+html, body { height: 100%; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif; font-size: 14px; color: var(--text-main); background: var(--bg-page); }
+a { text-decoration: none; color: var(--primary); }
+ul { list-style: none; }
+.hidden { display: none !important; }
+
+/* ================= 布局 ================= */
+.layout { display: flex; min-height: 100vh; }
+.sidebar { width: 220px; flex: none; background: var(--sidebar-bg); display: flex; flex-direction: column; }
+.logo { height: 56px; display: flex; align-items: center; gap: 8px; padding: 0 20px; color: #fff; font-size: 16px; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,.08); }
+.nav { flex: 1; padding: 12px 0; }
+.nav a { display: flex; align-items: center; gap: 10px; padding: 12px 20px; color: var(--sidebar-text); font-size: 14px; border-left: 3px solid transparent; cursor: pointer; }
+.nav a:hover { color: #fff; background: rgba(255,255,255,.06); }
+.nav a.active { color: #fff; background: var(--primary); border-left-color: #fff; }
+.sidebar-user { padding: 14px 20px; border-top: 1px solid rgba(255,255,255,.08); display: flex; align-items: center; gap: 10px; color: #fff; font-size: 13px; }
+.sidebar-user .role { color: var(--sidebar-text); font-size: 12px; }
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.topbar { height: 56px; background: #fff; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: sticky; top: 0; z-index: 10; }
+.crumbs { font-size: 14px; color: var(--text-regular); }
+.crumbs b { color: var(--text-main); }
+.top-actions { display: flex; align-items: center; gap: 18px; }
+.bell { position: relative; font-size: 18px; color: var(--text-regular); cursor: pointer; }
+.bell .badge { position: absolute; top: -6px; right: -9px; background: var(--danger); color: #fff; font-size: 11px; border-radius: 9px; padding: 0 5px; line-height: 16px; font-style: normal; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; flex: none; }
+.avatar-sm { width: 22px; height: 22px; font-size: 12px; }
+.avatars { display: flex; }
+.avatars .avatar { margin-left: -6px; border: 2px solid #fff; }
+.avatars .avatar:first-child { margin-left: 0; }
+.content { padding: 24px; }
+.view { display: none; }
+.view.active { display: block; }
+
+/* ================= 通用组件 ================= */
+.card { background: var(--bg-card); border-radius: 8px; border: 1px solid var(--border); padding: 20px; }
+.card + .card { margin-top: 16px; }
+.page-title { font-size: 18px; font-weight: 600; }
+.page-desc { color: var(--text-secondary); font-size: 13px; margin: 4px 0 16px; }
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; gap: 12px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 4px; font-size: 14px; cursor: pointer; border: 1px solid transparent; background: #fff; color: var(--text-regular); }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #66b1ff; }
+.btn-plain { border-color: var(--primary); color: var(--primary); background: #fff; }
+.btn-small { padding: 4px 10px; font-size: 12px; }
+.btn-block { width: 100%; justify-content: center; }
+.btn-link { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 12px; padding: 0; }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; line-height: 20px; white-space: nowrap; }
+.tag-gray { background: #f4f4f5; color: #909399; }
+.tag-blue { background: #ecf5ff; color: #409EFF; }
+.tag-green { background: #f0f9eb; color: #67C23A; }
+.tag-red { background: #fef0f0; color: #F56C6C; }
+.tag-amber { background: #fdf6ec; color: #E6A23C; }
+.tag-purple { background: #f4ecfd; color: #8B5CF6; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 12px; font-size: 12px; border: 1px solid transparent; cursor: pointer; color: var(--text-regular); background: #f4f4f5; }
+.chip.active { border-color: var(--primary); color: var(--primary); background: #ecf5ff; }
+.chip-warn { background: #fef0f0; color: #F56C6C; }
+.chip-block { background: #f4ecfd; color: #8B5CF6; }
+.chip-near { background: #fdf6ec; color: #E6A23C; }
+.chip-ok { background: #f0f9eb; color: #67C23A; }
+.muted { color: var(--text-secondary); }
+.small { font-size: 12px; }
+.dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 6px; vertical-align: middle; }
+.dot-blue{background:var(--primary)} .dot-green{background:var(--success)} .dot-gray{background:var(--info)} .dot-red{background:var(--danger)} .dot-amber{background:var(--warning)} .dot-purple{background:var(--blocked)}
+
+.ring { --p: 50; width: 84px; height: 84px; border-radius: 50%; flex: none; background: conic-gradient(var(--primary) calc(var(--p) * 1%), #e4e7ed 0); display: flex; align-items: center; justify-content: center; position: relative; }
+.ring::before { content: ""; position: absolute; inset: 9px; background: #fff; border-radius: 50%; }
+.ring b { position: relative; z-index: 1; font-size: 16px; color: var(--text-main); }
+.progress-line { height: 8px; background: #ebeef5; border-radius: 4px; overflow: hidden; }
+.progress-line .fill { height: 100%; border-radius: 4px; background: var(--primary); }
+.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table th { background: #fafafa; color: var(--text-secondary); font-weight: 500; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.table td { padding: 10px 12px; border-bottom: 1px solid #f0f2f5; vertical-align: middle; }
+.table tr:hover td { background: #fafcff; }
+.form-item { margin-bottom: 16px; }
+.form-item label { display: block; font-size: 13px; color: var(--text-regular); margin-bottom: 6px; }
+.form-input, .form-select, .form-textarea { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; color: var(--text-main); font-family: inherit; background: #fff; }
+.form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--primary); }
+.form-select { width: auto; }
+.form-row { display: flex; gap: 16px; }
+.form-row .form-item { flex: 1; }
+.tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.tab { padding: 12px 20px; cursor: pointer; color: var(--text-regular); border-bottom: 2px solid transparent; font-size: 14px; }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+
+/* ================= 登录 ================= */
+.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #1c3faa 0%, #409eff 55%, #7bb8ff 100%); }
+.login-card { width: 380px; background: #fff; border-radius: 10px; padding: 40px 36px; box-shadow: 0 10px 40px rgba(0,0,0,.18); }
+.login-card .logo-line { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 6px; font-size: 22px; font-weight: 600; }
+.login-card .sub { text-align: center; color: var(--text-secondary); font-size: 13px; margin-bottom: 28px; }
+.login-hint { margin-top: 20px; text-align: center; font-size: 12px; color: var(--text-secondary); }
+
+/* ================= 我的项目 ================= */
+.project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; }
+.project-card { padding: 20px; }
+.project-card .top { display: flex; gap: 16px; align-items: flex-start; }
+.project-card .info { flex: 1; min-width: 0; }
+.project-name { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.project-code { font-size: 12px; color: var(--text-secondary); margin: 4px 0 8px; }
+.project-dates { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; }
+.stat-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.project-actions { display: flex; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #f0f2f5; }
+.project-members { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.mini-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; background: #f7f9fb; border: 1px dashed var(--border); border-radius: 6px; padding: 10px; margin-bottom: 16px; }
+.mini-form .form-input, .mini-form .form-select { width: auto; }
+.mini-form .grow { flex: 1; min-width: 160px; }
+
+/* ================= 时间线 ================= */
+.filter-bar { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-bottom: 14px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+.filter-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-regular); }
+.filter-spacer { flex: 1; }
+.status-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.gantt { border: 1px solid var(--border); border-radius: 8px; background: #fff; overflow: hidden; position: relative; }
+.gantt-head { display: flex; border-bottom: 1px solid var(--border); background: #fafafa; padding-left: 260px; }
+.month { padding: 8px 0; text-align: center; font-size: 12px; color: var(--text-secondary); border-left: 1px solid var(--border); }
+.gantt-vlines { position: absolute; top: 38px; bottom: 0; left: 260px; right: 0; pointer-events: none; }
+.gantt-vlines span { position: absolute; top: 0; bottom: 0; border-left: 1px solid #f0f2f5; }
+.today-line { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--danger); }
+.today-label { position: absolute; top: 2px; left: 4px; background: var(--danger); color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+.gantt-module { display: flex; border-bottom: 1px solid var(--border); background: #f7f9fb; }
+.gantt-module .gantt-label { font-weight: 600; }
+.gantt-module .gantt-track { background: #f7f9fb; }
+.gantt-row { display: flex; border-bottom: 1px solid #f0f2f5; }
+.gantt-row:hover { background: #fafcff; }
+.gantt-label { width: 260px; flex: none; padding: 0 16px; display: flex; align-items: center; gap: 8px; border-right: 1px solid var(--border); min-height: 40px; font-size: 13px; }
+.gantt-label .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gantt-label .owner { margin-left: auto; flex: none; font-size: 11px; color: var(--text-secondary); background: #f5f7fa; padding: 1px 8px; border-radius: 10px; }
+.gantt-track { flex: 1; position: relative; min-height: 40px; }
+.bar { position: absolute; top: 9px; height: 22px; border-radius: 4px; padding: 0 10px; color: #fff; font-size: 12px; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; cursor: pointer; }
+.bar:hover { filter: brightness(1.08); }
+.bar .pct { font-weight: 600; }
+.bar.done { background: var(--success); }
+.bar.doing { background: var(--primary); }
+.bar.todo { background: #fff; border: 1px dashed #c0c4cc; color: var(--text-secondary); }
+.bar.overdue { background: var(--danger); }
+.bar.blocked { background: var(--blocked); }
+.bar.near { background: var(--warning); }
+.legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-secondary); margin-top: 12px; flex-wrap: wrap; }
+
+/* ================= 模块视图 ================= */
+.module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.module-card .mhead { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.module-card .mname { font-size: 15px; font-weight: 600; flex: 1; }
+.module-card .stats { display: flex; gap: 8px; margin: 10px 0; flex-wrap: wrap; }
+.module-node { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px dashed #f0f2f5; font-size: 13px; cursor: pointer; }
+.module-node:hover .nm { color: var(--primary); }
+.module-node .nm { flex: 1; color: var(--text-main); }
+.module-node .dt { font-size: 12px; color: var(--text-secondary); }
+
+/* ================= 节点详情 ================= */
+.detail-grid { display: grid; grid-template-columns: 1fr 330px; gap: 16px; align-items: start; }
+.info-list { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; font-size: 13px; }
+.info-list .k { color: var(--text-secondary); margin-bottom: 3px; font-size: 12px; }
+.alert-danger { background: #fef0f0; border: 1px solid #fbc4c4; color: #F56C6C; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin: 12px 0; }
+.alert-block { background: #f4ecfd; border: 1px solid #d9c7f7; color: #8B5CF6; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin: 12px 0; }
+.progress-input { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.progress-input .form-input { width: 90px; }
+.summary-box { text-align: center; padding: 12px; background: #f7f9fb; border-radius: 6px; }
+.summary-box .num { font-size: 22px; font-weight: 600; }
+.summary-box .lbl { font-size: 12px; color: var(--text-secondary); }
+.summary-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.log-list { font-size: 13px; }
+.log-item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px dashed #f0f2f5; }
+.log-item .t { color: var(--text-secondary); flex: none; width: 108px; font-size: 12px; padding-top: 1px; }
+.card-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.mt8 { margin-top: 8px; }
+.mb0 { margin-bottom: 0; }
+
+/* ================= 看板 ================= */
+.kanban-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+.kanban-col { background: #f5f7fa; border-radius: 8px; padding: 12px; }
+.kanban-col-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 14px; font-weight: 600; padding: 0 4px; }
+.task-card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 10px; }
+.task-card .tname { font-size: 13px; margin-bottom: 8px; line-height: 1.4; }
+.task-card .tmeta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+.task-card .tmeta .spacer { flex: 1; }
+.task-card .days { background: #f5f7fa; padding: 1px 8px; border-radius: 8px; }
+.kanban-move { display: flex; gap: 4px; margin-top: 8px; }
+.kanban-move button { width: 24px; height: 22px; border: 1px solid var(--border); background: #fff; border-radius: 3px; cursor: pointer; color: var(--text-secondary); font-size: 12px; line-height: 1; }
+.kanban-move button:hover { color: var(--primary); border-color: var(--primary); }
+.kanban-move button:disabled { opacity: .3; cursor: not-allowed; }
+.kanban-move .spacer { flex: 1; }
+
+/* ================= 人员负载 ================= */
+.load-bar { width: 90px; height: 6px; background: #ebeef5; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; }
+.load-bar .fill { height: 100%; border-radius: 3px; }
+
+/* ================= 通知 ================= */
+.notif-list { background: #fff; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.notif-item { display: flex; gap: 12px; padding: 14px 18px; border-bottom: 1px solid #f0f2f5; align-items: flex-start; cursor: pointer; }
+.notif-item:last-child { border-bottom: none; }
+.notif-item.unread { background: #ecf5ff; }
+.notif-item:hover { background: #f5f9ff; }
+.notif-icon { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex: none; }
+.notif-body { flex: 1; min-width: 0; }
+.notif-title { font-size: 14px; }
+.notif-desc { font-size: 13px; color: var(--text-regular); margin-top: 3px; line-height: 1.5; }
+.notif-time { font-size: 12px; color: var(--text-secondary); flex: none; padding-top: 2px; }
+.notif-unread-dot { width: 8px; height: 8px; background: var(--danger); border-radius: 50%; flex: none; margin-top: 6px; }
+
+/* ================= 周报 ================= */
+.report-section { margin-bottom: 22px; }
+.report-section h3 { font-size: 14px; font-weight: 600; margin-bottom: 10px; padding-left: 8px; border-left: 3px solid var(--primary); line-height: 1.3; }
+.report-meta { display: flex; gap: 20px; font-size: 13px; color: var(--text-regular); margin-bottom: 16px; flex-wrap: wrap; }
+.history-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px dashed #f0f2f5; }
+.history-item .spacer { flex: 1; }
+.empty { text-align: center; color: var(--text-secondary); padding: 24px 0; font-size: 13px; }
+
+/* ================= 设置 ================= */
+.module-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #f0f2f5; flex-wrap: wrap; }
+.module-row .mname { flex: 1; font-size: 14px; min-width: 120px; }
+.module-row .form-select { width: 160px; }
+
+/* ================= 提示条 ================= */
+#toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); background: rgba(48,49,51,.85); color: #fff; padding: 8px 18px; border-radius: 4px; font-size: 13px; z-index: 99; display: none; }
+</style>
+</head>
+<body>
+
+<!-- ============ 登录 ============ -->
+<div id="loginWrap" class="login-wrap">
+  <form class="login-card" id="loginForm" onsubmit="return false;">
+    <div class="logo-line">📅 项目时间线</div>
+    <div class="sub">项目进度管理 · 交互原型（单文件版）</div>
+    <div class="form-item">
+      <label>用户名（可选：李经理 / 王工 / 赵工 / 孙工 / 钱工 / 张总）</label>
+      <input class="form-input" id="loginName" type="text" value="李经理" placeholder="请输入用户名">
+    </div>
+    <div class="form-item">
+      <label>密码</label>
+      <input class="form-input" type="password" value="123456" placeholder="请输入密码">
+    </div>
+    <a class="btn btn-primary btn-block" id="btnLogin" href="projects.html">登 录</a>
+    <div class="login-hint">原型演示 · 数据保存在浏览器内存，刷新即重置</div>
+    <div id="jsError" style="display:none;margin-top:14px;padding:10px 12px;background:#fef0f0;border:1px solid #fbc4c4;color:#F56C6C;border-radius:6px;font-size:12px;line-height:1.6"></div>
+  </form>
+</div>
+
+<!-- ============ 应用外壳 ============ -->
+<div id="appChrome" class="layout hidden">
+  <aside class="sidebar">
+    <div class="logo">📅 项目时间线</div>
+    <nav class="nav" id="sideNav">
+      <a data-view="projects">📁 我的项目</a>
+      <a data-view="timeline">📅 项目时间线</a>
+      <a data-view="modules">🧩 模块视图</a>
+      <a data-view="workload">👥 人员负载</a>
+      <a data-view="notifications">🔔 通知中心</a>
+      <a data-view="weekly">📄 周报</a>
+      <a data-view="settings">⚙️ 项目管理</a>
+    </nav>
+    <div class="sidebar-user">
+      <span class="avatar avatar-sm" id="sideAvatar">李</span>
+      <div><span id="sideName">李经理</span><br><span class="role" id="sideRole">项目经理</span></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumbs" id="crumbs">首页 / <b>我的项目</b></div>
+      <div class="top-actions">
+        <a class="bell" id="bellBtn" title="通知中心">🔔<span class="badge" id="bellBadge">3</span></a>
+        <span class="avatar" id="topAvatar">李</span>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- 我的项目 -->
+      <div class="view" id="view-projects">
+        <div class="page-head">
+          <div><div class="page-title">我的项目</div><div class="page-desc" id="projectDesc">共 2 个项目</div></div>
+          <button class="btn btn-primary" onclick="app.toggleCreateProject()">＋ 新建项目</button>
+        </div>
+        <div class="mini-form hidden" id="createProjectForm">
+          <input class="form-input grow" id="cpName" placeholder="项目名称，如：官网改版">
+          <input class="form-input" id="cpCode" placeholder="代号，如 WEB-2026" style="width:140px">
+          <input class="form-input" id="cpStart" value="2025-12-18" style="width:130px" title="计划开始">
+          <input class="form-input" id="cpEnd" value="2026-03-31" style="width:130px" title="计划结束">
+          <button class="btn btn-primary btn-small" onclick="app.createProject()">创建</button>
+          <button class="btn btn-small" onclick="app.toggleCreateProject()">取消</button>
+        </div>
+        <div class="project-grid" id="projectGrid"></div>
+      </div>
+
+      <!-- 时间线 -->
+      <div class="view" id="view-timeline">
+        <div class="page-head">
+          <div><div class="page-title" id="tlTitle">项目时间线</div><div class="page-desc" id="tlDesc"></div></div>
+          <button class="btn btn-plain" onclick="app.newNodeForm()">＋ 新建节点</button>
+        </div>
+        <div class="mini-form hidden" id="newNodeForm">
+          <input class="form-input grow" id="nnName" placeholder="节点名称，如：接口联调完成">
+          <select class="form-select" id="nnModule"></select>
+          <select class="form-select" id="nnOwner"></select>
+          <input class="form-input" id="nnStart" style="width:120px" value="2025-12-18">
+          <input class="form-input" id="nnEnd" style="width:120px" value="2026-01-15">
+          <button class="btn btn-primary btn-small" onclick="app.createNode()">创建</button>
+          <button class="btn btn-small" onclick="app.newNodeForm(true)">取消</button>
+        </div>
+        <div class="filter-bar">
+          <div class="filter-item">模块 <select class="form-select" id="tlModule" onchange="app.renderTimeline()"></select></div>
+          <div class="filter-item">负责人 <select class="form-select" id="tlOwner" onchange="app.renderTimeline()"></select></div>
+          <div class="filter-spacer"></div>
+          <div class="status-chips" id="tlChips"></div>
+        </div>
+        <div class="gantt" id="gantt"></div>
+        <div class="legend">
+          <span><i class="dot dot-gray"></i>未开始</span><span><i class="dot dot-blue"></i>进行中</span>
+          <span><i class="dot dot-green"></i>已完成</span><span><i class="dot dot-red"></i>延期</span>
+          <span><i class="dot dot-purple"></i>受阻</span><span><i class="dot dot-amber"></i>临近（≤3天到期）</span>
+          <span style="margin-left:auto">点击节点条进入节点详情</span>
+        </div>
+      </div>
+
+      <!-- 模块视图 -->
+      <div class="view" id="view-modules">
+        <div class="page-head">
+          <div><div class="page-title">模块视图</div><div class="page-desc" id="mdDesc"></div></div>
+          <button class="btn btn-primary" onclick="app.go('settings')">＋ 新建模块</button>
+        </div>
+        <div class="module-grid" id="moduleGrid"></div>
+      </div>
+
+      <!-- 节点详情 -->
+      <div class="view" id="view-node">
+        <div class="page-head">
+          <div><div class="page-title" id="nodeTitle"></div><div class="page-desc" id="nodeDesc"></div></div>
+          <div class="btn-row">
+            <button class="btn btn-small" onclick="app.go('kanban')">看板视图</button>
+            <button class="btn btn-plain btn-small" onclick="app.go('timeline')">← 返回时间线</button>
+          </div>
+        </div>
+        <div id="nodeBody"></div>
+      </div>
+
+      <!-- 看板 -->
+      <div class="view" id="view-kanban">
+        <div class="page-head">
+          <div><div class="page-title" id="kbTitle">任务看板</div><div class="page-desc" id="kbDesc"></div></div>
+          <button class="btn btn-plain btn-small" onclick="app.go('node')">← 返回节点详情</button>
+        </div>
+        <div id="kbAlert"></div>
+        <div class="mini-form" id="kbAddForm">
+          <input class="form-input grow" id="kbTaskName" placeholder="新任务名称">
+          <select class="form-select" id="kbTaskAssignee"></select>
+          <input class="form-input" id="kbTaskEst" style="width:110px" placeholder="计划人天">
+          <button class="btn btn-primary btn-small" onclick="app.addTask()">添加任务</button>
+        </div>
+        <div class="kanban-board" id="kanbanBoard"></div>
+      </div>
+
+      <!-- 人员负载 -->
+      <div class="view" id="view-workload">
+        <div class="page-head">
+          <div><div class="page-title">人员负载（跨项目汇总）</div><div class="page-desc">分配任务前先看谁在忙什么，避免过载</div></div>
+          <button class="btn btn-plain" onclick="app.toast('原型演示：导出功能开发阶段实现')">导出 Excel</button>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <table class="table" id="workloadTable"></table>
+        </div>
+        <div class="card">
+          <div class="card-title">📌 负载说明</div>
+          <div class="small" style="color:var(--text-regular);line-height:1.8">
+            · 负载 = 本周在办任务计划人天 ÷ 团队人均周计划人天（8 人天）；<br>
+            · <span style="color:var(--danger)">高</span>（&gt;80%）建议 PM 重新分配；<span style="color:var(--warning)">中</span>（50%~80%）可少量加派；<span style="color:var(--success)">低</span>（&lt;50%）可承接新任务。
+          </div>
+        </div>
+      </div>
+
+      <!-- 通知中心 -->
+      <div class="view" id="view-notifications">
+        <div class="page-head">
+          <div><div class="page-title">通知中心</div><div class="page-desc" id="notifDesc"></div></div>
+          <button class="btn btn-plain" onclick="app.readAll()">全部标为已读</button>
+        </div>
+        <div class="notif-list" id="notifList"></div>
+      </div>
+
+      <!-- 周报 -->
+      <div class="view" id="view-weekly">
+        <div class="page-head">
+          <div><div class="page-title">项目周报</div><div class="page-desc">系统按节点/任务变化自动生成草稿，PM 补充后发布</div></div>
+          <button class="btn btn-primary" id="btnPublish" onclick="app.publishReport()">发布本周周报</button>
+        </div>
+        <div class="tabs">
+          <div class="tab active" data-wtab="draft" onclick="app.wtab('draft')">本周草稿</div>
+          <div class="tab" data-wtab="history" onclick="app.wtab('history')">历史周报</div>
+        </div>
+        <div id="weeklyBody"></div>
+      </div>
+
+      <!-- 项目管理 -->
+      <div class="view" id="view-settings">
+        <div class="page-head">
+          <div><div class="page-title">项目管理</div><div class="page-desc">维护项目信息、成员与模块（含模块负责人）</div></div>
+        </div>
+        <div class="tabs settings-tabs" id="settingsTabs">
+          <div class="tab active" data-stab="basic" onclick="app.stab('basic')">基本信息</div>
+          <div class="tab" data-stab="members" onclick="app.stab('members')">成员管理</div>
+          <div class="tab" data-stab="mods" onclick="app.stab('mods')">模块管理</div>
+        </div>
+        <div id="settingsBody"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* ================================================================
+   数据（内存态，刷新即重置）
+   ================================================================ */
+const TODAY = '2025-12-18';
+const WEEK = { start: '2025-12-15', end: '2025-12-21', label: '第 51 周（12-15 ~ 12-21）' };
+const W0 = '2025-10-06';            // 时间线窗口起点
+const SPAN = 117;                   // 窗口天数（10-06 ~ 01-31）
+
+const USERS = [
+  { id: 'u1', name: '张总', role: 'VIEWER', avatar: '张' },
+  { id: 'u2', name: '李经理', role: 'USER', avatar: '李' },
+  { id: 'u3', name: '王工', role: 'USER', avatar: '王' },
+  { id: 'u4', name: '赵工', role: 'USER', avatar: '赵' },
+  { id: 'u5', name: '孙工', role: 'USER', avatar: '孙' },
+  { id: 'u6', name: '钱工', role: 'USER', avatar: '钱' },
+];
+const uname = id => (USERS.find(u => u.id === id) || {}).name || id;
+
+function mkTask(id, name, assignee, status, est, act, due) {
+  return { id, name, assignee, status, est, act: act || 0, due };
+}
+function mkNode(id, name, owner, ps, pe, status, progress, extra) {
+  extra = extra || {};
+  return Object.assign({
+    id, name, owner, ps, pe, status, progress,
+    as: ps, ae: null, blocked: false, blockedReason: '', overdueReason: '',
+    tasks: [], logs: [], createdAt: ps,
+  }, extra);
+}
+
+const PROJECTS = [
+  {
+    id: 'p1', name: '商城系统开发', code: 'MALL-2025', pm: 'u2',
+    start: '2025-10-06', end: '2026-01-30', members: ['u1','u2','u3','u4','u5','u6'],
+    modules: [
+      { id: 'm1', name: '用户与登录', owner: 'u3', nodes: [
+        mkNode('n1_1', '需求梳理与原型设计', 'u3', '2025-10-06', '2025-10-20', 'DONE', 100, { ae: '2025-10-19' }),
+        mkNode('n1_2', '登录/注册开发', 'u3', '2025-10-20', '2025-11-20', 'DONE', 100, { ae: '2025-12-12' }),
+        mkNode('n1_3', '第三方登录对接', 'u3', '2025-11-21', '2025-12-20', 'DOING', 60, { tasks: [
+          mkTask('t1', '微信/QQ 登录接入', 'u3', 'DOING', 2, 1, '2025-12-18'),
+          mkTask('t2', '手机号一键登录', 'u6', 'TODO', 2, 0, '2025-12-20'),
+        ]}),
+        mkNode('n1_4', '用户中心与安全加固', 'u3', '2025-12-21', '2026-01-15', 'TODO', 0, { createdAt: '2025-12-15', tasks: [
+          mkTask('t1', '安全加固方案', 'u3', 'TODO', 2, 0, '2026-01-05'),
+        ]}),
+      ]},
+      { id: 'm2', name: '订单与支付', owner: 'u4', nodes: [
+        mkNode('n2_1', '订单流程设计', 'u4', '2025-10-13', '2025-10-31', 'DONE', 100, { ae: '2025-10-30' }),
+        mkNode('n2_2', '订单接口开发', 'u4', '2025-11-01', '2025-12-05', 'DOING', 70, {
+          overdueReason: '支付渠道资质审批超期，导致联调排期顺延；已与渠道方确认 12/22 前完成审批，预计节点 12/19 完成。',
+          tasks: [
+            mkTask('t1', '下单接口', 'u4', 'DONE', 3, 3.5, '2025-11-20'),
+            mkTask('t2', '订单状态机', 'u4', 'DONE', 2, 2, '2025-11-25'),
+            mkTask('t3', '接口文档输出', 'u4', 'DONE', 1, 1, '2025-11-28'),
+            mkTask('t4', '库存扣减接口', 'u6', 'DOING', 2, 1, '2025-12-10'),
+            mkTask('t5', '订单查询/列表', 'u6', 'DOING', 2, 0.5, '2025-12-12'),
+            mkTask('t6', '接口联调（与支付）', 'u4', 'TODO', 3, 0, '2025-12-19'),
+          ],
+          logs: [
+            { t: '2025-12-06 09:12', txt: '赵工 提交延期原因（系统自动通知 PM 李经理）' },
+            { t: '2025-12-05 18:00', txt: '系统 节点超过计划结束日，自动标记「延期」' },
+            { t: '2025-11-20 10:30', txt: '赵工 更新进度 45% → 70%' },
+            { t: '2025-11-12 14:00', txt: '钱工 完成任务「订单状态机」（实际 2 人天）' },
+            { t: '2025-11-01 09:00', txt: '赵工 状态流转 未开始 → 进行中' },
+            { t: '2025-10-28 16:20', txt: '李经理 创建节点，指定负责人 赵工（继承自模块）' },
+          ],
+        }),
+        mkNode('n2_3', '支付渠道接入', 'u4', '2025-11-15', '2025-12-20', 'DOING', 40, {
+          blocked: true, blockedReason: '银联支付入网证书审批中（预计 12/22 出证），银联接入任务被阻塞，其余渠道不受影响。',
+          tasks: [
+            mkTask('t1', '微信支付接入', 'u6', 'DOING', 3, 2, '2025-12-15'),
+            mkTask('t2', '银联支付申请', 'u4', 'DOING', 1, 1, '2025-12-10'),
+            mkTask('t3', '支付宝接入', 'u6', 'TODO', 3, 0, '2025-12-20'),
+            mkTask('t4', '支付回调处理', 'u4', 'TODO', 2, 0, '2025-12-20'),
+            mkTask('t5', '退款流程', 'u4', 'TODO', 2, 0, '2025-12-22'),
+            mkTask('t6', '沙箱环境测试', 'u6', 'TODO', 2, 0, '2025-12-22'),
+            mkTask('t7', '支付需求评审', 'u4', 'DONE', 0.5, 0.5, '2025-11-10'),
+            mkTask('t8', '渠道调研', 'u6', 'DONE', 1, 1, '2025-11-12'),
+          ],
+          logs: [
+            { t: '2025-12-10 11:30', txt: '赵工 标记受阻：' + '银联证书审批等待中' },
+            { t: '2025-11-15 09:00', txt: '李经理 创建节点，指定负责人 赵工（继承自模块）' },
+          ],
+        }),
+        mkNode('n2_4', '对账与结算系统', 'u4', '2025-12-21', '2026-01-20', 'TODO', 0, { tasks: [
+          mkTask('t1', '对账单生成', 'u4', 'TODO', 3, 0, '2026-01-10'),
+        ]}),
+      ]},
+      { id: 'm3', name: '后台管理', owner: 'u5', nodes: [
+        mkNode('n3_1', '后台框架搭建', 'u5', '2025-10-20', '2025-11-15', 'DONE', 100, { ae: '2025-11-13' }),
+        mkNode('n3_2', '商品管理模块', 'u5', '2025-11-16', '2025-12-22', 'DOING', 45, { tasks: [
+          mkTask('t1', '商品列表页', 'u5', 'DOING', 2, 1.5, '2025-12-20'),
+          mkTask('t2', '商品编辑与上下架', 'u5', 'TODO', 3, 0, '2025-12-22'),
+          mkTask('t3', '库存盘点报表', 'u6', 'TODO', 2, 0, '2025-12-24'),
+        ]}),
+        mkNode('n3_3', '订单管理模块', 'u5', '2025-12-23', '2026-01-25', 'TODO', 0),
+      ]},
+    ],
+  },
+  {
+    id: 'p2', name: '移动端 APP 改版', code: 'APP-2026', pm: 'u2',
+    start: '2025-12-10', end: '2026-03-20', members: ['u1','u2','u3','u6'],
+    modules: [
+      { id: 'ma1', name: 'APP整体设计', owner: 'u3', nodes: [
+        mkNode('na1', '视觉改版方案', 'u3', '2025-12-10', '2025-12-30', 'DOING', 30),
+      ]},
+      { id: 'ma2', name: '购物车重构', owner: 'u6', nodes: [
+        mkNode('na2', '购物车架构设计', 'u6', '2025-12-15', '2026-01-10', 'TODO', 0),
+      ]},
+    ],
+  },
+];
+
+let NOTIFS = [
+  { id: 'nf1', icon: '🔴', bg: '#fef0f0', title: '延期预警 · 「订单接口开发」已延期 13 天',
+    desc: '节点负责人 赵工 已提交延期原因，预计 12/19 完成。', view: 'node', nodeId: 'n2_2', time: '12-06 09:12', unread: true },
+  { id: 'nf2', icon: '⛔', bg: '#f4ecfd', title: '受阻提醒 · 「支付渠道接入」被标记受阻',
+    desc: '受阻原因：等待银联入网证书审批（预计 12/22）。', view: 'node', nodeId: 'n2_3', time: '12-10 11:30', unread: true },
+  { id: 'nf3', icon: '📋', bg: '#ecf5ff', title: '任务指派 · 赵工 指派任务「库存扣减接口」给你',
+    desc: '所属节点：订单接口开发 · 计划 2 人天 · 截止 12-10。', view: 'node', nodeId: 'n2_2', time: '11-25 10:00', unread: true },
+  { id: 'nf4', icon: '✅', bg: '#f0f9eb', title: '节点完成 · 「登录/注册开发」已完成',
+    desc: '节点负责人 王工 标记完成，实际结束 12-12。', view: 'node', nodeId: 'n1_2', time: '12-12 17:40', unread: false },
+  { id: 'nf5', icon: '📄', bg: '#ecf5ff', title: '周报发布 · 李经理 发布了第 50 周周报',
+    desc: '本周完成 1 个节点，1 个延期，1 个受阻。', view: 'weekly', time: '12-15 09:00', unread: false },
+  { id: 'nf6', icon: '📋', bg: '#ecf5ff', title: '任务指派 · 赵工 指派任务「微信支付接入」给你',
+    desc: '所属节点：支付渠道接入 · 计划 3 人天。', view: 'node', nodeId: 'n2_3', time: '11-20 15:22', unread: false },
+];
+
+const REPORT = {
+  status: 'DRAFT',
+  note: '本周订单与支付模块风险集中：接口开发延期、银联审批阻塞。已与渠道方确认 12/22 出证，下周完成支付渠道接入和接口联调，全力保障 1 月底上线目标。',
+  history: [
+    { label: '第 50 周（12-08 ~ 12-14）', sum: '完成 1 节点 · 延期 1 · 受阻 1', time: '12-15 09:00 发布' },
+    { label: '第 49 周（12-01 ~ 12-07）', sum: '完成 0 节点 · 延期 1', time: '12-08 09:12 发布' },
+    { label: '第 48 周（11-24 ~ 11-30）', sum: '完成 1 节点 · 一切正常', time: '12-01 09:30 发布' },
+  ],
+};
+
+/* ================================================================
+   状态与工具
+   ================================================================ */
+const state = { user: null, projectId: 'p1', nodeId: 'n2_2', tlFilter: 'all', wtab: 'draft', stab: 'basic' };
+const $ = id => document.getElementById(id);
+const proj = () => PROJECTS.find(p => p.id === state.projectId) || PROJECTS[0];
+function findNode(id) {
+  for (const p of PROJECTS) for (const m of p.modules) for (const n of m.nodes)
+    if (n.id === id) return { p, m, n };
+  return null;
+}
+function d2n(s) {
+  const [y, m, d] = s.split('-').map(Number);
+  return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(2025, 9, 6)) / 86400000);
+}
+const pctOf = n => (n / SPAN * 100);
+function nodeFlags(n) {
+  const active = n.status === 'TODO' || n.status === 'DOING';
+  const over = active && n.pe < TODAY;
+  const gap = d2n(n.pe) - d2n(TODAY);
+  const near = active && !over && gap >= 0 && gap <= 3;
+  return { over, near, blocked: !!n.blocked };
+}
+function statusTag(st) {
+  const map = { TODO: ['未开始', 'tag-gray'], DOING: ['进行中', 'tag-blue'], DONE: ['已完成', 'tag-green'], CANCELLED: ['已取消', 'tag-gray'] };
+  const [txt, cls] = map[st] || map.TODO;
+  return `<span class="tag ${cls}">${txt}</span>`;
+}
+function nowStamp() {
+  const d = new Date();
+  return TODAY.slice(5).replace('-', '/') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function log(n, txt) { n.logs.unshift({ t: nowStamp(), txt }); }
+let toastTimer;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg; t.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.style.display = 'none'; }, 1700);
+}
+function updateBadge() {
+  const c = NOTIFS.filter(n => n.unread).length;
+  const b = $('bellBadge');
+  b.textContent = c;
+  b.style.display = c ? '' : 'none';
+}
+
+/* ================================================================
+   视图路由
+   ================================================================ */
+function setCrumbs(view) {
+  const p = proj();
+  const map = {
+    projects: '首页 / <b>我的项目</b>',
+    timeline: `我的项目 / <b>${p.name}</b> / 项目时间线`,
+    modules: `我的项目 / <b>${p.name}</b> / 模块视图`,
+    node: `我的项目 / <b>${p.name}</b> / 节点详情`,
+    kanban: `我的项目 / <b>${p.name}</b> / 任务看板`,
+    workload: '全局 / <b>人员负载</b>',
+    notifications: '全局 / <b>通知中心</b>',
+    weekly: `我的项目 / <b>${p.name}</b> / 周报`,
+    settings: `我的项目 / <b>${p.name}</b> / 项目管理`,
+  };
+  $('crumbs').innerHTML = map[view] || '项目时间线';
+}
+function go(view, params) {
+  if (params) Object.assign(state, params);
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  const el = $('view-' + view);
+  if (el) el.classList.add('active');
+  document.querySelectorAll('#sideNav a').forEach(a => a.classList.toggle('active', a.dataset.view === view));
+  if (view === 'projects') renderProjects();
+  if (view === 'timeline') renderTimeline();
+  if (view === 'modules') renderModules();
+  if (view === 'node') renderNode();
+  if (view === 'kanban') renderKanban();
+  if (view === 'workload') renderWorkload();
+  if (view === 'notifications') renderNotifs();
+  if (view === 'weekly') renderWeekly();
+  if (view === 'settings') renderSettings();
+  updateBadge();
+  setCrumbs(view);
+  window.scrollTo(0, 0);
+}
+
+/* ================================================================
+   登录
+   ================================================================ */
+function login(ev) {
+  ev.preventDefault();
+  const name = $('loginName').value.trim();
+  state.user = USERS.find(u => u.name === name) || USERS[1];
+  $('loginWrap').classList.add('hidden');
+  $('appChrome').classList.remove('hidden');
+  $('sideAvatar').textContent = state.user.avatar;
+  $('topAvatar').textContent = state.user.avatar;
+  $('sideName').textContent = state.user.name;
+  $('sideRole').textContent = state.user.role === 'VIEWER' ? '只读观察者' : '项目经理';
+  go('projects');
+  toast('欢迎回来，' + state.user.name);
+}
+
+/* ================================================================
+   我的项目
+   ================================================================ */
+function projectStats(p) {
+  const nodes = p.modules.flatMap(m => m.nodes);
+  const active = nodes.filter(n => n.status !== 'CANCELLED');
+  const fl = nodes.map(nodeFlags);
+  return {
+    total: nodes.length,
+    done: nodes.filter(n => n.status === 'DONE').length,
+    doing: nodes.filter(n => n.status === 'DOING').length,
+    todo: nodes.filter(n => n.status === 'TODO').length,
+    over: fl.filter(f => f.over).length,
+    blocked: fl.filter(f => f.blocked).length,
+    near: fl.filter(f => f.near).length,
+    prog: active.length ? Math.round(active.reduce((s, n) => s + n.progress, 0) / active.length) : 0,
+  };
+}
+function renderProjects() {
+  const risk = PROJECTS.map(projectStats).filter(s => s.over + s.blocked > 0).length;
+  $('projectDesc').textContent = `共 ${PROJECTS.length} 个项目，${risk} 个存在延期/受阻节点`;
+  $('projectGrid').innerHTML = PROJECTS.map(p => {
+    const s = projectStats(p);
+    const warns = [];
+    if (s.over) warns.push(`<span class="chip chip-warn">⚠ 延期 ${s.over}</span>`);
+    if (s.blocked) warns.push(`<span class="chip chip-block">⛔ 受阻 ${s.blocked}</span>`);
+    if (s.near) warns.push(`<span class="chip chip-near">⌛ 临近 ${s.near}</span>`);
+    if (!warns.length) warns.push('<span class="chip chip-ok">一切正常</span>');
+    const avatars = p.members.map(id => {
+      const u = USERS.find(x => x.id === id);
+      return `<span class="avatar avatar-sm" title="${u.name}">${u.avatar}</span>`;
+    }).join('');
+    return `
+    <div class="card project-card">
+      <div class="top">
+        <div class="info">
+          <div class="project-name">${p.name} <span class="tag tag-blue">进行中</span></div>
+          <div class="project-code">代号 ${p.code} ｜ 项目经理：${uname(p.pm)}</div>
+          <div class="project-dates">📆 ${p.start} ~ ${p.end}</div>
+          <div class="stat-chips">
+            <span class="chip">节点 ${s.total}</span><span class="chip chip-ok">完成 ${s.done}</span>
+            <span class="chip">进行中 ${s.doing}</span><span class="chip">未开始 ${s.todo}</span>
+          </div>
+          <div class="stat-chips">${warns.join('')}</div>
+        </div>
+        <div class="ring" style="--p:${s.prog}"><b>${s.prog}%</b></div>
+      </div>
+      <div class="project-members"><span class="muted small">成员：</span><span class="avatars">${avatars}</span></div>
+      <div class="project-actions">
+        <button class="btn btn-primary btn-small" onclick="app.openProject('${p.id}','timeline')">进入时间线</button>
+        <button class="btn btn-plain btn-small" onclick="app.openProject('${p.id}','modules')">模块视图</button>
+        <button class="btn btn-plain btn-small" onclick="app.openProject('${p.id}','weekly')">周报</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function openProject(id, view) { state.projectId = id; go(view); }
+function toggleCreateProject(hide) {
+  $('createProjectForm').classList.toggle('hidden', !!hide);
+}
+function createProject() {
+  const name = $('cpName').value.trim() || '未命名项目';
+  PROJECTS.push({
+    id: 'p' + Date.now(), name, code: $('cpCode').value.trim() || 'NEW',
+    pm: state.user.id, start: $('cpStart').value || TODAY, end: $('cpEnd').value || '2026-03-31',
+    members: [state.user.id], modules: [],
+  });
+  $('cpName').value = ''; $('cpCode').value = '';
+  toggleCreateProject(true);
+  renderProjects();
+  toast('项目「' + name + '」已创建，到「项目管理」添加模块');
+}
+
+/* ================================================================
+   项目时间线
+   ================================================================ */
+const TL_CHIPS = [['all', '全部'], ['todo', '未开始'], ['doing', '进行中'], ['done', '已完成'], ['overdue', '延期'], ['blocked', '受阻'], ['near', '临近']];
+function barClass(f, n) {
+  if (n.status === 'DONE') return 'done';
+  if (n.status === 'CANCELLED') return 'todo';
+  if (f.over) return 'overdue';
+  if (f.blocked) return 'blocked';
+  if (f.near) return 'near';
+  if (n.status === 'DOING') return 'doing';
+  return 'todo';
+}
+function matchesFilter(n, f) {
+  if (state.tlFilter === 'all') return true;
+  if (state.tlFilter === 'overdue') return f.over;
+  if (state.tlFilter === 'blocked') return f.blocked;
+  if (state.tlFilter === 'near') return f.near;
+  if (state.tlFilter === 'done') return n.status === 'DONE';
+  if (state.tlFilter === 'doing') return n.status === 'DOING';
+  if (state.tlFilter === 'todo') return n.status === 'TODO';
+  return true;
+}
+function renderTimeline() {
+  const p = proj();
+  $('tlTitle').textContent = '项目时间线 · ' + p.name;
+  $('tlDesc').textContent = `按模块分组的节点甘特视图 ｜ 今天：${TODAY} ｜ 总进度 ${projectStats(p).prog}%`;
+  const mSel = $('tlModule'), oSel = $('tlOwner');
+  const curM = mSel.value, curO = oSel.value;
+  mSel.innerHTML = '<option value="">全部模块</option>' + p.modules.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+  oSel.innerHTML = '<option value="">全部负责人</option>' + USERS.slice(1).map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+  mSel.value = curM; oSel.value = curO;
+  $('tlChips').innerHTML = TL_CHIPS.map(([k, label]) =>
+    `<span class="chip ${state.tlFilter === k ? 'active' : ''}" onclick="app.setTlFilter('${k}')">${label}</span>`).join('');
+  let rows = '';
+  for (const m of p.modules) {
+    const vis = m.nodes.filter(n => {
+      const f = nodeFlags(n);
+      if (!matchesFilter(n, f)) return false;
+      if (curM && m.id !== curM) return false;
+      if (curO && n.owner !== curO) return false;
+      return true;
+    });
+    if (!vis.length) continue;
+    rows += `<div class="gantt-module"><div class="gantt-label">🧩 ${m.name} <span class="owner">负责人 ${uname(m.owner)}</span></div><div class="gantt-track"></div></div>`;
+    for (const n of vis) {
+      const f = nodeFlags(n);
+      const cls = barClass(f, n);
+      const left = pctOf(d2n(n.ps)), width = Math.max(pctOf(d2n(n.pe) - d2n(n.ps)), 3);
+      let label;
+      if (n.status === 'DONE') label = `${n.name} <span class="pct">100%</span>`;
+      else if (n.status === 'CANCELLED') label = '已取消';
+      else if (f.over) label = `⚠ ${n.name} <span class="pct">${n.progress}%</span>`;
+      else if (f.blocked) label = `⛔ ${n.name} <span class="pct">${n.progress}%</span>`;
+      else if (n.status === 'DOING') label = `${n.name} <span class="pct">${n.progress}%</span>`;
+      else label = '未开始';
+      rows += `
+      <div class="gantt-row">
+        <div class="gantt-label"><span class="nm">${n.name}</span><span class="owner">${uname(n.owner)}</span></div>
+        <div class="gantt-track">
+          <a class="bar ${cls}" style="left:${left.toFixed(1)}%;width:${width.toFixed(1)}%" onclick="app.openNode('${n.id}')">${label}</a>
+        </div>
+      </div>`;
+    }
+  }
+  const todayP = pctOf(d2n(TODAY));
+  $('gantt').innerHTML = `
+    <div class="gantt-head">
+      <div class="month" style="flex:0 0 22.2%">2025年10月</div>
+      <div class="month" style="flex:0 0 25.7%">2025年11月</div>
+      <div class="month" style="flex:0 0 26.5%">2025年12月</div>
+      <div class="month" style="flex:0 0 25.6%;border-right:1px solid var(--border)">2026年1月</div>
+    </div>
+    <div class="gantt-vlines">
+      <span style="left:22.2%"></span><span style="left:47.9%"></span><span style="left:74.4%"></span>
+      <div class="today-line" style="left:${todayP.toFixed(1)}%"><span class="today-label">今天 ${TODAY.slice(5)}</span></div>
+    </div>
+    ${rows}`;
+}
+function setTlFilter(k) { state.tlFilter = k; renderTimeline(); }
+function openNode(id) { state.nodeId = id; go('node'); }
+function newNodeForm(hide) {
+  const f = $('newNodeForm');
+  if (hide) { f.classList.add('hidden'); return; }
+  const p = proj();
+  $('nnModule').innerHTML = p.modules.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+  $('nnOwner').innerHTML = USERS.slice(1).map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+  f.classList.toggle('hidden');
+}
+function createNode() {
+  const p = proj();
+  const mid = $('nnModule').value;
+  const m = p.modules.find(x => x.id === mid);
+  if (!m) { toast('请先到「项目管理」创建模块'); return; }
+  const n = mkNode('n' + Date.now(), $('nnName').value.trim() || '未命名节点',
+    $('nnOwner').value || m.owner, $('nnStart').value || TODAY, $('nnEnd').value || '2026-01-15', 'TODO', 0);
+  n.createdAt = TODAY;
+  log(n, state.user.name + ' 创建节点，指定负责人 ' + uname(n.owner) + '（继承自模块）');
+  m.nodes.push(n);
+  $('nnName').value = '';
+  newNodeForm(true);
+  renderTimeline();
+  toast('节点已创建');
+}
+
+/* ================================================================
+   模块视图
+   ================================================================ */
+function renderModules() {
+  const p = proj();
+  $('mdDesc').textContent = `${p.modules.length} 个模块，各自有负责人；模块进度 = 模块下节点的平均进度`;
+  $('moduleGrid').innerHTML = p.modules.map(m => {
+    const act = m.nodes.filter(n => n.status !== 'CANCELLED');
+    const prog = act.length ? Math.round(act.reduce((s, n) => s + n.progress, 0) / act.length) : 0;
+    const done = m.nodes.filter(n => n.status === 'DONE').length;
+    const fl = m.nodes.map(nodeFlags);
+    let warn = '';
+    const over = fl.filter(f => f.over).length, blocked = fl.filter(f => f.blocked).length, near = fl.filter(f => f.near).length;
+    if (over) warn += `<span class="chip chip-warn">延期 ${over}</span>`;
+    if (blocked) warn += `<span class="chip chip-block">受阻 ${blocked}</span>`;
+    if (near) warn += `<span class="chip chip-near">临近 ${near}</span>`;
+    const owner = USERS.find(u => u.id === m.owner);
+    const nodesHtml = m.nodes.map(n => {
+      const f = nodeFlags(n);
+      let tag = statusTag(n.status);
+      if (f.over) tag = '<span class="tag tag-red">延期</span>';
+      else if (f.blocked) tag = '<span class="tag tag-purple">受阻</span>';
+      else if (f.near) tag = '<span class="tag tag-amber">临近</span>';
+      const dt = n.status === 'DONE' ? ` · 100%` : (n.status === 'TODO' ? '' : ` · ${n.progress}%`);
+      return `<div class="module-node" onclick="app.openNode('${n.id}')">${tag}<span class="nm">${n.name}</span><span class="dt">${n.ps} ~ ${n.pe}${dt}</span></div>`;
+    }).join('');
+    return `
+    <div class="card module-card">
+      <div class="mhead"><span class="avatar">${owner.avatar}</span><div class="mname">${m.name}</div><span class="tag tag-blue">负责人 ${owner.name}</span></div>
+      <div class="progress-line"><div class="fill" style="width:${prog}%"></div></div>
+      <div class="stats">
+        <span class="chip">进度 ${prog}%</span><span class="chip">节点 ${m.nodes.length}</span>
+        <span class="chip chip-ok">完成 ${done}</span>${warn}
+      </div>
+      <div>${nodesHtml}</div>
+    </div>`;
+  }).join('') || '<div class="empty">暂无模块，去「项目管理」创建</div>';
+}
+
+/* ================================================================
+   节点详情
+   ================================================================ */
+function renderNode() {
+  const hit = findNode(state.nodeId);
+  if (!hit) { go('timeline'); return; }
+  const { m, n } = hit;
+  const f = nodeFlags(n);
+  const owner = USERS.find(u => u.id === n.owner);
+  let extra = statusTag(n.status);
+  if (f.over) extra += ' <span class="tag tag-red">⚠ 延期</span>';
+  if (f.blocked) extra += ' <span class="tag tag-purple">⛔ 受阻</span>';
+  if (f.near) extra += ' <span class="tag tag-amber">⌛ 临近</span>';
+  $('nodeTitle').innerHTML = '节点：' + n.name + ' ' + extra;
+  $('nodeDesc').textContent = `所属模块：${m.name}（负责人 ${uname(m.owner)}） ｜ 所属项目：${proj().name}`;
+  const gap = Math.max(0, d2n(TODAY) - d2n(n.pe));
+  const alertHtml = f.over
+    ? `<div class="alert-danger">⚠ 该节点已延期 ${gap} 天（计划结束 ${n.pe}）。<b>延期原因</b>${n.overdueReason ? '（负责人已提交，已通知 PM）：' + n.overdueReason : '：<i>负责人尚未填写</i>'}</div>`
+    : (f.blocked ? `<div class="alert-block">⛔ 受阻原因：${n.blockedReason}</div>` : '');
+  const tasksHtml = n.tasks.length ? n.tasks.map(t => `
+    <tr>
+      <td>${t.name}</td><td>${uname(t.assignee)}</td>
+      <td><select class="form-select" style="padding:2px 6px;font-size:12px" onchange="app.taskStatus('${n.id}','${t.id}',this.value)">
+        <option value="TODO" ${t.status === 'TODO' ? 'selected' : ''}>待办</option>
+        <option value="DOING" ${t.status === 'DOING' ? 'selected' : ''}>进行中</option>
+        <option value="DONE" ${t.status === 'DONE' ? 'selected' : ''}>已完成</option>
+      </select></td>
+      <td>${t.est}</td><td>${t.act || '—'}</td><td>${t.due}</td>
+    </tr>`).join('') : '<tr><td colspan="6" class="empty">暂无任务</td></tr>';
+  const sumEst = n.tasks.reduce((s, t) => s + t.est, 0);
+  const sumAct = n.tasks.reduce((s, t) => s + (t.act || 0), 0);
+  const logsHtml = n.logs.length ? n.logs.map(l => `<div class="log-item"><span class="t">${l.t}</span><div>${l.txt}</div></div>`).join('') : '<div class="empty">暂无日志</div>';
+  $('nodeBody').innerHTML = `
+  <div class="detail-grid">
+    <div>
+      <div class="card">
+        <div class="card-title">📋 节点信息</div>
+        <div class="info-list">
+          <div><div class="k">节点名称</div>${n.name}</div>
+          <div><div class="k">节点负责人</div>${owner.avatar} ${owner.name}（继承自模块负责人，可改派）</div>
+          <div><div class="k">所属模块</div>${m.name}</div>
+          <div><div class="k">所属项目</div>${proj().name}</div>
+          <div><div class="k">计划起止</div>${n.ps} ~ ${n.pe}</div>
+          <div><div class="k">实际起止</div>${n.as} ~ ${n.ae ? n.ae : '<span class="tag tag-red">未完成</span>'}</div>
+          <div><div class="k">当前状态</div>${statusTag(n.status)}</div>
+          <div><div class="k">当前进度</div><b>${n.progress}%</b>（负责人手动维护）</div>
+        </div>
+        ${alertHtml}
+      </div>
+      <div class="card">
+        <div class="card-title">✅ 任务列表（${n.tasks.length}）<span class="muted small" style="font-weight:400">下拉可直接改任务状态</span></div>
+        <table class="table">
+          <thead><tr><th>任务</th><th>负责人</th><th>状态</th><th>计划人天</th><th>实际人天</th><th>截止日</th></tr></thead>
+          <tbody>${tasksHtml}</tbody>
+        </table>
+        <div class="mini-form" style="margin-top:12px">
+          <input class="form-input grow" id="ntName" placeholder="新任务名称">
+          <select class="form-select" id="ntAssignee">${USERS.slice(1).map(u => `<option value="${u.id}" ${u.id === n.owner ? 'selected' : ''}>${u.name}</option>`).join('')}</select>
+          <input class="form-input" id="ntEst" style="width:100px" placeholder="计划人天">
+          <button class="btn btn-primary btn-small" onclick="app.addTaskToNode('${n.id}')">添加任务</button>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title">🎛 操作面板</div>
+        <div class="form-item mb0">
+          <label>状态流转（未开始 → 进行中 → 已完成）</label>
+          <div class="btn-row">
+            <button class="btn btn-small btn-plain" ${n.status !== 'TODO' ? 'disabled' : ''} onclick="app.setNodeStatus('${n.id}','DOING')">开始</button>
+            <button class="btn btn-small btn-primary" ${(n.status === 'DONE' || n.status === 'CANCELLED') ? 'disabled' : ''} onclick="app.setNodeStatus('${n.id}','DONE')">标记完成</button>
+            <button class="btn btn-small" ${n.status === 'CANCELLED' ? 'disabled' : ''} onclick="app.setNodeStatus('${n.id}','CANCELLED')">取消节点</button>
+          </div>
+        </div>
+        <div class="form-item mt8 mb0">
+          <label>进度百分比（完成时自动置 100）</label>
+          <div class="progress-input"><input class="form-input" id="npInput" type="number" min="0" max="100" value="${n.progress}">% <button class="btn btn-small btn-primary" onclick="app.saveProgress('${n.id}')">保存</button></div>
+        </div>
+        <div class="form-item mt8 mb0">
+          <label>异常标记</label>
+          <div class="btn-row">
+            ${f.over ? '<span class="tag tag-red">延期（自动判定）</span>' : ''}
+            ${n.blocked
+              ? `<button class="btn btn-small btn-plain" onclick="app.toggleBlocked('${n.id}')">解除受阻</button>`
+              : `<button class="btn btn-small" onclick="app.toggleBlocked('${n.id}')">标记受阻</button>`}
+          </div>
+        </div>
+        ${n.blocked ? `
+        <div class="form-item mt8 mb0"><label>受阻原因</label>
+          <textarea class="form-textarea" rows="2" id="brInput">${n.blockedReason}</textarea>
+          <button class="btn btn-small btn-primary mt8" onclick="app.saveBlockedReason('${n.id}')">更新受阻原因</button>
+        </div>` : ''}
+        ${f.over ? `
+        <div class="form-item mt8 mb0"><label>延期原因（延期后必填，提交后自动通知 PM 与模块负责人）</label>
+          <textarea class="form-textarea" rows="3" id="orInput">${n.overdueReason}</textarea>
+          <button class="btn btn-primary btn-small mt8" onclick="app.saveOverdueReason('${n.id}')">更新延期原因</button>
+        </div>` : ''}
+      </div>
+      <div class="card">
+        <div class="card-title">⏱ 工时汇总</div>
+        <div class="summary-row">
+          <div class="summary-box"><div class="num">${sumEst}</div><div class="lbl">计划人天</div></div>
+          <div class="summary-box"><div class="num">${sumAct}</div><div class="lbl">实际人天</div></div>
+        </div>
+        <div class="summary-row" style="margin-top:10px">
+          <div class="summary-box"><div class="num">${Math.max(0, sumEst - sumAct).toFixed(1)}</div><div class="lbl">剩余人天</div></div>
+          <div class="summary-box"><div class="num" style="color:${sumAct > sumEst ? 'var(--danger)' : 'inherit'}">${sumAct > sumEst ? '+' : ''}${(sumAct - sumEst).toFixed(1)}</div><div class="lbl">偏差人天</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">📜 变更日志（周报草稿数据来源）</div>
+        <div class="log-list">${logsHtml}</div>
+      </div>
+    </div>
+  </div>`;
+}
+function setNodeStatus(id, st) {
+  const { n } = findNode(id);
+  const stName = { DOING: '进行中', DONE: '已完成', CANCELLED: '已取消' }[st];
+  if (n.status === st) return;
+  if (st === 'DOING') { n.status = 'DOING'; if (!n.as) n.as = TODAY; }
+  if (st === 'DONE') { n.status = 'DONE'; n.progress = 100; n.ae = TODAY; }
+  if (st === 'CANCELLED') { n.status = 'CANCELLED'; }
+  log(n, state.user.name + ' 状态流转 → ' + stName);
+  if (st === 'DONE') {
+    NOTIFS.unshift({ id: 'nf' + Date.now(), icon: '✅', bg: '#f0f9eb', title: `节点完成 · 「${n.name}」已完成`,
+      desc: `节点负责人 ${uname(n.owner)} 标记完成，实际结束 ${TODAY}。`, view: 'node', nodeId: n.id, time: nowStamp(), unread: true });
+  }
+  renderNode(); updateBadge();
+  toast('节点状态已更新为：' + stName);
+}
+function saveProgress(id) {
+  const { n } = findNode(id);
+  let v = parseInt($('npInput').value, 10);
+  if (isNaN(v)) v = n.progress;
+  v = Math.max(0, Math.min(100, v));
+  if (n.status === 'DONE') v = 100;
+  if (v !== n.progress) { log(n, state.user.name + ' 更新进度 ' + n.progress + '% → ' + v + '%'); n.progress = v; }
+  renderNode();
+  toast('进度已保存：' + v + '%');
+}
+function taskStatus(nodeId, taskId, st) {
+  const { n } = findNode(nodeId);
+  const t = n.tasks.find(x => x.id === taskId);
+  if (t.status !== st) {
+    t.status = st;
+    log(n, uname(t.assignee) + ' 将任务「' + t.name + '」改为 ' + ({ TODO: '待办', DOING: '进行中', DONE: '已完成' })[st]);
+    renderNode();
+  }
+}
+function addTaskToNode(nodeId) {
+  const { n } = findNode(nodeId);
+  const name = $('ntName').value.trim() || '未命名任务';
+  const est = parseFloat($('ntEst').value) || 0;
+  n.tasks.push(mkTask('t' + Date.now(), name, $('ntAssignee').value, 'TODO', est, 0, n.pe));
+  log(n, state.user.name + ' 添加任务「' + name + '」');
+  $('ntName').value = ''; $('ntEst').value = '';
+  renderNode();
+  toast('任务已添加');
+}
+function toggleBlocked(id) {
+  const { n } = findNode(id);
+  n.blocked = !n.blocked;
+  if (n.blocked) {
+    n.blockedReason = n.blockedReason || '';
+    log(n, state.user.name + ' 标记受阻');
+    NOTIFS.unshift({ id: 'nf' + Date.now(), icon: '⛔', bg: '#f4ecfd', title: `受阻提醒 · 「${n.name}」被标记受阻`,
+      desc: '受阻原因：' + (n.blockedReason || '未填写'), view: 'node', nodeId: n.id, time: nowStamp(), unread: true });
+  } else {
+    log(n, state.user.name + ' 解除受阻');
+  }
+  renderNode(); updateBadge();
+  toast(n.blocked ? '已标记受阻' : '已解除受阻');
+}
+function saveBlockedReason(id) {
+  const { n } = findNode(id);
+  n.blockedReason = $('brInput').value;
+  log(n, state.user.name + ' 更新受阻原因');
+  renderNode(); toast('受阻原因已更新');
+}
+function saveOverdueReason(id) {
+  const { n } = findNode(id);
+  n.overdueReason = $('orInput').value;
+  log(n, state.user.name + ' 提交延期原因（系统自动通知 PM 李经理）');
+  NOTIFS.unshift({ id: 'nf' + Date.now(), icon: '🔴', bg: '#fef0f0', title: `延期预警 · 「${n.name}」延期原因已更新`,
+    desc: '负责人 ' + uname(n.owner) + '：' + n.overdueReason.slice(0, 40) + '…', view: 'node', nodeId: n.id, time: nowStamp(), unread: true });
+  renderNode(); updateBadge();
+  toast('延期原因已提交，已通知 PM');
+}
+
+/* ================================================================
+   任务看板
+   ================================================================ */
+function renderKanban() {
+  const hit = findNode(state.nodeId);
+  if (!hit) { go('timeline'); return; }
+  const { n } = hit;
+  const f = nodeFlags(n);
+  $('kbTitle').innerHTML = '任务看板 · ' + n.name + ' ' + statusTag(n.status) + (f.blocked ? ' <span class="tag tag-purple">⛔ 受阻</span>' : '');
+  $('kbDesc').textContent = `节点负责人 ${uname(n.owner)} ｜ 计划 ${n.ps} ~ ${n.pe} ｜ 进度 ${n.progress}%`;
+  $('kbAlert').innerHTML = f.blocked ? `<div class="alert-block" style="margin-bottom:16px">⛔ 受阻原因：${n.blockedReason}</div>` : '';
+  $('kbTaskAssignee').innerHTML = USERS.slice(1).map(u => `<option value="${u.id}" ${u.id === n.owner ? 'selected' : ''}>${u.name}</option>`).join('');
+  const cols = [
+    { key: 'TODO', label: '待办', cls: 'tag-gray' },
+    { key: 'DOING', label: '进行中', cls: 'tag-blue' },
+    { key: 'DONE', label: '已完成', cls: 'tag-green' },
+  ];
+  $('kanbanBoard').innerHTML = cols.map(c => {
+    const list = n.tasks.filter(t => t.status === c.key);
+    const cards = list.map(t => {
+      const blockedTask = f.blocked && t.name.indexOf('银联') >= 0;
+      const u = USERS.find(x => x.id === t.assignee) || {};
+      return `
+      <div class="task-card" ${blockedTask ? 'style="border-color:#d9c7f7;background:#fbf8ff"' : ''}>
+        <div class="tname">${t.name} ${blockedTask ? '<span class="tag tag-purple">⛔ 受阻</span>' : ''}</div>
+        <div class="tmeta"><span class="avatar avatar-sm">${u.avatar || '?'}</span> ${uname(t.assignee)} <span class="spacer"></span><span class="days">计划 ${t.est} 人天${t.act ? ' · 已花 ' + t.act : ''}</span></div>
+        ${blockedTask ? '<div class="small muted" style="margin-top:8px">等待银联证书审批（预计 12/22）</div>' : ''}
+        <div class="kanban-move">
+          <button ${c.key === 'TODO' ? 'disabled' : ''} title="移到左列" onclick="app.moveTask('${n.id}','${t.id}',-1)">◀</button>
+          <span class="spacer"></span>
+          <button ${c.key === 'DONE' ? 'disabled' : ''} title="移到右列" onclick="app.moveTask('${n.id}','${t.id}',1)">▶</button>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="kanban-col"><div class="kanban-col-head">${c.label} <span class="tag ${c.cls}">${list.length}</span></div>${cards || '<div class="empty">暂无任务</div>'}</div>`;
+  }).join('');
+}
+function moveTask(nodeId, taskId, dir) {
+  const { n } = findNode(nodeId);
+  const t = n.tasks.find(x => x.id === taskId);
+  const order = ['TODO', 'DOING', 'DONE'];
+  const idx = order.indexOf(t.status) + dir;
+  if (idx < 0 || idx > 2) return;
+  t.status = order[idx];
+  if (t.status === 'DONE') log(n, uname(t.assignee) + ' 完成任务「' + t.name + '」');
+  renderKanban();
+}
+function addTask() {
+  const { n } = findNode(state.nodeId);
+  const name = $('kbTaskName').value.trim() || '未命名任务';
+  const est = parseFloat($('kbTaskEst').value) || 0;
+  n.tasks.push(mkTask('t' + Date.now(), name, $('kbTaskAssignee').value, 'TODO', est, 0, n.pe));
+  log(n, state.user.name + ' 添加任务「' + name + '」');
+  $('kbTaskName').value = ''; $('kbTaskEst').value = '';
+  renderKanban();
+  toast('任务已添加');
+}
+
+/* ================================================================
+   人员负载
+   ================================================================ */
+function renderWorkload() {
+  const rows = USERS.map(u => {
+    if (u.role === 'VIEWER') {
+      return `<tr><td><span class="avatar avatar-sm">${u.avatar}</span> ${u.name}</td><td>只读观察者</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="tag tag-gray">只读</span></td></tr>`;
+    }
+    const mods = [], nodes = [], tasks = [];
+    let estActive = 0;
+    for (const p of PROJECTS) for (const m of p.modules) {
+      if (m.owner === u.id) mods.push(m.name);
+      for (const n of m.nodes) {
+        if (n.owner === u.id) nodes.push(n);
+        for (const t of n.tasks) if (t.assignee === u.id) {
+          tasks.push(t);
+          if (t.status !== 'DONE') estActive += t.est;
+        }
+      }
+    }
+    const pmCount = PROJECTS.filter(p => p.pm === u.id).length;
+    if (!mods.length && !nodes.length && !tasks.length) {
+      return `<tr><td><span class="avatar avatar-sm">${u.avatar}</span> ${u.name}</td><td>普通用户</td><td>PM × ${pmCount} 项目</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="tag tag-gray">协调中</span></td></tr>`;
+    }
+    const doing = nodes.filter(n => n.status === 'DOING').length;
+    const tDoing = tasks.filter(t => t.status === 'DOING').length;
+    const tTodo = tasks.filter(t => t.status === 'TODO').length;
+    const dueWeek = tasks.filter(t => t.status !== 'DONE' && t.due >= TODAY && t.due <= '2025-12-25').length;
+    const over = nodes.filter(n => nodeFlags(n).over).length;
+    const load = Math.min(120, Math.round(estActive / 8 * 100));
+    const lvl = load > 80 ? ['高', 'var(--danger)'] : load >= 50 ? ['中', 'var(--warning)'] : ['低', 'var(--success)'];
+    const barColor = load > 80 ? 'var(--danger)' : load >= 50 ? 'var(--warning)' : 'var(--success)';
+    return `<tr>
+      <td><span class="avatar avatar-sm">${u.avatar}</span> ${u.name}</td>
+      <td>普通用户</td>
+      <td>${mods.length ? '模块负责人' : '成员'}</td>
+      <td>${mods.join(' / ') || '—'}</td>
+      <td>${nodes.length} <span class="muted">(${doing})</span></td>
+      <td>${tasks.length} <span class="muted">(${tDoing}/${tTodo})</span></td>
+      <td>${dueWeek ? `<span class="tag tag-amber">${dueWeek}</span>` : '0'}</td>
+      <td>${over ? `<span class="tag tag-red">${over}</span>` : '0'}</td>
+      <td>${estActive.toFixed(1)}</td>
+      <td><span class="load-bar"><span class="fill" style="width:${Math.min(100, load)}%;background:${barColor}"></span></span> <span class="small" style="color:${lvl[1]}">${lvl[0]}</span></td>
+    </tr>`;
+  }).join('');
+  $('workloadTable').innerHTML = `
+    <thead><tr>
+      <th>成员</th><th>全局角色</th><th>项目内职务</th><th>负责模块</th>
+      <th>负责节点<br><span class="small">(进行中)</span></th><th>任务<br><span class="small">(进行中/待办)</span></th>
+      <th>本周到期</th><th>延期</th><th>计划人天</th><th>负载</th>
+    </tr></thead><tbody>${rows}</tbody>`;
+}
+
+/* ================================================================
+   通知中心
+   ================================================================ */
+function renderNotifs() {
+  const c = NOTIFS.filter(n => n.unread).length;
+  $('notifDesc').textContent = c ? `${c} 条未读 ｜ 点击通知跳转并标记已读` : '暂无未读通知 ｜ 点击通知可跳转';
+  $('notifList').innerHTML = NOTIFS.map(n => `
+    <div class="notif-item ${n.unread ? 'unread' : ''}" onclick="app.readNotif('${n.id}')">
+      <div class="notif-icon" style="background:${n.bg}">${n.icon}</div>
+      <div class="notif-body">
+        <div class="notif-title">${n.title}</div>
+        <div class="notif-desc">${n.desc} ${n.view ? '<span style="color:var(--primary)">查看 →</span>' : ''}</div>
+      </div>
+      ${n.unread ? '<div class="notif-unread-dot"></div>' : ''}
+      <div class="notif-time">${n.time}</div>
+    </div>`).join('');
+}
+function readNotif(id) {
+  const n = NOTIFS.find(x => x.id === id);
+  if (n.unread) { n.unread = false; }
+  if (n.nodeId) state.nodeId = n.nodeId;
+  go(n.view || 'weekly');
+}
+function readAll() {
+  NOTIFS.forEach(n => { n.unread = false; });
+  renderNotifs(); updateBadge();
+  toast('已全部标记为已读');
+}
+
+/* ================================================================
+   周报
+   ================================================================ */
+function renderWeekly() {
+  $('btnPublish').style.display = REPORT.status === 'PUBLISHED' ? 'none' : '';
+  if (state.wtab === 'history') {
+    $('weeklyBody').innerHTML = `<div class="card">
+      <div class="card-title">📚 历史周报</div>
+      ${REPORT.history.map(h => `
+      <div class="history-item">
+        <span>📄</span>
+        <div>${h.label} <span class="muted small">· ${h.sum}</span></div>
+        <span class="spacer"></span>
+        <span class="tag tag-green">已发布</span>
+        <span class="muted small">${h.time}</span>
+      </div>`).join('')}
+    </div>`;
+    return;
+  }
+  const p = proj();
+  const nodes = p.modules.flatMap(m => m.nodes);
+  const doneWeek = nodes.filter(n => n.ae && n.ae >= WEEK.start && n.ae <= WEEK.end);
+  const risks = nodes.filter(n => nodeFlags(n).over || nodeFlags(n).blocked);
+  const nextDue = nodes.filter(n => (n.status === 'TODO' || n.status === 'DOING') && n.pe > TODAY && n.pe <= '2025-12-28');
+  const created = nodes.filter(n => n.createdAt && n.createdAt >= WEEK.start && n.createdAt <= WEEK.end);
+  const doneHtml = doneWeek.length
+    ? `<table class="table"><thead><tr><th>节点</th><th>模块</th><th>负责人</th><th>实际结束</th></tr></thead><tbody>
+       ${doneWeek.map(n => `<tr><td><a style="cursor:pointer" onclick="app.openNode('${n.id}')">${n.name}</a></td><td>${findNode(n.id).m.name}</td><td>${uname(n.owner)}</td><td>${n.ae}</td></tr>`).join('')}</tbody></table>`
+    : `<div class="empty">本周暂无完成节点（最近完成：12-12「登录/注册开发」）</div>`;
+  const riskHtml = risks.length
+    ? `<table class="table"><thead><tr><th>节点</th><th>负责人</th><th>标记</th><th>原因摘要</th></tr></thead><tbody>
+       ${risks.map(n => {
+         const f = nodeFlags(n);
+         const tag = f.over ? '<span class="tag tag-red">延期</span>' : '<span class="tag tag-purple">受阻</span>';
+         const reason = (f.over ? n.overdueReason : n.blockedReason) || '未填写';
+         return `<tr><td><a style="cursor:pointer" onclick="app.openNode('${n.id}')">${n.name}</a></td><td>${uname(n.owner)}</td><td>${tag}</td><td>${reason.slice(0, 32)}${reason.length > 32 ? '…' : ''}</td></tr>`;
+       }).join('')}</tbody></table>`
+    : '<div class="empty">本周无延期/受阻节点 🎉</div>';
+  const dueHtml = nextDue.length
+    ? `<table class="table"><thead><tr><th>节点</th><th>负责人</th><th>计划结束</th><th>当前进度</th></tr></thead><tbody>
+       ${nextDue.map(n => {
+         const near = nodeFlags(n).near;
+         return `<tr><td><a style="cursor:pointer" onclick="app.openNode('${n.id}')">${n.name}</a></td><td>${uname(n.owner)}</td><td>${n.pe} ${near ? '<span class="tag tag-amber">临近</span>' : ''}</td><td>${n.progress}%</td></tr>`;
+       }).join('')}</tbody></table>`
+    : '<div class="empty">下周暂无到期节点</div>';
+  const createdHtml = created.length
+    ? '<div class="small" style="color:var(--text-regular);line-height:1.8">· 新增节点：' + created.map(n => `<a style="cursor:pointer" onclick="app.openNode('${n.id}')">${n.name}</a>`).join('、') + '；<br>· 新增任务 3 个：库存扣减接口、订单查询/列表、沙箱环境测试。</div>'
+    : '<div class="empty">本周暂无新增节点</div>';
+  $('weeklyBody').innerHTML = `
+  <div class="card">
+    <div class="report-meta">
+      <span>📆 统计周期：${WEEK.label}</span>
+      <span>👤 起草人：${state.user.name}</span>
+      <span><span class="tag ${REPORT.status === 'PUBLISHED' ? 'tag-green' : 'tag-amber'}">${REPORT.status === 'PUBLISHED' ? '已发布' : '草稿'}</span></span>
+    </div>
+    <div class="report-section"><h3>✅ 本周完成节点</h3>${doneHtml}</div>
+    <div class="report-section"><h3>⚠️ 延期 / 受阻节点</h3>${riskHtml}</div>
+    <div class="report-section"><h3>⏳ 下周到期节点</h3>${dueHtml}</div>
+    <div class="report-section"><h3>🆕 本周新增节点与任务</h3>${createdHtml}</div>
+    <div class="report-section"><h3>⏱ 本周工时汇总</h3>
+      <div class="summary-row" style="max-width:420px">
+        <div class="summary-box"><div class="num">21.5</div><div class="lbl">实际投入人天</div></div>
+        <div class="summary-box"><div class="num">25</div><div class="lbl">计划人天</div></div>
+      </div>
+    </div>
+    <div class="report-section" style="margin-bottom:0"><h3>✍️ PM 补充说明（发布前可编辑）</h3>
+      <textarea class="form-textarea" rows="3" id="reportNote" ${REPORT.status === 'PUBLISHED' ? 'disabled' : ''}>${REPORT.note}</textarea>
+      ${REPORT.status === 'DRAFT' ? '<button class="btn btn-small btn-plain mt8" onclick="app.saveReportNote()">保存草稿说明</button>' : ''}
+    </div>
+  </div>`;
+}
+function saveReportNote() {
+  REPORT.note = $('reportNote').value;
+  toast('草稿说明已保存');
+}
+function publishReport() {
+  if (REPORT.status === 'PUBLISHED') return;
+  REPORT.status = 'PUBLISHED';
+  REPORT.history.unshift({ label: WEEK.label, sum: '完成 0 节点 · 延期 1 · 受阻 1', time: nowStamp() + ' 发布' });
+  NOTIFS.unshift({ id: 'nf' + Date.now(), icon: '📄', bg: '#ecf5ff',
+    title: `周报发布 · ${state.user.name} 发布了「${proj().name}」周报`,
+    desc: WEEK.label + ' 已发布，请项目成员查收。', view: 'weekly', time: nowStamp(), unread: true });
+  renderWeekly(); updateBadge();
+  toast('周报已发布，已通知项目成员');
+}
+
+/* ================================================================
+   项目管理（设置）
+   ================================================================ */
+function renderSettings() {
+  const p = proj();
+  if (state.stab === 'basic') {
+    $('settingsBody').innerHTML = `
+    <div class="card" style="max-width:760px">
+      <div class="form-row">
+        <div class="form-item"><label>项目名称</label><input class="form-input" id="setName" value="${p.name}"></div>
+        <div class="form-item"><label>项目代号</label><input class="form-input" id="setCode" value="${p.code}"></div>
+      </div>
+      <div class="form-item"><label>项目描述</label><textarea class="form-textarea" rows="3">自营电商商城，含用户体系、订单支付、后台管理三大模块。</textarea></div>
+      <div class="form-row">
+        <div class="form-item"><label>计划开始</label><input class="form-input" id="setStart" value="${p.start}"></div>
+        <div class="form-item"><label>计划结束</label><input class="form-input" id="setEnd" value="${p.end}"></div>
+        <div class="form-item"><label>项目经理</label>
+          <select class="form-select" style="width:100%" id="setPm">${USERS.slice(1).map(u => `<option value="${u.id}" ${p.pm === u.id ? 'selected' : ''}>${u.name}</option>`).join('')}</select>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="app.saveProject()">保存</button>
+    </div>`;
+  } else if (state.stab === 'members') {
+    const rows = p.members.map(id => {
+      const u = USERS.find(x => x.id === id);
+      const duty = p.pm === id ? '<span class="tag tag-blue">PM</span>'
+        : p.modules.some(m => m.owner === id) ? '模块负责人' : '<span class="tag tag-gray">成员</span>';
+      return `<tr><td><span class="avatar avatar-sm">${u.avatar}</span> ${u.name}</td><td>${u.role === 'VIEWER' ? '只读观察者' : '普通用户'}</td><td>${duty}</td><td>—</td><td><button class="btn-link" onclick="app.removeMember('${id}')">移出</button></td></tr>`;
+    }).join('');
+    $('settingsBody').innerHTML = `
+    <div class="card">
+      <div class="card-title">👥 成员管理</div>
+      <table class="table"><thead><tr><th>成员</th><th>全局角色</th><th>项目内职务</th><th>加入时间</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>
+      <div style="margin-top:12px"><button class="btn btn-plain btn-small" onclick="app.addMember()">＋ 添加成员</button></div>
+    </div>`;
+  } else {
+    const rows = p.modules.map(m => {
+      const fl = m.nodes.map(nodeFlags);
+      let warn = '';
+      if (fl.some(f => f.over)) warn += '<span class="tag tag-red">延期</span> ';
+      if (fl.some(f => f.blocked)) warn += '<span class="tag tag-purple">受阻</span> ';
+      if (fl.some(f => f.near)) warn += '<span class="tag tag-amber">临近</span> ';
+      return `
+      <div class="module-row">
+        <span class="mname">${m.name}</span>
+        <span class="muted small">节点 ${m.nodes.length}</span>
+        ${warn}
+        <select class="form-select" onchange="app.setModuleOwner('${m.id}', this.value)">
+          ${USERS.slice(1).map(u => `<option value="${u.id}" ${m.owner === u.id ? 'selected' : ''}>负责人：${u.name}</option>`).join('')}
+        </select>
+        <button class="btn-link" onclick="app.removeModule('${m.id}')">删除</button>
+      </div>`;
+    }).join('') || '<div class="empty">暂无模块</div>';
+    $('settingsBody').innerHTML = `
+    <div class="card">
+      <div class="card-title">🧩 模块管理（模块负责人 = 新建节点时的默认负责人）</div>
+      ${rows}
+      <div class="mini-form" style="margin-top:12px">
+        <input class="form-input grow" id="nmName" placeholder="新模块名称，如：数据报表">
+        <select class="form-select" id="nmOwner">${USERS.slice(1).map(u => `<option value="${u.id}">${u.name}</option>`).join('')}</select>
+        <button class="btn btn-primary btn-small" onclick="app.addModule()">新建模块</button>
+      </div>
+    </div>`;
+  }
+}
+function stab(k) {
+  state.stab = k;
+  document.querySelectorAll('#settingsTabs .tab').forEach(t => t.classList.toggle('active', t.dataset.stab === k));
+  renderSettings();
+}
+function wtab(k) {
+  state.wtab = k;
+  document.querySelectorAll('[data-wtab]').forEach(t => t.classList.toggle('active', t.dataset.wtab === k));
+  renderWeekly();
+}
+function saveProject() {
+  const p = proj();
+  p.name = $('setName').value.trim() || p.name;
+  p.code = $('setCode').value.trim() || p.code;
+  p.start = $('setStart').value || p.start;
+  p.end = $('setEnd').value || p.end;
+  p.pm = $('setPm').value;
+  toast('项目信息已保存');
+}
+function setModuleOwner(mid, uid) {
+  proj().modules.find(m => m.id === mid).owner = uid;
+  toast('模块负责人已更新为：' + uname(uid));
+}
+function addModule() {
+  const p = proj();
+  const name = $('nmName').value.trim() || '未命名模块';
+  p.modules.push({ id: 'm' + Date.now(), name, owner: $('nmOwner').value, nodes: [] });
+  $('nmName').value = '';
+  renderSettings();
+  toast('模块已创建');
+}
+function removeModule(mid) {
+  const p = proj();
+  const m = p.modules.find(x => x.id === mid);
+  if (!m) return;
+  if (m.nodes.length) { toast('请先删除该模块下的节点'); return; }
+  p.modules = p.modules.filter(x => x.id !== mid);
+  renderSettings();
+  toast('模块已删除');
+}
+function removeMember(uid) {
+  const p = proj();
+  if (p.pm === uid) { toast('PM 不能移出项目'); return; }
+  p.members = p.members.filter(x => x !== uid);
+  renderSettings();
+  toast('成员已移出');
+}
+function addMember() {
+  const p = proj();
+  const cand = USERS.find(u => u.role === 'USER' && !p.members.includes(u.id));
+  if (!cand) { toast('所有用户都已在项目中'); return; }
+  p.members.push(cand.id);
+  renderSettings();
+  toast('已添加成员：' + cand.name);
+}
+
+/* ================================================================
+   初始化与对外接口
+   ================================================================ */
+window.app = {
+  login, go, openProject, openNode, setTlFilter, toggleCreateProject, createProject,
+  newNodeForm, createNode, setNodeStatus, saveProgress, taskStatus, addTaskToNode,
+  toggleBlocked, saveBlockedReason, saveOverdueReason, moveTask, addTask,
+  readNotif, readAll, publishReport, saveReportNote, wtab, stab,
+  saveProject, setModuleOwner, addModule, removeModule, removeMember, addMember, toast,
+};
+/* 事件绑定统一走 addEventListener：不依赖内联 onclick/onsubmit，兼容部分预览器 */
+const loginBtnEl = document.getElementById('btnLogin');
+if (loginBtnEl) loginBtnEl.addEventListener('click', function (e) { e.preventDefault(); app.login(e); });
+const loginFormEl = document.getElementById('loginForm');
+if (loginFormEl) loginFormEl.addEventListener('submit', function (e) { e.preventDefault(); app.login(e); });
+const bellBtnEl = document.getElementById('bellBtn');
+if (bellBtnEl) bellBtnEl.addEventListener('click', function (e) { e.preventDefault(); app.go('notifications'); });
+document.querySelectorAll('#sideNav a').forEach(a => a.addEventListener('click', function () { app.go(this.dataset.view); }));
+</script>
+
+<script>
+/* 看门狗：主脚本未成功加载/执行时，在登录页给出可见提示 */
+(function () {
+  function showErr(msg) {
+    var el = document.getElementById('jsError');
+    if (el) { el.textContent = '⚠ ' + msg; el.style.display = 'block'; }
+  }
+  window.addEventListener('error', function (e) {
+    showErr('脚本运行出错：' + (e.message || e.type || '未知错误'));
+  }, true);
+  setTimeout(function () {
+    if (typeof window.app === 'undefined') {
+      showErr('应用脚本未成功加载（可能被浏览器/预览器拦截）。请用浏览器直接打开 prototype/index.html，按 F12 查看 Console 报错。');
+    }
+  }, 600);
+})();
+</script>
+</body>
+</html>

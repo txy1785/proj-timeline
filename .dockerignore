@@ -1,0 +1,11 @@
+.git
+.m2
+backend/target
+frontend/node_modules
+frontend/dist
+frontend/playwright-report
+frontend/test-results
+prototype
+research
+*.log
+.env
