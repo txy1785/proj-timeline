@@ -226,6 +226,9 @@ Playwright 覆盖匿名跳转、管理员账号页、PM、成员、VIEWER 项目
 - 依赖锁精确版本（`docx-preview@0.4.1`、`read-excel-file@9.3.12`），避免小版本改默认安全选项。
 - 预览状态抽成 `composables/useAttachmentPreview.ts`，两个调用方共用；文档同步：不支持 `log/json` 预览（不在上传白名单）、不可预览格式不显示按钮。
 - 复验（Playwright + 构造攻击样本）：altChunk 文档渲染后 iframe 数 0、脚本未执行、内嵌内容不显示；`javascript:` 链接 href 被移除且点击不执行；SVG 行无预览按钮；正常 docx 仍正确渲染；全程无 console 错误。
+- 补充复验：含图片的 docx 在 `useBase64URL: true` 下渲染为 `data:image/png;base64,...`，`img.naturalWidth = 1`，说明该项不会破坏图片显示（此前审核的样本本身有缺陷，未覆盖到）。
+- PDF 预览用 `<iframe>` 直接加载 blob，**未加 `sandbox`**：PDF 由浏览器内置阅读器在独立扩展源中渲染，读不到应用 `sessionStorage`；加 sandbox 有较大概率让 Chrome 内置阅读器拒绝渲染，属于会直接打断主功能的改动，暂不启用。若后续要加固，需要先在目标浏览器上验证 `sandbox="allow-same-origin"` 是否仍能正常翻页。
+
 
 
 

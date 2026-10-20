@@ -64,8 +64,9 @@ async function load(file: Attachment) {
         renderComments: false,
         useBase64URL: true
       })
-      if (token !== loadToken) return
+      // 无论在哪个阶段的渲染结果，都先清洗链接再判断 token，避免过期渲染残留未清洗的节点
       sanitizeLinks(docxHost.value)
+      if (token !== loadToken) return
     } else if (kind.value === 'xlsx') {
       const excel = await import('read-excel-file/browser')
       // 一次读全部工作表，返回 [{ sheet, data }]
