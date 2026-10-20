@@ -32,7 +32,12 @@ public class WorkService {
 
     public Map<String, Object> node(long id) {
         long projectId = permissions.projectForNode(id); permissions.requireProjectRead(projectId);
-        Map<String, Object> node = db.one("SELECT n.*,u.name owner_name,m.name module_name FROM nodes n JOIN users u ON u.id=n.owner_id JOIN modules m ON m.id=n.module_id WHERE n.id=:id", Map.of("id", id), "节点不存在");
+        Map<String, Object> node = db.one("""
+                SELECT n.*, u.name owner_name, m.name module_name, m.owner_id module_owner_id, p.status project_status
+                FROM nodes n JOIN users u ON u.id=n.owner_id JOIN modules m ON m.id=n.module_id
+                JOIN projects p ON p.id=n.project_id
+                WHERE n.id=:id
+                """, Map.of("id", id), "节点不存在");
         projects.decorateNode(node);
         node.put("tasks", tasks(id));
         node.put("logs", logs(id));

@@ -245,7 +245,7 @@ CREATE TABLE weekly_reports (
 CREATE TABLE attachments (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   project_id    BIGINT UNSIGNED NOT NULL,
-  owner_type    VARCHAR(16) NOT NULL COMMENT 'PROJECT / MODULE，预留 NODE / TASK',
+  owner_type    VARCHAR(16) NOT NULL COMMENT 'PROJECT / MODULE / NODE，预留 TASK',
   owner_id      BIGINT UNSIGNED NOT NULL,
   category      VARCHAR(40) NOT NULL COMMENT 'DocumentCatalog 分类编码',
   title         VARCHAR(200) NOT NULL COMMENT '文件标题，同名再上传时版本号递增',
