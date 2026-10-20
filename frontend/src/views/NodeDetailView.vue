@@ -27,7 +27,7 @@ const canManageTask=computed(()=>{
 // 列表里的快捷操作：按当前状态给下一步（待完成→开始，进行中→完成，已完成→重新开始）
 const NEXT_ACTION=TASK_NEXT_ACTION
 // 带 expectedStatus 一起提交，多标签页/并发下状态已变会返回 409 而不是静默改错；busy 期间锁住所有快捷按钮
-async function quickStatus(task:Task){if(busyTaskId.value)return;const action=NEXT_ACTION[task.status];busyTaskId.value=task.id;try{await api<Task>('PUT',`/tasks/${task.id}/status`,{status:action.next,expectedStatus:task.status});ElMessage.success(`「${task.name}」已${action.label==='重新开始'?'重新开始':action.label==='完成'?'完成':'开始'}`);await loadNode()}catch(e){ElMessage.error((e as Error).message);await loadNode()}finally{busyTaskId.value=0}}
+async function quickStatus(task:Task){if(busyTaskId.value)return;const action=NEXT_ACTION[task.status];busyTaskId.value=task.id;try{await api<Task>('PUT',`/tasks/${task.id}/status`,{status:action.next,expectedStatus:task.status});ElMessage.success(`「${task.name}」已${action.label}`);await loadNode()}catch(e){ElMessage.error((e as Error).message);await loadNode()}finally{busyTaskId.value=0}}
 // 记录的删除口径：作者本人，或非执行人的管理者（执行人不能删他人的记录）
 const canDeleteNote=(note:TaskNote)=>canManageTask.value&&(isManager.value||note.authorId===auth.user?.id)
 const STATUS_LABELS=TASK_STATUS_LABELS; const STATUS_TYPES=TASK_STATUS_TYPES
