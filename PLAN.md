@@ -147,3 +147,35 @@ Playwright 覆盖匿名跳转、管理员账号页、PM、成员、VIEWER 项目
 - 文档同步：`AGENTS.md`、`README.md`、`PROJECT_MEMORY.md` 中的上线分支名改为 `main`；分支模型与审核流程不变。
 - candid-eval 侧：`github` 远程由 SSH 改为 HTTPS（本机 SSH 链路不稳定）；`main` 已合并回 `develop`（合并提交 `94efa20`），Gitee/GitHub 双远程同步。
 - 本次只改文档与分支，未改业务代码；未重新执行构建或测试。
+
+## 项目与模块文档、附件（2026-10-19，feature/file-upload）
+
+- 选型结论：先本地磁盘 + 存储抽象层。理由是本项目权限矩阵要求每次下载按所属项目实时校验，对象存储预签名 URL 会把授权转交给 URL；且当前 Compose 仅 db/backend/frontend 三服务，引入 MinIO 的容器、密钥、CORS 与内外网地址成本对 10 人自团队不划算。后期需要时新增 `MinioStorage` 实现并切换 `app.storage` 配置。
+- 数据：Flyway `V4__attachments.sql` 新建 `attachments`，多态归属 `owner_type`（PROJECT/MODULE，预留 NODE/TASK）+ `owner_id`，`category` 走字典编码，`version` 同名文件自增，`deleted` 软删除保留痕迹。
+- 分类字典集中在 `DocumentCatalog`：项目级 7 组 28 个分类（立项计划/需求/设计规范/测试质量/发布运维/验收收尾/管理过程），模块级 1 组 8 个分类（模块设计、流程图、接口说明、开发记录、评审、联调自测、交付物）。参考 GB/T 8567-2006 的文档主线并归并到 10 人团队可用粒度。
+- 接口 5 个：分类字典、列表、上传（multipart）、流式下载、软删除；接口总数 50 → 55。
+- 权限：项目级上传删除限 PM/ADMIN，模块级限模块负责人/PM/ADMIN；读统一 `requireProjectRead`，VIEWER 可下不可传，归档项目只读。
+- 前端：新增 `ProjectDocsView`（`/projects/:id/docs`）与可复用 `AttachmentPanel`；模块工作页嵌入同一面板（关闭分类导航）。契约新增 `upload()`/`download()`：blob 下载携带 Authorization，避免 token 进 URL；上传单独放宽超时到 5 分钟。
+- 部署：`deploy/nginx.conf` 增 `client_max_body_size 60m` 与 `proxy_request_buffering off`；Compose 新增 `file-data` 卷挂 `/app/data/files`；后端镜像预建该目录并 chown 给 `timeline` 用户；`.gitignore` 忽略本地 `data/`。
+- 验证：后端 `mvn test` 9 个用例通过；前端 `lint`、`typecheck`、`build` 通过。未验证：真实 MySQL 上 V4 迁移与上传下载全链路（需可用的本机库），Docker 构建仍需目标机执行。
+
+### 独立审核后的修复（同日）
+
+- 审核结论：有条件通过；阻塞项是下载接口的同源存储型 XSS——`content_type` 直接取客户端 multipart 声明，且 `inline` 判定覆盖 `text/*` 与全部 `image/*`，低权限账号可上传声明为 `text/html` 的文件诱导管理员打开。
+- 修复：新增 `MediaTypes` 由服务端按扩展名推导类型；仅 pdf/png/jpg/jpeg/gif/webp 内联，其余强制 `attachment` + `octet-stream`；下载响应补 `X-Content-Type-Options: nosniff`、`Cache-Control: private, no-store`；Nginx 全站补 nosniff 与 `X-Frame-Options`。
+- 修复：上传失败清理只包住 `db.insert`，清理异常记录日志而不掩盖原始异常；`put` 按实际写入字节数校验，不符即删除并返回 4000。
+- 修复：`V4` 补 `uk_attachment_version` 唯一键、`uploader_id` 外键与 `SET NAMES`，缓解并发同名上传的版本竞态。
+- 修复：删除模块时同步软删除其模块级文档（原先留下不可见却可按 id 下载的孤儿附件）；删除权限与上传口径统一为「上传者本人或对应管理者」。
+- 修复：`BusinessException.internal()` 工厂替代直接构造；前端删除按钮按行判断上传者、`download()` 延迟释放 blob URL、错误提示解析 blob 中的 JSON、上传前预检 50MB、只读场景不再拉分类字典。
+- 新增单测 `LocalDiskStorageTest` / `MediaTypesTest` / `StoragePropertiesTest`，后端用例 9 → 17。
+- 端到端复验：独立测试库 `proj_timeline_upload_test` 跑通 V1–V4 迁移、上传、版本递增、列表、下载内容一致、模块级上传、未知分类与非法 ownerType 拒绝、软删除清空列表，以及 VIEWER 可读不可写、非成员不可读、无 token 401，共 16 项用例全通过；验证后已删除测试库与临时文件，未触碰开发库。
+
+### 第二轮复审后的修复（同日）
+
+- 复审指出唯一键与版本算法口径冲突：`MAX(version)` 只统计 `deleted=0`，删除后重传同名标题会永久撞 `uk_attachment_version` 并返回 4090。修复为版本号对软删记录同样占位（去掉 `deleted=0`），删除后重传得到更高版本号。
+- 上传失败清理范围扩到「算版本 → 落库」整段，避免 `db.count`/`permissions.current()` 抛错时磁盘文件永久残留；唯一键冲突转换为「同名文件正在上传，请稍后重试」。
+- `LocalDiskStorage` 的 IOException 分支同时删除半写文件；`.gitignore` 补 `/backend/data/`；前端删除按钮按「未归档 &&（有管理权 || 本人上传）」判断。
+- 复核确认 `V4` 从未在开发库执行（`flyway_schema_history` 仅 V1–V3），就地修订不存在 checksum 风险。
+- 回归用例（临时脚本，未入库）：上传 v1 → 软删除 → 重传同名得 v2 → 列表只显示存量版本 → 下载一致 → 旧 id 返回 404，全部通过。删除后重传与并发同名仍缺自动化回归，列入后续待补。
+
+

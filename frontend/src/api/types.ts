@@ -4,6 +4,7 @@ export type ProjectStatus = 'ACTIVE' | 'ARCHIVED'
 export type NodeStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED'
 export type TaskStatus = 'TODO' | 'DOING' | 'DONE'
 export type ReportStatus = 'DRAFT' | 'PUBLISHED'
+export type AttachmentOwnerType = 'PROJECT' | 'MODULE'
 
 export interface ApiResponse<T> { code: number; msg: string; data: T }
 export interface PageResponse<T> { list: T[]; total: number; page: number; size: number }
@@ -19,3 +20,5 @@ export interface Task { id: number; nodeId: number; name: string; description?: 
 export interface WorkLog { id: number; taskId: number; userId: number; userName: string; workDate: string; days: number; note?: string }
 export interface Notification { id: number; type: string; title: string; content?: string; link?: string; readAt?: string; createdAt: string }
 export interface Report { id?: number; projectId: number; weekStart: string; weekEnd: string; note?: string; status: ReportStatus; content: Record<string, unknown> & { actualDays?: number; plannedDays?: number; completedNodes?: Record<string, unknown>[]; exceptionNodes?: Record<string, unknown>[] } }
+export interface AttachmentCategory { ownerType: AttachmentOwnerType; group: string; code: string; name: string }
+export interface Attachment { id: number; projectId: number; ownerType: AttachmentOwnerType; ownerId: number; category: string; categoryName?: string; title: string; originalName: string; contentType?: string; sizeBytes: number; sha256?: string; version: number; remark?: string; uploaderId: number; uploaderName?: string; createdAt: string }

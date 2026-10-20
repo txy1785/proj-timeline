@@ -20,4 +20,5 @@ public class BusinessException extends RuntimeException {
     public static BusinessException forbidden(String message) { return new BusinessException(4003, HttpStatus.FORBIDDEN, message); }
     public static BusinessException notFound(String message) { return new BusinessException(4004, HttpStatus.NOT_FOUND, message); }
     public static BusinessException conflict(String message) { return new BusinessException(4090, HttpStatus.CONFLICT, message); }
+    public static BusinessException internal(String message) { return new BusinessException(5000, HttpStatus.INTERNAL_SERVER_ERROR, message); }
 }

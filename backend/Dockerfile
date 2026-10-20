@@ -7,7 +7,9 @@ RUN mvn -B package
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app
-RUN useradd --system --uid 10001 timeline
+RUN useradd --system --uid 10001 timeline \
+    && mkdir -p /app/data/files \
+    && chown -R timeline:timeline /app/data
 COPY --from=build /workspace/target/proj-timeline-backend-1.0.0.jar app.jar
 USER timeline
 EXPOSE 8080

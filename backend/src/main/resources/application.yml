@@ -5,6 +5,10 @@ server:
 spring:
   application:
     name: proj-timeline
+  servlet:
+    multipart:
+      max-file-size: ${UPLOAD_MAX_FILE_SIZE:50MB}
+      max-request-size: ${UPLOAD_MAX_REQUEST_SIZE:60MB}
   datasource:
     url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/proj_timeline?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: ${DB_USERNAME}
@@ -43,4 +47,7 @@ app:
   jwt-secret: ${JWT_SECRET:development-only-secret-change-me-1234567890}
   jwt-hours: 8
   bootstrap-admin: false
+  storage:
+    root: ${UPLOAD_ROOT:./data/files}
+    max-file-bytes: ${UPLOAD_MAX_BYTES:52428800}
 

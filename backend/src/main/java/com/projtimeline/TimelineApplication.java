@@ -1,6 +1,7 @@
 package com.projtimeline;
 
 import com.projtimeline.config.AppProperties;
+import com.projtimeline.file.StorageProperties;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -12,7 +13,7 @@ import java.time.ZoneId;
 
 @SpringBootApplication
 @MapperScan("com.projtimeline.user")
-@EnableConfigurationProperties(AppProperties.class)
+@EnableConfigurationProperties({AppProperties.class, StorageProperties.class})
 public class TimelineApplication {
     public static void main(String[] args) {
         SpringApplication.run(TimelineApplication.class, args);
