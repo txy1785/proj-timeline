@@ -240,12 +240,12 @@ CREATE TABLE weekly_reports (
 ) ENGINE=InnoDB COMMENT='周报';
 
 -- ------------------------------------------------------------
--- 11. 文档与附件（Flyway V4）
+-- 11. 文档与附件（Flyway V4 建表；V5 已把 owner_type 注释修正为含 NODE，此处为最终态）
 -- ------------------------------------------------------------
 CREATE TABLE attachments (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   project_id    BIGINT UNSIGNED NOT NULL,
-  owner_type    VARCHAR(16) NOT NULL COMMENT 'PROJECT / MODULE，预留 NODE / TASK',
+  owner_type    VARCHAR(16) NOT NULL COMMENT 'PROJECT / MODULE / NODE，预留 TASK',
   owner_id      BIGINT UNSIGNED NOT NULL,
   category      VARCHAR(40) NOT NULL COMMENT 'DocumentCatalog 分类编码',
   title         VARCHAR(200) NOT NULL COMMENT '文件标题，同名再上传时版本号递增',

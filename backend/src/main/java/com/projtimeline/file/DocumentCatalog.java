@@ -13,6 +13,7 @@ public final class DocumentCatalog {
 
     public static final String OWNER_PROJECT = "PROJECT";
     public static final String OWNER_MODULE = "MODULE";
+    public static final String OWNER_NODE = "NODE";
 
     public record Category(String ownerType, String group, String code, String name) {}
 
@@ -60,7 +61,15 @@ public final class DocumentCatalog {
             new Category(OWNER_MODULE, "模块开发", "DESIGN_REVIEW", "设计评审记录"),
             new Category(OWNER_MODULE, "模块开发", "JOINT_TEST", "联调与自测记录"),
             new Category(OWNER_MODULE, "模块开发", "DELIVERABLE", "交付物与截图"),
-            new Category(OWNER_MODULE, "其他", "MODULE_OTHER", "其他模块文件")
+            new Category(OWNER_MODULE, "其他", "MODULE_OTHER", "其他模块文件"),
+            // 节点级 · 功能节点产出
+            new Category(OWNER_NODE, "节点产出", "NODE_DESIGN", "节点设计说明"),
+            new Category(OWNER_NODE, "节点产出", "NODE_FLOW", "流程图与时序图"),
+            new Category(OWNER_NODE, "节点产出", "NODE_API", "接口与数据说明"),
+            new Category(OWNER_NODE, "节点产出", "NODE_TEST", "自测与联调记录"),
+            new Category(OWNER_NODE, "节点产出", "NODE_SCREENSHOT", "截图与演示"),
+            new Category(OWNER_NODE, "节点产出", "NODE_DELIVERABLE", "节点交付物"),
+            new Category(OWNER_NODE, "其他", "NODE_OTHER", "其他节点文件")
     );
 
     public static List<Category> all() { return CATEGORIES; }
@@ -72,6 +81,6 @@ public final class DocumentCatalog {
     }
 
     public static boolean supports(String ownerType) {
-        return OWNER_PROJECT.equals(ownerType) || OWNER_MODULE.equals(ownerType);
+        return OWNER_PROJECT.equals(ownerType) || OWNER_MODULE.equals(ownerType) || OWNER_NODE.equals(ownerType);
     }
 }

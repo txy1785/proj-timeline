@@ -16,23 +16,31 @@ import java.util.Map;
 
 /**
  * 文档与附件接口。下载走带 Authorization 头的一次性流式响应，不做 token 直链，权限每次请求重新校验。
+ * <p>
+ * 类级映射为 {@code /api} 而非 {@code /api/attachments}，是因为项目汇总接口挂在 {@code /projects/{projectId}/attachments} 下；
+ * 各方法因此写完整路径，新增接口时不要省略前缀。
  */
 @RestController
-@RequestMapping("/api/attachments")
+@RequestMapping("/api")
 public class AttachmentController {
     private final AttachmentService service;
 
     public AttachmentController(AttachmentService service) { this.service = service; }
 
-    @GetMapping("/categories")
+    @GetMapping("/attachments/categories")
     ApiResponse<List<DocumentCatalog.Category>> categories() { return ApiResponse.ok(service.categories()); }
 
-    @GetMapping
+    @GetMapping("/attachments")
     ApiResponse<List<Map<String, Object>>> list(@RequestParam String ownerType, @RequestParam long ownerId) {
         return ApiResponse.ok(service.list(ownerType, ownerId));
     }
 
-    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @GetMapping("/projects/{projectId}/attachments")
+    ApiResponse<List<Map<String, Object>>> projectFiles(@PathVariable long projectId) {
+        return ApiResponse.ok(service.listByProject(projectId));
+    }
+
+    @PostMapping(path = "/attachments", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     ApiResponse<Map<String, Object>> upload(@RequestParam String ownerType,
                                             @RequestParam long ownerId,
                                             @RequestParam String category,
@@ -42,7 +50,7 @@ public class AttachmentController {
         return ApiResponse.ok(service.upload(ownerType, ownerId, category, title, remark, file));
     }
 
-    @GetMapping("/{id}/content")
+    @GetMapping("/attachments/{id}/content")
     ResponseEntity<Resource> content(@PathVariable long id) {
         AttachmentService.AttachmentFile file = service.download(id);
         Map<String, Object> row = file.row();
@@ -64,6 +72,6 @@ public class AttachmentController {
                 .body(new InputStreamResource(file.stream()));
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/attachments/{id}")
     ApiResponse<Void> delete(@PathVariable long id) { service.delete(id); return ApiResponse.ok(null); }
 }
