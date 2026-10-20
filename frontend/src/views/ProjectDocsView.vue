@@ -3,10 +3,11 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { api } from '../api/client'
-import { downloadAttachment, formatBytes } from '../utils/attachment'
+import { downloadAttachment, formatBytes, previewKind } from '../utils/attachment'
 import type { Attachment, Timeline, User } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import AttachmentPanel from '../components/AttachmentPanel.vue'
+import AttachmentPreview from '../components/AttachmentPreview.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,6 +19,8 @@ const loading = ref(true)
 const tab = ref('all')
 const files = ref<Attachment[]>([])
 const sourceType = ref('')
+const previewOpen = ref(false)
+const previewItem = ref<Attachment | null>(null)
 const membership = computed(() => members.value.find(item => item.id === auth.user?.id))
 const canManage = computed(() => !auth.isViewer && (auth.isAdmin || membership.value?.projectRole === 'PM'))
 const visibleFiles = computed(() => sourceType.value ? files.value.filter(item => item.ownerType === sourceType.value) : files.value)
@@ -60,6 +63,11 @@ async function save(row: Attachment) {
   } catch (error) {
     ElMessage.error((error as Error).message)
   }
+}
+
+function openPreview(row: Attachment) {
+  previewItem.value = row
+  previewOpen.value = true
 }
 
 const size = formatBytes
@@ -112,8 +120,11 @@ onMounted(load)
             <el-table-column label="大小" width="95"><template #default="scope">{{ size(scope.row.sizeBytes) }}</template></el-table-column>
             <el-table-column prop="uploaderName" label="上传人" width="105" />
             <el-table-column prop="createdAt" label="上传时间" width="170" />
-            <el-table-column label="操作" width="80">
-              <template #default="scope"><el-button link type="primary" @click="save(scope.row)">下载</el-button></template>
+            <el-table-column label="操作" width="120">
+              <template #default="scope">
+                <el-button v-if="previewKind(scope.row.originalName) !== 'none'" link type="primary" @click="openPreview(scope.row)">预览</el-button>
+                <el-button link type="primary" @click="save(scope.row)">下载</el-button>
+              </template>
             </el-table-column>
           </el-table>
         </section>
@@ -131,5 +142,7 @@ onMounted(load)
         </section>
       </el-tab-pane>
     </el-tabs>
+
+    <AttachmentPreview v-model="previewOpen" :attachment="previewItem" />
   </div>
 </template>
