@@ -7,6 +7,7 @@ import { downloadAttachment, formatBytes, previewKind } from '../utils/attachmen
 import type { Attachment, AttachmentCategory, AttachmentOwnerType } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import AttachmentPreview from './AttachmentPreview.vue'
+import { useAttachmentPreview } from '../composables/useAttachmentPreview'
 
 const auth = useAuthStore()
 const props = withDefaults(defineProps<{
@@ -24,8 +25,7 @@ const loading = ref(false)
 const activeCode = ref('')
 const dialog = ref(false)
 const uploading = ref(false)
-const previewOpen = ref(false)
-const previewItem = ref<Attachment | null>(null)
+const { previewOpen, previewItem, openPreview } = useAttachmentPreview()
 const form = reactive({ code: '', title: '', remark: '', fileName: '', raw: null as File | null })
 
 const ownCategories = computed(() => categories.value.filter(item => item.ownerType === props.ownerType))
@@ -103,15 +103,9 @@ async function save(row: Attachment) {
   }
 }
 
-function openPreview(row: Attachment) {
-  previewItem.value = row
-  previewOpen.value = true
-}
-
 async function remove(row: Attachment) {
   try {
-    await ElMessageBox.confirm(`确定删除「${row.title}」？删除后不再显示在列表中。`, '删除文件', { type: 'warning' })
-  } catch { return }
+    await ElMessageBox.confirm(`确定删除「${row.title}」？删除后不再显示在列表中。`, '删除文件', { type: 'warning' })  } catch { return }
   try {
     await api<void>('DELETE', `/attachments/${row.id}`)
     ElMessage.success('已删除')

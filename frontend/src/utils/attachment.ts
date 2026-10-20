@@ -13,13 +13,19 @@ export async function downloadAttachment(row: Pick<Attachment, 'id' | 'originalN
   await download(`/attachments/${row.id}/content`, row.originalName)
 }
 
-/** 可在线预览的类型；Office 旧格式（doc/xls/ppt）与压缩包等不支持。 */
+/** 可在线预览的类型；Office 旧格式（doc/xls/ppt）、SVG 与压缩包等不支持。 */
 export type PreviewKind = 'pdf' | 'image' | 'text' | 'docx' | 'xlsx' | 'none'
 
-const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']
-const TEXT_EXTENSIONS = ['txt', 'md', 'csv', 'log', 'json']
+/**
+ * 图片预览白名单：与后端 `MediaTypes.INLINE_TYPES` 保持一致，**不含 svg**。
+ * SVG 里可以带脚本，blob: 文档继承应用源，右键「新标签页打开」即可执行，
+ * 因此 SVG 一律不给预览入口，只能下载。
+ */
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp']
+/** 与后端上传白名单可接受的文本类扩展名保持一致。 */
+const TEXT_EXTENSIONS = ['txt', 'md', 'csv']
 
-export function extensionOf(name: string): string {
+function extensionOf(name: string): string {
   const dot = name.lastIndexOf('.')
   return dot < 0 ? '' : name.slice(dot + 1).toLowerCase()
 }
@@ -48,8 +54,7 @@ const IMAGE_MIME: Record<string, string> = {
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
   gif: 'image/gif',
-  webp: 'image/webp',
-  svg: 'image/svg+xml'
+  webp: 'image/webp'
 }
 
 const mimeFor = (name: string): string => {

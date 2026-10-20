@@ -8,6 +8,7 @@ import type { Attachment, Timeline, User } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import AttachmentPanel from '../components/AttachmentPanel.vue'
 import AttachmentPreview from '../components/AttachmentPreview.vue'
+import { useAttachmentPreview } from '../composables/useAttachmentPreview'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,8 +20,7 @@ const loading = ref(true)
 const tab = ref('all')
 const files = ref<Attachment[]>([])
 const sourceType = ref('')
-const previewOpen = ref(false)
-const previewItem = ref<Attachment | null>(null)
+const { previewOpen, previewItem, openPreview } = useAttachmentPreview()
 const membership = computed(() => members.value.find(item => item.id === auth.user?.id))
 const canManage = computed(() => !auth.isViewer && (auth.isAdmin || membership.value?.projectRole === 'PM'))
 const visibleFiles = computed(() => sourceType.value ? files.value.filter(item => item.ownerType === sourceType.value) : files.value)
@@ -65,10 +65,6 @@ async function save(row: Attachment) {
   }
 }
 
-function openPreview(row: Attachment) {
-  previewItem.value = row
-  previewOpen.value = true
-}
 
 const size = formatBytes
 
