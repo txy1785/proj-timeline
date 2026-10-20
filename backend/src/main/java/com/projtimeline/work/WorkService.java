@@ -157,8 +157,9 @@ public class WorkService {
         long assignee = Optional.ofNullable(longValue(body, "assigneeId")).orElse(number(node.get("ownerId"))); permissions.requireAssignable(number(node.get("projectId")), assignee);
         BigDecimal estimate = decimal(body, "estimateDays"); validateDays(estimate, true);
         Map<String, Object> values = new HashMap<>(); values.put("node", nodeId); values.put("name", requiredText(body, "name")); values.put("description", text(body, "description"));
+        values.put("situation", detailText(body, "situation")); values.put("handling", detailText(body, "handling"));
         values.put("assignee", assignee); values.put("due", date(body, "dueDate")); values.put("estimate", estimate); values.put("creator", permissions.current().id());
-        long id = db.insert("INSERT INTO tasks(node_id,name,description,assignee_id,due_date,estimate_days,created_by) VALUES(:node,:name,:description,:assignee,:due,:estimate,:creator)", values);
+        long id = db.insert("INSERT INTO tasks(node_id,name,description,situation,handling,assignee_id,due_date,estimate_days,created_by) VALUES(:node,:name,:description,:situation,:handling,:assignee,:due,:estimate,:creator)", values);
         log(nodeId, "TASK_ADD", "创建任务", null, Map.of("taskId", id, "name", values.get("name")));
         notifyUser(assignee, "TASK_ASSIGN", "新任务已指派", "/nodes/" + nodeId);
         return task(id);
@@ -167,15 +168,34 @@ public class WorkService {
     @Transactional
     public Map<String, Object> updateTask(long id, Map<String, Object> body) {
         permissions.requireTaskManager(id, false); Map<String, Object> before = task(id); long projectId = permissions.projectForTask(id);
-        lockNode(number(before.get("nodeId")));
+        long nodeId = number(before.get("nodeId"));
+        Map<String, Object> node = db.one("SELECT status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "节点不存在");
+        if (Set.of("DONE", "CANCELLED").contains(Objects.toString(node.get("status")))) throw BusinessException.conflict("已完成或已取消节点的任务不能修改");
         long assignee = Optional.ofNullable(longValue(body, "assigneeId")).orElse(number(before.get("assigneeId"))); permissions.requireAssignable(projectId, assignee);
         BigDecimal estimate = decimal(body, "estimateDays"); validateDays(estimate, true);
         Map<String, Object> values = new HashMap<>(); values.put("id", id); values.put("name", requiredText(body, "name")); values.put("description", text(body, "description"));
+        values.put("situation", detailText(body, "situation")); values.put("handling", detailText(body, "handling"));
         values.put("assignee", assignee); values.put("due", date(body, "dueDate")); values.put("estimate", estimate);
-        db.update("UPDATE tasks SET name=:name,description=:description,assignee_id=:assignee,due_date=:due,estimate_days=:estimate WHERE id=:id", values);
-        long nodeId = number(before.get("nodeId")); log(nodeId, "TASK_STATUS", "更新任务", before, values);
+        db.update("UPDATE tasks SET name=:name,description=:description,situation=:situation,handling=:handling,assignee_id=:assignee,due_date=:due,estimate_days=:estimate WHERE id=:id", values);
+        log(nodeId, "TASK_UPDATE", "更新任务", before, values);
         if (assignee != number(before.get("assigneeId"))) notifyUser(assignee, "TASK_ASSIGN", "任务已改派", "/nodes/" + nodeId);
         return task(id);
+    }
+
+    @Transactional
+    public void deleteTask(long id) {
+        permissions.requireTaskManager(id, false);
+        Map<String, Object> task = db.one("SELECT id,node_id,name FROM tasks WHERE id=:id", Map.of("id", id), "任务不存在");
+        long nodeId = number(task.get("nodeId"));
+        Map<String, Object> node = db.one("SELECT status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "节点不存在");
+        if (Set.of("DONE", "CANCELLED").contains(Objects.toString(node.get("status")))) throw BusinessException.conflict("已完成或已取消节点的任务不能删除");
+        task = db.one("SELECT id,node_id,name FROM tasks WHERE id=:id FOR UPDATE", Map.of("id", id), "任务不存在");
+        // 任务附件软删除保留磁盘文件；记录与工时随任务一起清理，避免外键孤儿
+        db.update("UPDATE attachments SET deleted=1 WHERE owner_type='TASK' AND owner_id=:id", Map.of("id", id));
+        db.update("DELETE FROM task_notes WHERE task_id=:id", Map.of("id", id));
+        db.update("DELETE FROM task_work_logs WHERE task_id=:id", Map.of("id", id));
+        if (db.update("DELETE FROM tasks WHERE id=:id", Map.of("id", id)) != 1) throw BusinessException.conflict("任务已被删除");
+        log(nodeId, "TASK_DELETE", "删除任务", Map.of("taskId", id, "name", task.get("name")), null);
     }
 
     @Transactional
@@ -221,6 +241,10 @@ public class WorkService {
         permissions.requireTaskManager(taskId, true);
         String content = requiredText(body, "content");
         if (content.length() > 2000) throw BusinessException.badRequest("记录不能超过 2000 字");
+        // 与删任务串行：先锁节点和任务行，避免记录插入时任务已被删除导致外键 500
+        long nodeId = number(db.one("SELECT node_id FROM tasks WHERE id=:id", Map.of("id", taskId), "任务不存在").get("nodeId"));
+        lockNode(nodeId);
+        db.one("SELECT id FROM tasks WHERE id=:id FOR UPDATE", Map.of("id", taskId), "任务不存在");
         // 记录本身带作者与时间，不重复写 node_logs（其 action 枚举未包含记录事件）；时间用注入的 Clock，避免依赖数据库时区
         long id = db.insert("INSERT INTO task_notes(task_id,author_id,content,created_at) VALUES(:task,:author,:content,:created)",
                 map("task", taskId, "author", permissions.current().id(), "content", content,
@@ -235,7 +259,9 @@ public class WorkService {
         // 归档项目与 VIEWER 一律拒绝；作者身份只决定能否越过管理者校验，不决定是否检查项目状态
         permissions.requireProjectActive(permissions.projectForTask(taskId));
         if (number(note.get("authorId")) != permissions.current().id()) permissions.requireTaskManager(taskId, false);
-        db.update("DELETE FROM task_notes WHERE id=:id", Map.of("id", id));
+        long nodeId = number(db.one("SELECT node_id FROM tasks WHERE id=:id", Map.of("id", taskId), "任务不存在").get("nodeId"));
+        lockNode(nodeId);
+        if (db.update("DELETE FROM task_notes WHERE id=:id", Map.of("id", id)) != 1) throw BusinessException.notFound("记录不存在");
     }
 
     @Transactional
@@ -298,6 +324,12 @@ public class WorkService {
 
     private void notifyUser(long userId, String type, String title, String link) {
         db.insert("INSERT INTO notifications(user_id,type,title,link) VALUES(:user,:type,:title,:link)", Map.of("user", userId, "type", type, "title", title, "link", link));
+    }
+
+    private static String detailText(Map<String, Object> body, String key) {
+        String value = text(body, key);
+        if (value != null && value.length() > 2000) throw BusinessException.badRequest(key + " 不能超过 2000 字");
+        return value;
     }
 
     private static long requiredLong(Map<String, Object> body, String key) { Long value = longValue(body, key); if (value == null) throw BusinessException.badRequest(key + " 不能为空"); return value; }

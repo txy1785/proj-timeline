@@ -82,6 +82,10 @@ INSERT INTO tasks (id, node_id, name, assignee_id, status, due_date, estimate_da
  (20,104,'安全加固方案',3,'TODO','2026-01-05',2,NULL,3),
  (21,108,'对账单生成',4,'TODO','2026-01-10',3,NULL,4);
 
+-- 任务情况 / 处理方式示例（V8 新增字段）
+UPDATE tasks SET situation='微信登录 SDK 版本与现有登录态冲突，回调地址待调整', handling='先完成微信回调联调，再补 QQ 登录，预计 12/19 完成' WHERE id=1;
+UPDATE tasks SET situation='银联入网证书仍在审批，接口无法联调', handling='等待渠道方 12/22 出证，期间先做支付宝与微信回调' WHERE id=10;
+
 UPDATE tasks t JOIN nodes n ON t.node_id = n.id SET t.created_at = n.created_at;
 
 -- 演示工时按实际发生日期归周；任务的累计实际人天由本表求和返回。

@@ -166,7 +166,7 @@ public class ProjectService {
 
     @Transactional
     public Map<String, Object> updateModule(long id, Map<String, Object> body) {
-        Map<String, Object> module = db.one("SELECT id,project_id FROM modules WHERE id=:id", Map.of("id", id), "模块不存在");
+        Map<String, Object> module = db.one("SELECT id,project_id,sort_order FROM modules WHERE id=:id", Map.of("id", id), "模块不存在");
         long projectId = number(module.get("projectId"));
         permissions.requireProjectManager(projectId);
         Long requestedOwnerId = longValue(body, "ownerId");
@@ -174,7 +174,8 @@ public class ProjectService {
         long ownerId = requestedOwnerId; permissions.requireAssignable(projectId, ownerId);
         Map<String, Object> values = new HashMap<>(); values.put("id", id); values.put("name", requiredText(body, "name"));
         values.put("description", text(body, "description"));
-        values.put("owner", ownerId); values.put("sort", Optional.ofNullable(intValue(body, "sortOrder")).orElse(0));
+        // 未显式传 sortOrder 时保留原顺序，避免改名把模块排到最前
+        values.put("owner", ownerId); values.put("sort", Optional.ofNullable(intValue(body, "sortOrder")).orElse((int) number(module.get("sortOrder"))));
         db.update("UPDATE modules SET name=:name,description=:description,owner_id=:owner,sort_order=:sort WHERE id=:id", values);
         return db.one("SELECT m.*,u.name owner_name FROM modules m JOIN users u ON u.id=m.owner_id WHERE m.id=:id", Map.of("id", id), "模块不存在");
     }
