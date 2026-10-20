@@ -64,7 +64,7 @@ public class AttachmentService {
     }
 
     /**
-     * 项目下的全部文件（项目级 + 模块级 + 节点级），带归属名称，供项目文档页汇总查看。
+     * 项目下的全部文件（项目级 + 模块级 + 节点级 + 任务级），带归属名称，供项目文档页汇总查看。
      */
     public List<Map<String, Object>> listByProject(long projectId) {
         permissions.requireProjectRead(projectId);
@@ -74,11 +74,13 @@ public class AttachmentService {
                          WHEN 'PROJECT' THEN p.name
                          WHEN 'MODULE' THEN m.name
                          WHEN 'NODE' THEN n.name
+                         WHEN 'TASK' THEN t.name
                        END AS owner_name
                 FROM attachments a
                 JOIN projects p ON p.id = a.project_id
                 LEFT JOIN modules m ON a.owner_type = 'MODULE' AND m.id = a.owner_id
                 LEFT JOIN nodes n ON a.owner_type = 'NODE' AND n.id = a.owner_id
+                LEFT JOIN tasks t ON a.owner_type = 'TASK' AND t.id = a.owner_id
                 LEFT JOIN users u ON u.id = a.uploader_id
                 WHERE a.project_id = :project AND a.deleted = 0
                 ORDER BY a.created_at DESC, a.id DESC
@@ -89,7 +91,8 @@ public class AttachmentService {
                                       String remark, MultipartFile file) {
         String type = normalizeOwnerType(ownerType);
         long projectId = projectOf(type, ownerId);
-        if (DocumentCatalog.OWNER_NODE.equals(type)) permissions.requireNodeManager(ownerId);
+        if (DocumentCatalog.OWNER_TASK.equals(type)) permissions.requireTaskManager(ownerId, true);
+        else if (DocumentCatalog.OWNER_NODE.equals(type)) permissions.requireNodeManager(ownerId);
         else if (DocumentCatalog.OWNER_MODULE.equals(type)) permissions.requireModuleManager(ownerId);
         else permissions.requireProjectManager(projectId);
 
@@ -179,10 +182,12 @@ public class AttachmentService {
             db.update("UPDATE attachments SET deleted=1 WHERE id=:id", Map.of("id", id));
             return;
         }
-        // 与上传口径一致：节点文档由节点负责人管理，模块文档由模块负责人管理，项目文档由项目经理管理
+        // 与上传口径一致：任务由执行人/节点负责人管理，节点由节点负责人管理，模块由模块负责人管理，项目由项目经理管理
         String ownerType = String.valueOf(row.get("ownerType"));
         long ownerId = PermissionService.number(row.get("ownerId"));
-        if (DocumentCatalog.OWNER_NODE.equals(ownerType)) {
+        if (DocumentCatalog.OWNER_TASK.equals(ownerType)) {
+            permissions.requireTaskManager(ownerId, true);
+        } else if (DocumentCatalog.OWNER_NODE.equals(ownerType)) {
             permissions.requireNodeManager(ownerId);
         } else if (DocumentCatalog.OWNER_MODULE.equals(ownerType)) {
             permissions.requireModuleManager(ownerId);
@@ -209,13 +214,16 @@ public class AttachmentService {
 
     private String normalizeOwnerType(String ownerType) {
         String type = ownerType == null ? "" : ownerType.trim().toUpperCase(Locale.ROOT);
-        if (!DocumentCatalog.supports(type)) throw BusinessException.badRequest("ownerType 仅支持 PROJECT、MODULE 或 NODE");
+        if (!DocumentCatalog.supports(type)) throw BusinessException.badRequest("ownerType 仅支持 PROJECT、MODULE、NODE 或 TASK");
         return type;
     }
 
     private long projectOf(String ownerType, long ownerId) {
         if (DocumentCatalog.OWNER_PROJECT.equals(ownerType)) {
             return PermissionService.number(db.one("SELECT id FROM projects WHERE id=:id", Map.of("id", ownerId), "项目不存在").get("id"));
+        }
+        if (DocumentCatalog.OWNER_TASK.equals(ownerType)) {
+            return PermissionService.number(db.one("SELECT n.project_id FROM tasks t JOIN nodes n ON n.id=t.node_id WHERE t.id=:id", Map.of("id", ownerId), "任务不存在").get("projectId"));
         }
         if (DocumentCatalog.OWNER_NODE.equals(ownerType)) {
             return PermissionService.number(db.one("SELECT project_id FROM nodes WHERE id=:id", Map.of("id", ownerId), "节点不存在").get("projectId"));

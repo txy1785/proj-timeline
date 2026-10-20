@@ -57,6 +57,15 @@ public class WorkController {
     @PutMapping("/tasks/{id}/status")
     ApiResponse<Map<String, Object>> taskStatus(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.taskStatus(id, String.valueOf(body.get("status")))); }
 
+    @GetMapping("/tasks/{id}/notes")
+    ApiResponse<List<Map<String, Object>>> taskNotes(@PathVariable long id) { return ApiResponse.ok(service.taskNotes(id)); }
+
+    @PostMapping("/tasks/{id}/notes")
+    ApiResponse<Map<String, Object>> addTaskNote(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.addTaskNote(id, body)); }
+
+    @DeleteMapping("/task-notes/{id}")
+    ApiResponse<Void> deleteTaskNote(@PathVariable long id) { service.deleteTaskNote(id); return ApiResponse.ok(null); }
+
     @GetMapping("/tasks/{id}/work-logs")
     ApiResponse<List<Map<String, Object>>> workLogs(@PathVariable long id) { return ApiResponse.ok(service.workLogs(id)); }
 

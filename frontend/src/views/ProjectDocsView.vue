@@ -25,7 +25,8 @@ const SOURCES = [
   { value: '', label: '全部来源', tag: '' },
   { value: 'PROJECT', label: '项目级', tag: '项目' },
   { value: 'MODULE', label: '模块级', tag: '模块' },
-  { value: 'NODE', label: '节点级', tag: '节点' }
+  { value: 'NODE', label: '节点级', tag: '节点' },
+  { value: 'TASK', label: '任务级', tag: '任务' }
 ]
 const ownerTag = (type: string) => SOURCES.find(item => item.value === type)?.tag || type
 

@@ -146,7 +146,7 @@ public class WorkService {
 
     public List<Map<String, Object>> tasks(long nodeId) {
         permissions.requireProjectRead(permissions.projectForNode(nodeId));
-        return db.list("SELECT t.*,u.name assignee_name,(SELECT SUM(w.days) FROM task_work_logs w WHERE w.task_id=t.id) actual_days FROM tasks t JOIN users u ON u.id=t.assignee_id WHERE t.node_id=:node ORDER BY FIELD(t.status,'DOING','TODO','DONE'),t.due_date,t.id", Map.of("node", nodeId));
+        return db.list("SELECT t.*,u.name assignee_name,(SELECT SUM(w.days) FROM task_work_logs w WHERE w.task_id=t.id) actual_days,(SELECT COUNT(*) FROM task_notes n WHERE n.task_id=t.id) note_count FROM tasks t JOIN users u ON u.id=t.assignee_id WHERE t.node_id=:node ORDER BY FIELD(t.status,'DOING','TODO','DONE'),t.due_date,t.id", Map.of("node", nodeId));
     }
 
     @Transactional
@@ -186,6 +186,35 @@ public class WorkService {
     public List<Map<String, Object>> workLogs(long taskId) {
         permissions.requireProjectRead(permissions.projectForTask(taskId));
         return db.list("SELECT w.*,u.name user_name FROM task_work_logs w JOIN users u ON u.id=w.user_id WHERE w.task_id=:task ORDER BY w.work_date DESC,w.id DESC", Map.of("task", taskId));
+    }
+
+    /** 任务进展记录：按时间倒序，用于记录完成思路与结果，也可当备注用。 */
+    public List<Map<String, Object>> taskNotes(long taskId) {
+        permissions.requireProjectRead(permissions.projectForTask(taskId));
+        return db.list("""
+                SELECT n.id, n.task_id, n.author_id, u.name author_name, n.content, n.created_at
+                FROM task_notes n JOIN users u ON u.id = n.author_id
+                WHERE n.task_id = :task
+                ORDER BY n.created_at DESC, n.id DESC
+                """, Map.of("task", taskId));
+    }
+
+    @Transactional
+    public Map<String, Object> addTaskNote(long taskId, Map<String, Object> body) {
+        permissions.requireTaskManager(taskId, true);
+        String content = requiredText(body, "content");
+        if (content.length() > 2000) throw BusinessException.badRequest("记录不能超过 2000 字");
+        // 记录本身带作者与时间，不重复写 node_logs（其 action 枚举未包含记录事件）
+        long id = db.insert("INSERT INTO task_notes(task_id,author_id,content) VALUES(:task,:author,:content)",
+                map("task", taskId, "author", permissions.current().id(), "content", content));
+        return db.one("SELECT n.*,u.name author_name FROM task_notes n JOIN users u ON u.id=n.author_id WHERE n.id=:id", Map.of("id", id), "记录不存在");
+    }
+
+    @Transactional
+    public void deleteTaskNote(long id) {
+        Map<String, Object> note = db.one("SELECT id,task_id,author_id FROM task_notes WHERE id=:id", Map.of("id", id), "记录不存在");
+        if (number(note.get("authorId")) != permissions.current().id()) permissions.requireTaskManager(number(note.get("taskId")), false);
+        db.update("DELETE FROM task_notes WHERE id=:id", Map.of("id", id));
     }
 
     @Transactional

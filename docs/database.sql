@@ -240,12 +240,12 @@ CREATE TABLE weekly_reports (
 ) ENGINE=InnoDB COMMENT='周报';
 
 -- ------------------------------------------------------------
--- 11. 文档与附件（Flyway V4 建表；V5 已把 owner_type 注释修正为含 NODE，此处为最终态）
+-- 11. 文档与附件（Flyway V4 建表；V5 修正 owner_type 注释；V6 加入 TASK，此处为最终态）
 -- ------------------------------------------------------------
 CREATE TABLE attachments (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   project_id    BIGINT UNSIGNED NOT NULL,
-  owner_type    VARCHAR(16) NOT NULL COMMENT 'PROJECT / MODULE / NODE，预留 TASK',
+  owner_type    VARCHAR(16) NOT NULL COMMENT 'PROJECT / MODULE / NODE / TASK',
   owner_id      BIGINT UNSIGNED NOT NULL,
   category      VARCHAR(40) NOT NULL COMMENT 'DocumentCatalog 分类编码',
   title         VARCHAR(200) NOT NULL COMMENT '文件标题，同名再上传时版本号递增',
@@ -266,4 +266,19 @@ CREATE TABLE attachments (
   CONSTRAINT fk_attachment_project FOREIGN KEY (project_id) REFERENCES projects(id),
   CONSTRAINT fk_attachment_uploader FOREIGN KEY (uploader_id) REFERENCES users(id)
 ) ENGINE=InnoDB COMMENT='项目与模块的文档、附件';
+
+-- ------------------------------------------------------------
+-- 12. 任务进展记录（Flyway V6）
+-- ------------------------------------------------------------
+CREATE TABLE task_notes (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  task_id    BIGINT UNSIGNED NOT NULL,
+  author_id  BIGINT UNSIGNED NOT NULL,
+  content    VARCHAR(2000) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_task_notes_task (task_id, created_at),
+  CONSTRAINT fk_task_notes_task FOREIGN KEY (task_id) REFERENCES tasks(id),
+  CONSTRAINT fk_task_notes_author FOREIGN KEY (author_id) REFERENCES users(id)
+) ENGINE=InnoDB COMMENT='任务进展记录';
 
