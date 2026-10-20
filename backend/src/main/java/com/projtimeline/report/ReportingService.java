@@ -37,10 +37,10 @@ public class ReportingService {
                 SELECT u.id,u.name,u.username,
                   (SELECT COUNT(*) FROM nodes n JOIN projects p ON p.id=n.project_id WHERE n.owner_id=u.id AND n.status='IN_PROGRESS' %s) active_node_count,
                   (SELECT COUNT(*) FROM nodes n JOIN projects p ON p.id=n.project_id WHERE n.owner_id=u.id AND n.status IN('NOT_STARTED','IN_PROGRESS') AND n.plan_end<:today %s) overdue_node_count,
-                  (SELECT COUNT(*) FROM tasks t JOIN nodes n ON n.id=t.node_id JOIN projects p ON p.id=n.project_id WHERE t.assignee_id=u.id AND t.status IN('TODO','DOING') %s) open_task_count,
-                  (SELECT COUNT(*) FROM tasks t JOIN nodes n ON n.id=t.node_id JOIN projects p ON p.id=n.project_id WHERE t.assignee_id=u.id AND t.status<>'DONE' AND t.due_date BETWEEN :start AND :end %s) week_due_count,
-                  (SELECT COALESCE(SUM(t.estimate_days),0) FROM tasks t JOIN nodes n ON n.id=t.node_id JOIN projects p ON p.id=n.project_id WHERE t.assignee_id=u.id AND t.status<>'DONE' %s) active_estimate_days,
-                  (SELECT COALESCE(SUM(t.estimate_days),0) FROM tasks t JOIN nodes n ON n.id=t.node_id JOIN projects p ON p.id=n.project_id WHERE t.assignee_id=u.id AND t.due_date BETWEEN :start AND :end %s) week_due_estimate_days
+                  (SELECT COUNT(*) FROM tasks t JOIN nodes n ON n.id=t.node_id JOIN projects p ON p.id=n.project_id WHERE t.assignee_id=u.id AND t.status IN('TODO','DOING') AND n.status<>'CANCELLED' %s) open_task_count,
+                  (SELECT COUNT(*) FROM tasks t JOIN nodes n ON n.id=t.node_id JOIN projects p ON p.id=n.project_id WHERE t.assignee_id=u.id AND t.status<>'DONE' AND t.due_date BETWEEN :start AND :end AND n.status<>'CANCELLED' %s) week_due_count,
+                  (SELECT COALESCE(SUM(t.estimate_days),0) FROM tasks t JOIN nodes n ON n.id=t.node_id JOIN projects p ON p.id=n.project_id WHERE t.assignee_id=u.id AND t.status<>'DONE' AND n.status<>'CANCELLED' %s) active_estimate_days,
+                  (SELECT COALESCE(SUM(t.estimate_days),0) FROM tasks t JOIN nodes n ON n.id=t.node_id JOIN projects p ON p.id=n.project_id WHERE t.assignee_id=u.id AND t.due_date BETWEEN :start AND :end AND n.status<>'CANCELLED' %s) week_due_estimate_days
                 FROM users u WHERE u.active=1 AND u.global_role<>'VIEWER' ORDER BY u.name
                 """.formatted(projectFilter, projectFilter, projectFilter, projectFilter, projectFilter, projectFilter), params);
         return map("weekStart", week[0], "weekEnd", week[1], "people", rows);
@@ -115,7 +115,7 @@ public class ReportingService {
         List<Map<String, Object>> newNodes = db.list("SELECT id,name,created_at FROM nodes WHERE project_id=:project AND created_at>=:startTime AND created_at<:endTime ORDER BY created_at", params);
         List<Map<String, Object>> newTasks = db.list("SELECT t.id,t.name,t.created_at FROM tasks t JOIN nodes n ON n.id=t.node_id WHERE n.project_id=:project AND t.created_at>=:startTime AND t.created_at<:endTime ORDER BY t.created_at", params);
         Object actual = db.scalar("SELECT COALESCE(SUM(w.days),0) FROM task_work_logs w JOIN tasks t ON t.id=w.task_id JOIN nodes n ON n.id=t.node_id WHERE n.project_id=:project AND w.work_date BETWEEN :start AND :end", params);
-        Object planned = db.scalar("SELECT COALESCE(SUM(t.estimate_days),0) FROM tasks t JOIN nodes n ON n.id=t.node_id WHERE n.project_id=:project AND t.due_date BETWEEN :start AND :end", params);
+        Object planned = db.scalar("SELECT COALESCE(SUM(t.estimate_days),0) FROM tasks t JOIN nodes n ON n.id=t.node_id WHERE n.project_id=:project AND t.due_date BETWEEN :start AND :end AND n.status<>'CANCELLED'", params);
         return map("completedNodes", completed, "exceptionNodes", exceptions, "nextWeekDueNodes", nextDue, "newNodes", newNodes, "newTasks", newTasks, "actualDays", actual, "plannedDays", planned);
     }
 

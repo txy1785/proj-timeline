@@ -238,6 +238,25 @@ Playwright 覆盖匿名跳转、管理员账号页、PM、成员、VIEWER 项目
 - 状态机口径下沉到 `utils/task.ts` 的 `TASK_NEXT_ACTION` 并登记复用库。
 - 验证：lint/typecheck/build 通过、后端 17 个单测通过；Playwright 在测试库上实测四步——待完成（开始）→ 进行中（完成）→ 已完成（重新开始）→ 进行中，按钮文案与状态严格对应，无 console 错误。
 
+## 节点进度改为任务完成率派生（2026-10-20，feature/node-progress-derived）
+
+- 背景：用户反馈模块/节点进度「点一下就完成」。排查确认原口径是节点 `progress` 手填 + 模块/项目对节点百分比简单平均，任务状态完全不参与，节点少时点一次「完成节点」进度就跳到 100。
+- 新口径：节点进度 = 已完成任务数 ÷ 任务总数（四舍五入，未全部完成时最高 99）；无任务的节点按状态估算（未开始 0、进行中 50、已完成 100）；DONE 固定 100；取消节点不进入聚合。模块/项目仍为未取消节点进度的算术平均（`ProgressRules.aggregate`，仍有节点未完成时同样封顶 99，不按人天加权）。
+- 移除手动填写：删除 `PUT /nodes/{id}/progress` 的公开接口与节点详情滑块；旧路径保留为 `@Hidden` 的废弃路由，调用返回 4090 明确提示且不写数据，OpenAPI 与接口清单均不再出现（接口总数 59 → 58）。
+- 一致性约束：完成节点前校验该节点没有未完成任务，否则 4090「还有 N 个任务未完成」；已完成/已取消节点不能新增任务，避免 DONE 与进度矛盾。
+- 实现：新增 `common/ProgressRules.java`（含 6 个单测）并登记复用库；节点/时间线/模块/项目查询改用 `total_tasks`、`done_tasks` 子查询后实时派生，`nodes.progress` 列保留但不再读写；Flyway V7 只把该列注释标为弃用（不删列、不丢历史值）。
+- 前端：节点详情去掉 slider，改为显示「已完成 x/y 个任务」；模块卡片、节点表格、时间线、项目卡片的百分比自动变为派生值。
+- 文档：接口清单删除 #19 并把 #20-#58 重排，同步开发文档、需求文档、复用库、PROJECT_MEMORY、demo_seed（去掉手填 progress 与 PROGRESS_UPDATE 演示日志）。
+- 验证：后端 `mvn test` 23 个单测通过；前端 lint/typecheck/build 通过；`schema.d.ts` 从运行中的 OpenAPI 重新生成（-44 行）；本地 58080 实测节点 103/106/107 为 0/50/25、模块 1/2/3 为 50/44/33、项目 43，完成节点分别返回「还有 2/3 个任务未完成」；Playwright 在 5175 真实浏览器验证同上且页面无 slider。
+
+### 独立审核与复审后的修复（同时）
+
+- 第一轮审核（M1）：节点 DONE/CANCELLED 后任务仍可「重新开始」→ `taskStatus` 先对节点行 `SELECT ... FOR UPDATE`，已关闭节点只允许同状态幂等提交；`createTask` 也先锁节点行；前端节点详情/看板隐藏任务状态入口。另修任务看板接口编号、需求文档旧口径、前端重复算 x/y、before 含弃用列、临时脚本导致 lint 失败。
+- 第二轮审核（B1/M1 残余）：`updateNode` 收窄 before 时漏了 `project_id`，编辑节点会 NPE/500 → 补回 `project_id`（临时库实测 `PUT /nodes/106` 返回 200，`beforeValue` 为 `{name,ownerId,planEnd,planStart,projectId,sortOrder}`，不含 progress）；完成节点的未完成任务统计在 REPEATABLE READ 下仍读旧快照 → 改为 `SELECT id ... FOR UPDATE` 当前读；前端把记录/附件也一起禁掉 → 拆成 `canManageTaskContent` 与 `canChangeTaskStatus`；模块/项目平均可进位到 100 → 新增 `ProgressRules.aggregate` 同样封顶 99；补 m3/m4/m5 文档（需求文档 :56、PLAN 单测数、99% 封顶入接口/开发文档）。
+- 第三轮审核（M-A）：CANCELLED 冻结任务后，其未完成任务仍计入人员负载与周报计划人天，且任务无法删除或收尾 → `ReportingService.workload` 四个任务子查询与周报 `plannedDays` 排除 `n.status='CANCELLED'`（已发生工时仍计入实际人天）；`taskStatus` 改为节点锁后再对任务行当前读、关闭节点同状态幂等早退；`updateTask`/工时三个写路径补 `lockNode` 统一 node→tasks 锁序；文档补「取消节点任务冻结且不计入负载」口径。
+- 复核验证：临时库 pt_verify_m1 实测——任务完成后节点 104 进度 0→100、节点 DONE 后重开任务返回 4090「节点已完成或已取消，任务状态不能再变更」、新增任务返回 4090、`PUT /nodes/106` 编辑成功；临时库 pt_verify_wl 实测——王工取消节点 103 前后负载 activeNodeCount 2→1、openTaskCount 2→1、activeEstimateDays 4.0→2.0、weekDueEstimateDays 2.0→0.0，任务状态变更 4090；临时库均已删除、未触碰 `proj_timeline` 库。后端 23 个单测通过（`ProgressRulesTest` 6 个）、前端 lint/typecheck/build 通过、Playwright 复核节点 106 仍为 3/6、50%、无 slider。
+- 审核结论：通过（无 Blocker/Major 遗留）。
+
 
 
 

@@ -12,7 +12,7 @@ export interface User { id: number; username: string; name: string; email?: stri
 export interface ProjectStats { total: number; done: number; inProgress: number; overdue: number; blocked: number; near: number }
 export interface Project { id: number; name: string; code: string; description?: string; planStart: string; planEnd?: string; status: ProjectStatus; progress: number; stats: ProjectStats }
 export interface NodeFlags { overdue: boolean; near: boolean; blocked: boolean }
-export interface NodeItem { id: number; projectId: number; moduleId: number; moduleName?: string; moduleOwnerId?: number; projectStatus?: ProjectStatus; name: string; description?: string; planStart: string; planEnd: string; actualStart?: string; actualEnd?: string; status: NodeStatus; progress: number; ownerId: number; ownerName: string; flags: NodeFlags; tasks?: Task[] }
+export interface NodeItem { id: number; projectId: number; moduleId: number; moduleName?: string; moduleOwnerId?: number; projectStatus?: ProjectStatus; name: string; description?: string; planStart: string; planEnd: string; actualStart?: string; actualEnd?: string; status: NodeStatus; progress: number; totalTasks?: number; doneTasks?: number; ownerId: number; ownerName: string; flags: NodeFlags; tasks?: Task[] }
 export interface ModuleItem { id: number; projectId: number; name: string; description?: string; ownerId: number; ownerName: string; progress?: number; nodeCount?: number; overdueCount?: number; nodes?: NodeItem[] }
 export interface StageTarget { id: number; projectId: number; name: string; description?: string; targetDate: string; sortOrder?: number }
 export interface Timeline extends Project { modules: ModuleItem[]; stageTargets: StageTarget[] }
