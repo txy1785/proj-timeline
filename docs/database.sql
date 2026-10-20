@@ -240,7 +240,7 @@ CREATE TABLE weekly_reports (
 ) ENGINE=InnoDB COMMENT='周报';
 
 -- ------------------------------------------------------------
--- 11. 文档与附件（Flyway V4）
+-- 11. 文档与附件（Flyway V4 建表；V5 已把 owner_type 注释修正为含 NODE，此处为最终态）
 -- ------------------------------------------------------------
 CREATE TABLE attachments (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
