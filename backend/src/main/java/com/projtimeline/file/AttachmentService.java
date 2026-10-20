@@ -22,20 +22,21 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 项目级 / 模块级文档的读写口径。
+ * 文档与附件的读写口径，支持项目级 / 模块级 / 节点级三层归属。
  * <p>
- * 权限：项目级上传删除由 PM（或 ADMIN）操作；模块级由模块负责人操作；读取统一走 {@code requireProjectRead}，
- * 因此 VIEWER 与项目成员只能下载，归档项目只读。删除为软删除，磁盘文件保留以维持"痕迹"。
+ * 权限：上传与删除按归属层级判定——项目级由 PM（或 ADMIN）、模块级由模块负责人、节点级由节点负责人；
+ * 读取统一走 {@code requireProjectRead}，因此 VIEWER 与项目成员只能下载，归档项目只读。
+ * 删除为软删除，磁盘文件保留以维持"痕迹"。
  */
 @Service
 public class AttachmentService {
     private static final Logger log = LoggerFactory.getLogger(AttachmentService.class);
-    private static final String LIST_SQL = """
-            SELECT a.id, a.project_id, a.owner_type, a.owner_id, a.category, a.title, a.original_name,
-                   a.content_type, a.size_bytes, a.sha256, a.version, a.remark, a.uploader_id,
-                   u.name AS uploader_name, a.created_at
-            FROM attachments a LEFT JOIN users u ON u.id = a.uploader_id
-            """;
+    /** 列表与汇总共用的列清单，避免两处 SELECT 漂移；调用方需保证 u（users）与 a（attachments）别名可用。 */
+    private static final String BASE_COLUMNS = """
+            a.id, a.project_id, a.owner_type, a.owner_id, a.category, a.title, a.original_name,
+            a.content_type, a.size_bytes, a.sha256, a.version, a.remark, a.uploader_id,
+            u.name AS uploader_name, a.created_at""";
+    private static final String LIST_SQL = "SELECT " + BASE_COLUMNS + "\nFROM attachments a LEFT JOIN users u ON u.id = a.uploader_id\n";
 
     private final DataAccess db;
     private final PermissionService permissions;
@@ -58,7 +59,7 @@ public class AttachmentService {
         permissions.requireProjectRead(projectOf(type, ownerId));
         return decorate(db.list(LIST_SQL + """
                 WHERE a.owner_type=:type AND a.owner_id=:owner AND a.deleted=0
-                ORDER BY a.category, a.created_at DESC
+                ORDER BY a.category, a.created_at DESC, a.id DESC
                 """, Map.of("type", type, "owner", ownerId)));
     }
 
@@ -67,10 +68,8 @@ public class AttachmentService {
      */
     public List<Map<String, Object>> listByProject(long projectId) {
         permissions.requireProjectRead(projectId);
-        return decorate(db.list("""
-                SELECT a.id, a.project_id, a.owner_type, a.owner_id, a.category, a.title, a.original_name,
-                       a.content_type, a.size_bytes, a.sha256, a.version, a.remark, a.uploader_id,
-                       u.name AS uploader_name, a.created_at,
+        return decorate(db.list("SELECT " + BASE_COLUMNS + """
+                ,
                        CASE a.owner_type
                          WHEN 'PROJECT' THEN p.name
                          WHEN 'MODULE' THEN m.name
@@ -82,7 +81,7 @@ public class AttachmentService {
                 LEFT JOIN nodes n ON a.owner_type = 'NODE' AND n.id = a.owner_id
                 LEFT JOIN users u ON u.id = a.uploader_id
                 WHERE a.project_id = :project AND a.deleted = 0
-                ORDER BY a.created_at DESC
+                ORDER BY a.created_at DESC, a.id DESC
                 """, Map.of("project", projectId)));
     }
 

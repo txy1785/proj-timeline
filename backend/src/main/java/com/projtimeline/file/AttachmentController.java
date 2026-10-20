@@ -16,6 +16,9 @@ import java.util.Map;
 
 /**
  * 文档与附件接口。下载走带 Authorization 头的一次性流式响应，不做 token 直链，权限每次请求重新校验。
+ * <p>
+ * 类级映射为 {@code /api} 而非 {@code /api/attachments}，是因为项目汇总接口挂在 {@code /projects/{projectId}/attachments} 下；
+ * 各方法因此写完整路径，新增接口时不要省略前缀。
  */
 @RestController
 @RequestMapping("/api")

@@ -28,11 +28,11 @@
 | 模块卡片与模块工作页 | `frontend/src/views/ModulesView.vue`、`ModuleDetailView.vue` |
 | 项目时间线、节点详情 | `frontend/src/views/TimelineView.vue`、`NodeDetailView.vue` |
 | 路由、会话、HTTP 客户端 | `frontend/src/router.ts`、`stores/auth.ts`、`api/client.ts` |
-| 项目与模块的文档、附件 | `backend/src/main/java/com/projtimeline/file/`、`frontend/src/components/AttachmentPanel.vue`、`ProjectDocsView.vue` |
+| 项目、模块与节点的文档附件 | `backend/src/main/java/com/projtimeline/file/`、`frontend/src/components/AttachmentPanel.vue`、`ProjectDocsView.vue`、`utils/attachment.ts` |
 
 - 后端：Java 17、Spring Boot 3.5.16、MyBatis-Plus 3.5.17、Spring Security、Flyway、MySQL 8。
 - 前端：Vue 3、TypeScript、Vite、Vue Router、Pinia、Element Plus、Axios；使用 npm 和 `package-lock.json`。
-- 当前 Flyway 版本为 V4。V1 建表，V2 将项目开始日期设为必填并过渡性增加模块日期，V3 建立 `project_stage_targets` 并移除模块日期，V4 建立 `attachments` 文档附件表。已有迁移文件不能改写；新变更追加 V5 及以后版本。
+- 当前 Flyway 版本为 V5。V1 建表，V2 将项目开始日期设为必填并过渡性增加模块日期，V3 建立 `project_stage_targets` 并移除模块日期，V4 建立 `attachments` 文档附件表，V5 只修正 `owner_type` 注释（V4 已应用到环境，不得再改写）。已有迁移文件不能改写；新变更追加 V6 及以后版本。
 - 当前 OpenAPI 有 56 个 `/api` 操作。前端生成类型在 `frontend/src/api/schema.d.ts`，后端运行时用 `npm --prefix frontend run api:types` 更新。
 - 认证为 8 小时 JWT，仅保存用户 ID；每次请求重新检查账号启用状态与角色。浏览器会话存于 `sessionStorage`。
 - 日期判定使用注入的 `Clock`，默认业务时区 `Asia/Shanghai`。延期和临近到期由服务端实时计算。
@@ -50,7 +50,7 @@
 ## 验证与已知边界
 
 - 基本检查：`mvn -gs .mvn/settings.xml -s .mvn/settings.xml -f backend/pom.xml test`；`npm --prefix frontend run lint`、`typecheck`、`build`。浏览器路径测试在 `frontend/tests/roles.spec.ts`。
-- `PLAN.md` 中早期“47 个接口”“11 个页面”“10/11 张表”是当时版本的验证快照。当前接口为 50 个，页面已新增模块工作页；不能把早期数字当成现状。
+- `PLAN.md` 中早期“47 个接口”“11 个页面”“10/11 张表”是当时版本的验证快照。当前接口为 56 个，页面已新增模块工作页与项目文档页；不能把早期数字当成现状。
 - 当前工作站此前未运行 Docker Compose 的真实构建；部署仍需在具备 Docker 的目标环境验证。
 - 文件存储当前用本地磁盘（`app.storage.root` 默认 `./data/files`，容器内 `/app/data/files` 挂 `file-data` 卷）。未接入 MinIO/对象存储：存储层已抽成 `FileStorage` 接口，切换时只加实现并改配置。单文件上限 50MB，Nginx 侧 `client_max_body_size 60m`，后端 `spring.servlet.multipart` 与 `app.storage.max-file-bytes` 同步。
 - Git 远程：`https://github.com/txy1785/proj-timeline.git`。分支模型：`main` 版本上线、`develop` 开发主线、`feature/<描述>` 功能分支从 `develop` 拉出；功能代码必须经独立审核（干净会话/子代理）后合并 `develop`，发布从 `develop` 合并 `main` 并打 tag。GitHub 默认分支为 `main`，远程仅保留 `main` 与 `develop`（旧 `master` 已删除）。提交前先 `git status` 核对未被 .gitignore 遗漏的文件。

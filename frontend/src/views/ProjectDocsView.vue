@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { api, download } from '../api/client'
+import { api } from '../api/client'
+import { downloadAttachment, formatBytes } from '../utils/attachment'
 import type { Attachment, Timeline, User } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import AttachmentPanel from '../components/AttachmentPanel.vue'
@@ -20,7 +21,21 @@ const sourceType = ref('')
 const membership = computed(() => members.value.find(item => item.id === auth.user?.id))
 const canManage = computed(() => !auth.isViewer && (auth.isAdmin || membership.value?.projectRole === 'PM'))
 const visibleFiles = computed(() => sourceType.value ? files.value.filter(item => item.ownerType === sourceType.value) : files.value)
-const OWNER_LABELS: Record<string, string> = { PROJECT: '项目', MODULE: '模块', NODE: '节点' }
+const SOURCES = [
+  { value: '', label: '全部来源', tag: '' },
+  { value: 'PROJECT', label: '项目级', tag: '项目' },
+  { value: 'MODULE', label: '模块级', tag: '模块' },
+  { value: 'NODE', label: '节点级', tag: '节点' }
+]
+const ownerTag = (type: string) => SOURCES.find(item => item.value === type)?.tag || type
+
+async function loadFiles() {
+  try {
+    files.value = await api<Attachment[]>('GET', `/projects/${projectId}/attachments`)
+  } catch (error) {
+    ElMessage.error((error as Error).message)
+  }
+}
 
 async function load() {
   loading.value = true
@@ -35,19 +50,18 @@ async function load() {
   }
 }
 
+// 在「项目级文档」里上传后切回汇总页时刷新，避免看到过期列表
+watch(tab, (value) => { if (value === 'all') void loadFiles() })
+
 async function save(row: Attachment) {
   try {
-    await download(`/attachments/${row.id}/content`, row.originalName)
+    await downloadAttachment(row)
   } catch (error) {
     ElMessage.error((error as Error).message)
   }
 }
 
-function size(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-}
+const size = formatBytes
 
 onMounted(load)
 </script>
@@ -76,10 +90,7 @@ onMounted(load)
               <p class="muted">项目文档、各模块文档以及节点挂载的文件都汇总在这里，共 {{ visibleFiles.length }} 个。</p>
             </div>
             <el-select v-model="sourceType" size="small" style="width:140px">
-              <el-option label="全部来源" value="" />
-              <el-option label="项目级" value="PROJECT" />
-              <el-option label="模块级" value="MODULE" />
-              <el-option label="节点级" value="NODE" />
+              <el-option v-for="source in SOURCES" :key="source.value" :label="source.label" :value="source.value" />
             </el-select>
           </div>
           <el-table :data="visibleFiles" empty-text="暂无文件">
@@ -91,8 +102,8 @@ onMounted(load)
             </el-table-column>
             <el-table-column label="归属" min-width="170">
               <template #default="scope">
-                <el-tag size="small" :type="scope.row.ownerType === 'PROJECT' ? 'primary' : 'info'">{{ OWNER_LABELS[scope.row.ownerType] }}</el-tag>
-                <span style="margin-left:6px">{{ scope.row.ownerName }}</span>
+                <el-tag size="small" :type="scope.row.ownerType === 'PROJECT' ? 'primary' : 'info'">{{ ownerTag(scope.row.ownerType) }}</el-tag>
+                <span style="margin-left:6px">{{ scope.row.ownerName || '—' }}</span>
               </template>
             </el-table-column>
             <el-table-column prop="categoryName" label="分类" width="140" />
@@ -107,7 +118,7 @@ onMounted(load)
         </section>
       </el-tab-pane>
 
-      <el-tab-pane label="项目级文档" name="project">
+      <el-tab-pane label="项目级文档" name="project" lazy>
         <el-alert v-if="timeline && !canManage" title="只有项目经理可以上传和删除项目文档，你可以查看和下载" type="info" :closable="false" style="margin-bottom:16px" />
         <section class="surface">
           <AttachmentPanel

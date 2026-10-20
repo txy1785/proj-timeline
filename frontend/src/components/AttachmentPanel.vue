@@ -2,7 +2,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadFile } from 'element-plus'
-import { api, download, upload } from '../api/client'
+import { api, upload } from '../api/client'
+import { downloadAttachment, formatBytes } from '../utils/attachment'
 import type { Attachment, AttachmentCategory, AttachmentOwnerType } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 
@@ -93,7 +94,7 @@ async function submit() {
 
 async function save(row: Attachment) {
   try {
-    await download(`/attachments/${row.id}/content`, row.originalName)
+    await downloadAttachment(row)
   } catch (error) {
     ElMessage.error((error as Error).message)
   }
@@ -112,11 +113,7 @@ async function remove(row: Attachment) {
   }
 }
 
-function size(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-}
+const size = formatBytes
 
 onMounted(() => {
   void load()

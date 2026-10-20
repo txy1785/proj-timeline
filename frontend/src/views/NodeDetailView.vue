@@ -12,13 +12,15 @@ const readOnly=computed(()=>auth.isViewer)
 const members=ref<User[]>([])
 const membership=computed(()=>members.value.find(item=>item.id===auth.user?.id))
 const canManageFiles=computed(()=>!auth.isViewer&&(auth.isAdmin||membership.value?.projectRole==='PM'||node.value?.ownerId===auth.user?.id||node.value?.moduleOwnerId===auth.user?.id))
-async function load(){try{node.value=await api<NodeItem>('GET',`/nodes/${id}`);members.value=await api<User[]>('GET',`/projects/${node.value.projectId}/members`)}catch(e){ElMessage.error((e as Error).message)}}
-async function setStatus(status:string){try{await api('POST',`/nodes/${id}/status`,{status});await load()}catch(e){ElMessage.error((e as Error).message)}}
-async function setProgress(value:number){try{await api('PUT',`/nodes/${id}/progress`,{progress:value});await load()}catch(e){ElMessage.error((e as Error).message)}}
-async function block(){try{await api('POST',`/nodes/${id}/block`,{reason:'进展受阻，待负责人补充处理'});await load()}catch(e){ElMessage.error((e as Error).message)}}
-async function unblock(){try{await api('POST',`/nodes/${id}/unblock`);await load()}catch(e){ElMessage.error((e as Error).message)}}
-async function createTask(){try{await api('POST',`/nodes/${id}/tasks`,taskForm);taskDialog.value=false;await load()}catch(e){ElMessage.error((e as Error).message)}}
-async function addWork(){if(!selected.value)return;try{await api<WorkLog>('POST',`/tasks/${selected.value.id}/work-logs`,workForm);workDialog.value=false;await load()}catch(e){ElMessage.error((e as Error).message)}}
+async function loadNode(){try{node.value=await api<NodeItem>('GET',`/nodes/${id}`)}catch(e){ElMessage.error((e as Error).message)}}
+async function loadMembers(){if(!node.value)return;try{members.value=await api<User[]>('GET',`/projects/${node.value.projectId}/members`)}catch(e){ElMessage.error((e as Error).message)}}
+async function load(){await loadNode();await loadMembers()}
+async function setStatus(status:string){try{await api('POST',`/nodes/${id}/status`,{status});await loadNode()}catch(e){ElMessage.error((e as Error).message)}}
+async function setProgress(value:number){try{await api('PUT',`/nodes/${id}/progress`,{progress:value});await loadNode()}catch(e){ElMessage.error((e as Error).message)}}
+async function block(){try{await api('POST',`/nodes/${id}/block`,{reason:'进展受阻，待负责人补充处理'});await loadNode()}catch(e){ElMessage.error((e as Error).message)}}
+async function unblock(){try{await api('POST',`/nodes/${id}/unblock`);await loadNode()}catch(e){ElMessage.error((e as Error).message)}}
+async function createTask(){try{await api('POST',`/nodes/${id}/tasks`,taskForm);taskDialog.value=false;await loadNode()}catch(e){ElMessage.error((e as Error).message)}}
+async function addWork(){if(!selected.value)return;try{await api<WorkLog>('POST',`/tasks/${selected.value.id}/work-logs`,workForm);workDialog.value=false;await loadNode()}catch(e){ElMessage.error((e as Error).message)}}
 function onProgress(value: unknown) { void setProgress(Number(value)) }
 function openWork(task:Task){selected.value=task;workDialog.value=true} onMounted(load)
 </script>

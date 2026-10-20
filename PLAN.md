@@ -188,4 +188,14 @@ Playwright 覆盖匿名跳转、管理员账号页、PM、成员、VIEWER 项目
 - 节点详情响应补充 `moduleOwnerId` 与 `projectStatus`，供前端判断节点文件管理权与归档只读（纯新增字段，不影响既有消费方）。
 - 备注：系统目前不支持删除节点，因此节点级文件无需清理逻辑；删除模块时仍会软删模块级文件。
 
+### 独立审核后的修复（同日）
+
+- 审核发现阻塞级问题：`V4` 只改了注释，但**开发库已执行过 V4**（`flyway_schema_history` 有版本 4、checksum -2066996562，说明用户已用新 jar 重启），改注释会使下次启动 checksum 校验失败。因此把 `V4` 恢复为已发布版本原样，注释修正改由 **V5**（`ALTER TABLE ... MODIFY owner_type ... COMMENT`）完成。
+- 提交了「切换页签刷新汇总列表」的修复（原先只在工作区，未随分支提交）。
+- `NodeDetailView` 拆分 `loadNode()`/`loadMembers()`：状态、进度、受阻、建任务、录工时等操作只刷新节点，不再重复请求成员列表。
+- 抽取 `frontend/src/utils/attachment.ts`（`formatBytes`、`downloadAttachment`）并在复用库登记，消除 `AttachmentPanel` 与 `ProjectDocsView` 的重复实现；后端把列表列清单抽成 `BASE_COLUMNS`，列表与汇总共用，避免加列时漂移。
+- 汇总查询补 `, a.id DESC` 稳定排序；前端归属名补 `—` 兜底；「项目级文档」页签改为 `lazy`，默认页签不再多发请求。
+- 文档：接口清单 #56 路径统一为 `{projectId}`、§3.6 补 `moduleOwnerId`/`projectStatus`、§5 补齐「项目文档」与节点详情接口映射、`PROJECT_MEMORY` 同步为 56 个接口与 Flyway V5。
+
+
 
