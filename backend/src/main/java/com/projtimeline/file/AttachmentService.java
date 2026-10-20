@@ -22,11 +22,11 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 文档与附件的读写口径，支持项目级 / 模块级 / 节点级三层归属。
+ * 文档与附件的读写口径，支持项目级 / 模块级 / 节点级 / 任务级四层归属。
  * <p>
- * 权限：上传与删除按归属层级判定——项目级由 PM（或 ADMIN）、模块级由模块负责人、节点级由节点负责人；
- * 读取统一走 {@code requireProjectRead}，因此 VIEWER 与项目成员只能下载，归档项目只读。
- * 删除为软删除，磁盘文件保留以维持"痕迹"。
+ * 权限：上传与删除按归属层级判定——项目级由 PM（或 ADMIN）、模块级由模块负责人、节点级由节点负责人、
+ * 任务级由任务执行人或其上级管理者；读取统一走 {@code requireProjectRead}，
+ * 因此 VIEWER 与项目成员只能下载，归档项目只读。删除为软删除，磁盘文件保留以维持"痕迹"。
  */
 @Service
 public class AttachmentService {
@@ -222,12 +222,8 @@ public class AttachmentService {
         if (DocumentCatalog.OWNER_PROJECT.equals(ownerType)) {
             return PermissionService.number(db.one("SELECT id FROM projects WHERE id=:id", Map.of("id", ownerId), "项目不存在").get("id"));
         }
-        if (DocumentCatalog.OWNER_TASK.equals(ownerType)) {
-            return PermissionService.number(db.one("SELECT n.project_id FROM tasks t JOIN nodes n ON n.id=t.node_id WHERE t.id=:id", Map.of("id", ownerId), "任务不存在").get("projectId"));
-        }
-        if (DocumentCatalog.OWNER_NODE.equals(ownerType)) {
-            return PermissionService.number(db.one("SELECT project_id FROM nodes WHERE id=:id", Map.of("id", ownerId), "节点不存在").get("projectId"));
-        }
+        if (DocumentCatalog.OWNER_TASK.equals(ownerType)) return permissions.projectForTask(ownerId);
+        if (DocumentCatalog.OWNER_NODE.equals(ownerType)) return permissions.projectForNode(ownerId);
         return PermissionService.number(db.one("SELECT project_id FROM modules WHERE id=:id", Map.of("id", ownerId), "模块不存在").get("projectId"));
     }
 

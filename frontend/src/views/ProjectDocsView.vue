@@ -77,7 +77,7 @@ onMounted(load)
           <el-breadcrumb-item>项目文档</el-breadcrumb-item>
         </el-breadcrumb>
         <h1 style="margin-top:14px">项目文档</h1>
-        <p>项目、模块与功能节点的全部文件，按分类归档并可追溯历史版本。</p>
+        <p>项目、模块、节点与任务的全部文件，按分类归档并可追溯历史版本。</p>
       </div>
       <el-button @click="router.push(`/projects/${projectId}/timeline`)">返回时间线</el-button>
     </header>
@@ -88,7 +88,7 @@ onMounted(load)
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
             <div>
               <h2>全项目文件</h2>
-              <p class="muted">项目文档、各模块文档以及节点挂载的文件都汇总在这里，共 {{ visibleFiles.length }} 个。</p>
+              <p class="muted">项目文档、各模块文档、节点文件与任务附件都汇总在这里，共 {{ visibleFiles.length }} 个。</p>
             </div>
             <el-select v-model="sourceType" size="small" style="width:140px">
               <el-option v-for="source in SOURCES" :key="source.value" :label="source.label" :value="source.value" />

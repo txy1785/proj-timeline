@@ -204,16 +204,20 @@ public class WorkService {
         permissions.requireTaskManager(taskId, true);
         String content = requiredText(body, "content");
         if (content.length() > 2000) throw BusinessException.badRequest("记录不能超过 2000 字");
-        // 记录本身带作者与时间，不重复写 node_logs（其 action 枚举未包含记录事件）
-        long id = db.insert("INSERT INTO task_notes(task_id,author_id,content) VALUES(:task,:author,:content)",
-                map("task", taskId, "author", permissions.current().id(), "content", content));
+        // 记录本身带作者与时间，不重复写 node_logs（其 action 枚举未包含记录事件）；时间用注入的 Clock，避免依赖数据库时区
+        long id = db.insert("INSERT INTO task_notes(task_id,author_id,content,created_at) VALUES(:task,:author,:content,:created)",
+                map("task", taskId, "author", permissions.current().id(), "content", content,
+                        "created", LocalDateTime.now(clock)));
         return db.one("SELECT n.*,u.name author_name FROM task_notes n JOIN users u ON u.id=n.author_id WHERE n.id=:id", Map.of("id", id), "记录不存在");
     }
 
     @Transactional
     public void deleteTaskNote(long id) {
         Map<String, Object> note = db.one("SELECT id,task_id,author_id FROM task_notes WHERE id=:id", Map.of("id", id), "记录不存在");
-        if (number(note.get("authorId")) != permissions.current().id()) permissions.requireTaskManager(number(note.get("taskId")), false);
+        long taskId = number(note.get("taskId"));
+        // 归档项目与 VIEWER 一律拒绝；作者身份只决定能否越过管理者校验，不决定是否检查项目状态
+        permissions.requireProjectActive(permissions.projectForTask(taskId));
+        if (number(note.get("authorId")) != permissions.current().id()) permissions.requireTaskManager(taskId, false);
         db.update("DELETE FROM task_notes WHERE id=:id", Map.of("id", id));
     }
 

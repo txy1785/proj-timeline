@@ -265,7 +265,7 @@ CREATE TABLE attachments (
   KEY idx_attachment_project (project_id, created_at),
   CONSTRAINT fk_attachment_project FOREIGN KEY (project_id) REFERENCES projects(id),
   CONSTRAINT fk_attachment_uploader FOREIGN KEY (uploader_id) REFERENCES users(id)
-) ENGINE=InnoDB COMMENT='项目与模块的文档、附件';
+) ENGINE=InnoDB COMMENT='项目、模块、节点与任务的文档附件';
 
 -- ------------------------------------------------------------
 -- 12. 任务进展记录（Flyway V6）
