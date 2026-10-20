@@ -3,6 +3,7 @@ package com.projtimeline.work;
 import com.projtimeline.common.ApiResponse;
 import com.projtimeline.common.BusinessException;
 import com.projtimeline.common.RequestValues;
+import io.swagger.v3.oas.annotations.Hidden;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,11 +27,15 @@ public class WorkController {
     @PostMapping("/nodes/{id}/status")
     ApiResponse<Map<String, Object>> nodeStatus(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.changeNodeStatus(id, String.valueOf(body.get("status")))); }
 
+    /**
+     * 已废弃：节点进度改由任务完成率派生。保留路由只为让旧客户端得到明确提示，不修改任何数据；
+     * 用 @Hidden 排除在 OpenAPI 之外，接口清单里不再出现。
+     */
+    @Deprecated
+    @Hidden
     @PutMapping("/nodes/{id}/progress")
-    ApiResponse<Map<String, Object>> progress(@PathVariable long id, @RequestBody Map<String, Object> body) {
-        Integer value = RequestValues.intValue(body, "progress");
-        if (value == null) throw BusinessException.badRequest("progress 不能为空");
-        return ApiResponse.ok(service.progress(id, value));
+    ApiResponse<Void> progress(@PathVariable long id) {
+        throw BusinessException.conflict("节点进度由任务完成率自动计算，不再支持手动设置");
     }
 
     @PostMapping("/nodes/{id}/block")

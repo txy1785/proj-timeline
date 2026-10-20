@@ -113,7 +113,7 @@ CREATE TABLE nodes (
   actual_start  DATE NULL,
   actual_end    DATE NULL,
   status        ENUM('NOT_STARTED','IN_PROGRESS','DONE','CANCELLED') NOT NULL DEFAULT 'NOT_STARTED',
-  progress      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '手动百分比 0-100，DONE 时强制 100',
+  progress      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '已弃用（V7 起）：节点进度由任务完成率派生，不再读写该列',
   blocked       TINYINT(1) NOT NULL DEFAULT 0,
   blocked_reason TEXT NULL,
   overdue_reason TEXT NULL,

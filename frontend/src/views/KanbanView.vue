@@ -11,7 +11,7 @@ const columns=computed(()=>TASK_STATUSES.map(key=>({key,label:TASK_STATUS_LABELS
 const grouped=computed(()=>Object.fromEntries(columns.value.map(c=>[c.key,tasks.value.filter(t=>t.status===c.key)])))
 const membership=computed(()=>members.value.find(item=>item.id===auth.user?.id))
 const archived=computed(()=>node.value?.projectStatus==='ARCHIVED')
-function canManage(task:Task){return !auth.isViewer&&!archived.value&&(auth.isAdmin||membership.value?.projectRole==='PM'||node.value?.ownerId===auth.user?.id||node.value?.moduleOwnerId===auth.user?.id||task.assigneeId===auth.user?.id)}
+function canManage(task:Task){return !auth.isViewer&&!archived.value&&node.value?.status!=='DONE'&&node.value?.status!=='CANCELLED'&&(auth.isAdmin||membership.value?.projectRole==='PM'||node.value?.ownerId===auth.user?.id||node.value?.moduleOwnerId===auth.user?.id||task.assigneeId===auth.user?.id)}
 async function load(){try{tasks.value=await api<Task[]>('GET',`/nodes/${id}/tasks`)}catch(e){ElMessage.error((e as Error).message)}}
 async function loadContext(){try{node.value=await api<NodeItem>('GET',`/nodes/${id}`);members.value=await api<User[]>('GET',`/projects/${node.value.projectId}/members`)}catch(e){ElMessage.error((e as Error).message)}}
 async function move(task:Task,status:TaskStatus){try{await api('PUT',`/tasks/${task.id}/status`,{status});await load()}catch(e){ElMessage.error((e as Error).message)}}

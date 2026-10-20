@@ -3,6 +3,7 @@ package com.projtimeline.project;
 import com.projtimeline.common.BusinessException;
 import com.projtimeline.common.BusinessCalendar;
 import com.projtimeline.common.PageResponse;
+import com.projtimeline.common.ProgressRules;
 import com.projtimeline.data.DataAccess;
 import com.projtimeline.security.CurrentUser;
 import com.projtimeline.security.PermissionService;
@@ -75,7 +76,12 @@ public class ProjectService {
         permissions.requireProjectRead(projectId);
         Map<String, Object> project = projectDetail(projectId);
         List<Map<String, Object>> modules = db.list("SELECT m.id,m.name,m.description,m.owner_id,u.name owner_name,m.sort_order FROM modules m JOIN users u ON u.id=m.owner_id WHERE m.project_id=:project ORDER BY m.sort_order,m.id", Map.of("project", projectId));
-        List<Map<String, Object>> nodes = db.list("SELECT n.*,u.name owner_name FROM nodes n JOIN users u ON u.id=n.owner_id WHERE n.project_id=:project ORDER BY n.plan_start,n.sort_order,n.id", Map.of("project", projectId));
+        List<Map<String, Object>> nodes = db.list("""
+                SELECT n.*,u.name owner_name,
+                       (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id) total_tasks,
+                       (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id AND t.status='DONE') done_tasks
+                FROM nodes n JOIN users u ON u.id=n.owner_id WHERE n.project_id=:project ORDER BY n.plan_start,n.sort_order,n.id
+                """, Map.of("project", projectId));
         nodes.forEach(this::decorateNode);
         for (Map<String, Object> module : modules) {
             long moduleId = number(module.get("id"));
@@ -231,33 +237,54 @@ public class ProjectService {
     }
 
     private void decorateProject(Map<String, Object> project) {
-        List<Map<String, Object>> nodes = db.list("SELECT status,progress,plan_end,blocked FROM nodes WHERE project_id=:project", Map.of("project", project.get("id")));
+        List<Map<String, Object>> nodes = db.list("""
+                SELECT n.status,n.plan_end,n.blocked,
+                       (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id) total_tasks,
+                       (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id AND t.status='DONE') done_tasks
+                FROM nodes n WHERE n.project_id=:project
+                """, Map.of("project", project.get("id")));
         int total = nodes.size(), done = 0, inProgress = 0, overdue = 0, blocked = 0, near = 0, progressSum = 0, active = 0;
         for (Map<String, Object> node : nodes) {
             String status = Objects.toString(node.get("status"));
             if ("DONE".equals(status)) done++; if ("IN_PROGRESS".equals(status)) inProgress++;
             Map<String, Boolean> flags = flags(status, (LocalDate) node.get("planEnd"), truthy(node.get("blocked")));
             if (flags.get("overdue")) overdue++; if (flags.get("near")) near++; if (flags.get("blocked")) blocked++;
-            if (!"CANCELLED".equals(status)) { progressSum += ((Number) node.get("progress")).intValue(); active++; }
+            if (!"CANCELLED".equals(status)) { progressSum += nodeProgress(node); active++; }
         }
-        project.put("progress", active == 0 ? 0 : Math.round((float) progressSum / active));
+        project.put("progress", ProgressRules.aggregate(active, progressSum, done));
         project.put("stats", Map.of("total", total, "done", done, "inProgress", inProgress, "overdue", overdue, "blocked", blocked, "near", near));
     }
 
     private void decorateModule(Map<String, Object> module) {
-        List<Map<String, Object>> nodes = db.list("SELECT status,progress,plan_end,blocked FROM nodes WHERE module_id=:id", Map.of("id", module.get("id")));
-        int active = 0, sum = 0, overdue = 0;
+        List<Map<String, Object>> nodes = db.list("""
+                SELECT n.status,n.plan_end,n.blocked,
+                       (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id) total_tasks,
+                       (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id AND t.status='DONE') done_tasks
+                FROM nodes n WHERE n.module_id=:id
+                """, Map.of("id", module.get("id")));
+        int active = 0, sum = 0, overdue = 0, doneNodes = 0;
         for (Map<String, Object> node : nodes) {
             String status = Objects.toString(node.get("status"));
-            if (!"CANCELLED".equals(status)) { active++; sum += ((Number) node.get("progress")).intValue(); }
+            if (!"CANCELLED".equals(status)) {
+                active++; sum += nodeProgress(node);
+                if ("DONE".equals(status)) doneNodes++;
+            }
             if (flags(status, (LocalDate) node.get("planEnd"), truthy(node.get("blocked"))).get("overdue")) overdue++;
         }
-        module.put("progress", active == 0 ? 0 : Math.round((float) sum / active)); module.put("nodeCount", nodes.size()); module.put("overdueCount", overdue);
+        module.put("progress", ProgressRules.aggregate(active, sum, doneNodes)); module.put("nodeCount", nodes.size()); module.put("overdueCount", overdue);
     }
 
     public void decorateNode(Map<String, Object> node) {
         node.put("flags", flags(Objects.toString(node.get("status")), (LocalDate) node.get("planEnd"), truthy(node.get("blocked"))));
+        node.put("progress", nodeProgress(node));
     }
+
+    /** 节点进度由任务完成率派生；调用方查询需带 total_tasks / done_tasks 两列。 */
+    private static int nodeProgress(Map<String, Object> node) {
+        return ProgressRules.nodeProgress(Objects.toString(node.get("status")), intOf(node.get("totalTasks")), intOf(node.get("doneTasks")));
+    }
+
+    private static int intOf(Object value) { return value == null ? 0 : ((Number) value).intValue(); }
 
     private Map<String, Boolean> flags(String status, LocalDate end, boolean blocked) {
         return BusinessCalendar.nodeFlags(status, end, blocked, clock);

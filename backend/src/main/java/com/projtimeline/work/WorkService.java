@@ -33,7 +33,9 @@ public class WorkService {
     public Map<String, Object> node(long id) {
         long projectId = permissions.projectForNode(id); permissions.requireProjectRead(projectId);
         Map<String, Object> node = db.one("""
-                SELECT n.*, u.name owner_name, m.name module_name, m.owner_id module_owner_id, p.status project_status
+                SELECT n.*, u.name owner_name, m.name module_name, m.owner_id module_owner_id, p.status project_status,
+                       (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id) total_tasks,
+                       (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id AND t.status='DONE') done_tasks
                 FROM nodes n JOIN users u ON u.id=n.owner_id JOIN modules m ON m.id=n.module_id
                 JOIN projects p ON p.id=n.project_id
                 WHERE n.id=:id
@@ -64,7 +66,8 @@ public class WorkService {
     @Transactional
     public Map<String, Object> updateNode(long id, Map<String, Object> body) {
         permissions.requireNodeManager(id);
-        Map<String, Object> before = db.one("SELECT * FROM nodes WHERE id=:id", Map.of("id", id), "节点不存在");
+        // 只取业务字段：progress 列已弃用，不应再进入变更日志的 before_value
+        Map<String, Object> before = db.one("SELECT name,description,plan_start,plan_end,owner_id,sort_order,project_id FROM nodes WHERE id=:id", Map.of("id", id), "节点不存在");
         LocalDate start = requiredDate(body, "planStart"), end = requiredDate(body, "planEnd"); checkRange(start, end);
         long owner = Optional.ofNullable(longValue(body, "ownerId")).orElse(number(before.get("ownerId")));
         permissions.requireAssignable(number(before.get("projectId")), owner);
@@ -86,24 +89,20 @@ public class WorkService {
             default -> Set.of();
         };
         if (!allowed.contains(target)) throw BusinessException.conflict("非法节点状态流转");
+        // 进度由任务完成率派生：节点关闭前必须先把任务做完，否则 DONE 与进度会自相矛盾
+        if ("DONE".equals(target)) {
+            // 用锁定读取未完成任务：REPEATABLE READ 下普通 COUNT 可能仍读旧快照，看不到刚提交的新任务
+            long openTasks = db.list("SELECT id FROM tasks WHERE node_id=:id AND status<>'DONE' FOR UPDATE", Map.of("id", id)).size();
+            if (openTasks > 0) throw BusinessException.conflict("还有 " + openTasks + " 个任务未完成，全部完成后才能完成节点");
+        }
         LocalDate today = LocalDate.now(clock);
         Map<String, Object> values = new HashMap<>(); values.put("id", id); values.put("status", target);
         values.put("actualStart", "IN_PROGRESS".equals(target) && before.get("actualStart") == null ? today : before.get("actualStart"));
-        values.put("actualEnd", "DONE".equals(target) ? today : null); values.put("progress", "DONE".equals(target) ? 100 : before.get("progress"));
-        db.update("UPDATE nodes SET status=:status,actual_start=:actualStart,actual_end=:actualEnd,progress=:progress WHERE id=:id", values);
+        values.put("actualEnd", "DONE".equals(target) ? today : null);
+        db.update("UPDATE nodes SET status=:status,actual_start=:actualStart,actual_end=:actualEnd WHERE id=:id", values);
         String action = "DONE".equals(target) ? "COMPLETE" : "CANCELLED".equals(target) ? "CANCEL" : "STATUS_CHANGE";
         log(id, action, "节点状态变更为 " + target, Map.of("status", current), Map.of("status", target));
         if ("DONE".equals(target)) notifyPm(number(before.get("projectId")), "NODE_DONE", "节点已完成", "/nodes/" + id);
-        return node(id);
-    }
-
-    @Transactional
-    public Map<String, Object> progress(long id, int progress) {
-        permissions.requireNodeManager(id); if (progress < 0 || progress > 100) throw BusinessException.badRequest("progress 必须为 0-100");
-        Map<String, Object> before = db.one("SELECT progress,status FROM nodes WHERE id=:id", Map.of("id", id), "节点不存在");
-        if ("DONE".equals(before.get("status")) && progress != 100) throw BusinessException.conflict("已完成节点进度必须为 100");
-        db.update("UPDATE nodes SET progress=:progress WHERE id=:id", Map.of("id", id, "progress", progress));
-        log(id, "PROGRESS_UPDATE", "更新节点进度", Map.of("progress", before.get("progress")), Map.of("progress", progress));
         return node(id);
     }
 
@@ -151,7 +150,10 @@ public class WorkService {
 
     @Transactional
     public Map<String, Object> createTask(long nodeId, Map<String, Object> body) {
-        permissions.requireNodeManager(nodeId); Map<String, Object> node = db.one("SELECT id,project_id,owner_id FROM nodes WHERE id=:id", Map.of("id", nodeId), "节点不存在");
+        permissions.requireNodeManager(nodeId);
+        // 锁节点行，和完成节点、任务状态变更串行，避免并发下给已完成节点插入任务
+        Map<String, Object> node = db.one("SELECT id,project_id,owner_id,status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "节点不存在");
+        if (Set.of("DONE", "CANCELLED").contains(Objects.toString(node.get("status")))) throw BusinessException.conflict("已完成或已取消的节点不能新增任务");
         long assignee = Optional.ofNullable(longValue(body, "assigneeId")).orElse(number(node.get("ownerId"))); permissions.requireAssignable(number(node.get("projectId")), assignee);
         BigDecimal estimate = decimal(body, "estimateDays"); validateDays(estimate, true);
         Map<String, Object> values = new HashMap<>(); values.put("node", nodeId); values.put("name", requiredText(body, "name")); values.put("description", text(body, "description"));
@@ -165,6 +167,7 @@ public class WorkService {
     @Transactional
     public Map<String, Object> updateTask(long id, Map<String, Object> body) {
         permissions.requireTaskManager(id, false); Map<String, Object> before = task(id); long projectId = permissions.projectForTask(id);
+        lockNode(number(before.get("nodeId")));
         long assignee = Optional.ofNullable(longValue(body, "assigneeId")).orElse(number(before.get("assigneeId"))); permissions.requireAssignable(projectId, assignee);
         BigDecimal estimate = decimal(body, "estimateDays"); validateDays(estimate, true);
         Map<String, Object> values = new HashMap<>(); values.put("id", id); values.put("name", requiredText(body, "name")); values.put("description", text(body, "description"));
@@ -179,13 +182,22 @@ public class WorkService {
     public Map<String, Object> taskStatus(long id, String status, String expectedStatus) {
         permissions.requireTaskManager(id, true); if (!Set.of("TODO", "DOING", "DONE").contains(status)) throw BusinessException.badRequest("任务状态无效");
         Map<String, Object> before = task(id);
+        // 与节点完成/新增任务串行：先锁节点行，再对任务行做当前读，避免用旧快照判断状态
+        long nodeId = number(before.get("nodeId"));
+        Map<String, Object> node = db.one("SELECT status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "节点不存在");
+        String nodeStatus = Objects.toString(node.get("status"));
+        String currentStatus = String.valueOf(db.one("SELECT status FROM tasks WHERE id=:id FOR UPDATE", Map.of("id", id), "任务不存在").get("status"));
+        if (Set.of("DONE", "CANCELLED").contains(nodeStatus)) {
+            if (status.equals(currentStatus)) return task(id); // 幂等：关闭节点上重复提交同一状态不写日志
+            throw BusinessException.conflict("节点已完成或已取消，任务状态不能再变更");
+        }
         // 列表里的快捷操作带着点击时的状态一起提交，避免并发/多标签页下把已变化的任务改错
-        if (expectedStatus != null && !expectedStatus.isBlank() && !expectedStatus.equals(String.valueOf(before.get("status")))) {
+        if (expectedStatus != null && !expectedStatus.isBlank() && !expectedStatus.equals(currentStatus)) {
             throw BusinessException.conflict("任务状态已变化，请刷新后重试");
         }
         LocalDateTime doneAt = "DONE".equals(status) ? LocalDateTime.now(clock) : null;
         db.update("UPDATE tasks SET status=:status,done_at=:done WHERE id=:id", map("status", status, "done", doneAt, "id", id));
-        log(number(before.get("nodeId")), "TASK_STATUS", "任务状态变更", Map.of("status", before.get("status")), Map.of("status", status)); return task(id);
+        log(number(before.get("nodeId")), "TASK_STATUS", "任务状态变更", Map.of("status", currentStatus), Map.of("status", status)); return task(id);
     }
 
     public List<Map<String, Object>> workLogs(long taskId) {
@@ -229,6 +241,7 @@ public class WorkService {
     @Transactional
     public Map<String, Object> addWorkLog(long taskId, Map<String, Object> body) {
         permissions.requireTaskManager(taskId, true); Map<String, Object> task = task(taskId);
+        lockNode(number(task.get("nodeId")));
         Long requestedUser = longValue(body, "userId"); long userId = requestedUser == null ? permissions.current().id() : requestedUser;
         if (userId != permissions.current().id()) permissions.requireTaskManager(taskId, false);
         permissions.requireAssignable(permissions.projectForTask(taskId), userId);
@@ -242,21 +255,24 @@ public class WorkService {
     public Map<String, Object> updateWorkLog(long id, Map<String, Object> body) {
         Map<String, Object> before = workLog(id); long taskId = number(before.get("taskId"));
         if (number(before.get("userId")) != permissions.current().id()) permissions.requireTaskManager(taskId, false); else permissions.requireTaskManager(taskId, true);
+        Map<String, Object> task = task(taskId); lockNode(number(task.get("nodeId")));
         LocalDate workDate = requiredDate(body, "workDate"); if (workDate.isAfter(LocalDate.now(clock))) throw BusinessException.badRequest("工时日期不能晚于今天");
         BigDecimal days = decimal(body, "days"); validateDays(days, false);
         db.update("UPDATE task_work_logs SET work_date=:date,days=:days,note=:note WHERE id=:id", map("id", id, "date", workDate, "days", days, "note", text(body, "note")));
-        Map<String, Object> task = task(taskId); log(number(task.get("nodeId")), "WORK_LOG_UPDATE", "更正工时", before, workLog(id)); return workLog(id);
+        log(number(task.get("nodeId")), "WORK_LOG_UPDATE", "更正工时", before, workLog(id)); return workLog(id);
     }
 
     @Transactional
     public void deleteWorkLog(long id) {
         Map<String, Object> before = workLog(id); long taskId = number(before.get("taskId"));
         if (number(before.get("userId")) != permissions.current().id()) permissions.requireTaskManager(taskId, false); else permissions.requireTaskManager(taskId, true);
-        Map<String, Object> task = task(taskId); db.update("DELETE FROM task_work_logs WHERE id=:id", Map.of("id", id));
+        Map<String, Object> task = task(taskId); lockNode(number(task.get("nodeId"))); db.update("DELETE FROM task_work_logs WHERE id=:id", Map.of("id", id));
         log(number(task.get("nodeId")), "WORK_LOG_DELETE", "删除工时", before, null);
     }
 
     private Map<String, Object> task(long id) { return db.one("SELECT t.*,u.name assignee_name,(SELECT SUM(days) FROM task_work_logs WHERE task_id=t.id) actual_days FROM tasks t JOIN users u ON u.id=t.assignee_id WHERE t.id=:id", Map.of("id", id), "任务不存在"); }
+    /** 统一锁顺序：先锁节点再写任务/工时，避免与节点完成路径形成反向锁。 */
+    private void lockNode(long nodeId) { db.one("SELECT id FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "节点不存在"); }
     private Map<String, Object> workLog(long id) { return db.one("SELECT * FROM task_work_logs WHERE id=:id", Map.of("id", id), "工时记录不存在"); }
 
     private void log(long nodeId, String action, String detail, Object before, Object after) {
