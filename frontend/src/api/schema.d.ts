@@ -62,7 +62,7 @@ export interface paths {
         get?: never;
         put: operations["updateTask"];
         post?: never;
-        delete?: never;
+        delete: operations["deleteTask"];
         options?: never;
         head?: never;
         patch?: never;
@@ -949,6 +949,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
+    deleteTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseVoid"];
                 };
             };
         };

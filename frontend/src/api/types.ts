@@ -16,7 +16,7 @@ export interface NodeItem { id: number; projectId: number; moduleId: number; mod
 export interface ModuleItem { id: number; projectId: number; name: string; description?: string; ownerId: number; ownerName: string; progress?: number; nodeCount?: number; overdueCount?: number; nodes?: NodeItem[] }
 export interface StageTarget { id: number; projectId: number; name: string; description?: string; targetDate: string; sortOrder?: number }
 export interface Timeline extends Project { modules: ModuleItem[]; stageTargets: StageTarget[] }
-export interface Task { id: number; nodeId: number; name: string; description?: string; assigneeId: number; assigneeName: string; status: TaskStatus; dueDate?: string; estimateDays?: number; actualDays?: number; noteCount?: number }
+export interface Task { id: number; nodeId: number; name: string; description?: string; situation?: string; handling?: string; assigneeId: number; assigneeName: string; status: TaskStatus; dueDate?: string; estimateDays?: number; actualDays?: number; noteCount?: number }
 export interface TaskNote { id: number; taskId: number; authorId: number; authorName: string; content: string; createdAt: string }
 export interface WorkLog { id: number; taskId: number; userId: number; userName: string; workDate: string; days: number; note?: string }
 export interface Notification { id: number; type: string; title: string; content?: string; link?: string; readAt?: string; createdAt: string }

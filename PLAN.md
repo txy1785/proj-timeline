@@ -257,6 +257,20 @@ Playwright 覆盖匿名跳转、管理员账号页、PM、成员、VIEWER 项目
 - 复核验证：临时库 pt_verify_m1 实测——任务完成后节点 104 进度 0→100、节点 DONE 后重开任务返回 4090「节点已完成或已取消，任务状态不能再变更」、新增任务返回 4090、`PUT /nodes/106` 编辑成功；临时库 pt_verify_wl 实测——王工取消节点 103 前后负载 activeNodeCount 2→1、openTaskCount 2→1、activeEstimateDays 4.0→2.0、weekDueEstimateDays 2.0→0.0，任务状态变更 4090；临时库均已删除、未触碰 `proj_timeline` 库。后端 23 个单测通过（`ProgressRulesTest` 6 个）、前端 lint/typecheck/build 通过、Playwright 复核节点 106 仍为 3/6、50%、无 slider。
 - 审核结论：通过（无 Blocker/Major 遗留）。
 
+## 任务情况/处理方式与任务、模块 CRUD（2026-10-20，feature/task-fields-module-crud）
+
+- 需求：任务补充「任务情况」「处理方式」两个字段；任务和模块补齐修改/删除（例如改名称）；模块节点视图补返回上一级（模块视图）。
+- 数据库：Flyway V8 给 `tasks` 增加 `situation`/`handling`，给 `node_logs.action` 增加 `TASK_UPDATE`/`TASK_DELETE`；同步 `database.sql` 与 `demo_seed.sql`（任务 1/10 的示例）。
+- 后端：创建/编辑任务读写新字段；编辑任务写 `TASK_UPDATE`；新增 `DELETE /tasks/{id}`（物理删除任务，同一事务删除进展记录与工时、软删除任务附件、写 `TASK_DELETE`）；已完成/已取消节点拒绝编辑/删除任务；模块更新/删除沿用既有 `PUT/DELETE /modules/{id}`（含节点拒绝、模块附件软删除）。
+- 前端：任务表格新增编辑/删除，任务弹窗改为新增/编辑共用（名称、描述、任务情况、处理方式、执行人、截止日、计划人天），详情展示描述/任务情况/处理方式；模块工作页新增「返回模块视图」及「编辑模块/删除模块」；项目设置模块列表补删除；抽出 `components/ModuleFormDialog.vue` 供两处复用并登记复用库；Element Plus 启用 `zh-cn` locale，确认框按钮改为中文。
+- 接口：新增 #59 `DELETE /tasks/{id}`，OpenAPI 59 个操作；`schema.d.ts` 从运行中的 OpenAPI 重新生成。
+- 验证：后端 23 个单测通过；前端 lint/typecheck/build 通过；临时库 pt_verify_crud 实测任务创建（含情况/处理方式）→编辑→删除、模块创建→编辑→删除、含节点模块删除 409、关闭节点编辑/删除任务 409、`TASK_UPDATE`/`TASK_DELETE` 日志；Playwright 5175 实测返回模块视图、模块编辑弹窗、任务弹窗字段、任务创建/编辑/删除，无 console 错误；演示库数据已复原。
+- 独立审核（子代理）结论：修复后合并，1 个 Major、若干 Minor，无 Blocker。Major：`updateModule` 未传 `sortOrder` 时用 `orElse(0)` 会把模块顺序改到最前，命中「改名称」主路径；已改为保留原 `sort_order`。同时修复：编辑任务不再把 NULL 计划人天静默改成 1、`deleteTask` 锁任务行并校验影响行数、`TASK_DELETE` 日志带 `taskId`、记录增删与删任务按 node→tasks 串行、情况/处理方式限 2000 字、权限矩阵补「删除任务」行、§4.2/§3.6 口径补全、保存按钮防重复提交。
+- 备注：V8 把新 ENUM 值插在 `WORK_LOG_*` 之前，MySQL 会重建 `node_logs` 表；当前数据量小、可接受，后续再动该枚举应改为末尾追加。
+- 未做：删除任务不通知执行人——通知类型契约固定 5 类，扩类型需单独决策；后续如需要再补。
+- 已知未处理：`AttachmentService.upload` 对 TASK 不锁节点（先写盘再插行），与删任务并发时可能留下 `owner_name` 为空的孤儿附件（attachments 无外键，概率低）；后续统一在任务附件上传前加节点锁。
+- 审核结论：通过（无遗留 Blocker/Major）。
+
 
 
 
