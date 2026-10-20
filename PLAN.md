@@ -229,6 +229,16 @@ Playwright 覆盖匿名跳转、管理员账号页、PM、成员、VIEWER 项目
 - 补充复验：含图片的 docx 在 `useBase64URL: true` 下渲染为 `data:image/png;base64,...`，`img.naturalWidth = 1`，说明该项不会破坏图片显示（此前审核的样本本身有缺陷，未覆盖到）。
 - PDF 预览用 `<iframe>` 直接加载 blob，**未加 `sandbox`**：PDF 由浏览器内置阅读器在独立扩展源中渲染，读不到应用 `sessionStorage`；加 sandbox 有较大概率让 Chrome 内置阅读器拒绝渲染，属于会直接打断主功能的改动，暂不启用。若后续要加固，需要先在目标浏览器上验证 `sandbox="allow-same-origin"` 是否仍能正常翻页。
 
+## 任务列表快捷状态按钮（2026-10-20，feature/task-quick-status）
+
+- 需求：任务表格「操作」列在「详情」之外增加一个随状态变化的按钮——待完成→「开始」、进行中→「完成」、已完成→「重新开始」。
+- 权限：仅在 `canManageTaskRow` 为真时显示（执行人/节点负责人/模块负责人/PM，排除 VIEWER 与归档项目），与后端 `requireTaskManager(id, true)` 的允许集合一致；隐藏只是提示，服务端仍校验。
+- 并发保护：点击时把列表快照里的状态作为 `expectedStatus` 一起提交，后端不一致返回 409「任务状态已变化，请刷新后重试」，避免多标签页下把已变更的任务静默改错（尤其 DONE→DOING 会清空 `done_at`）。
+- 交互：busy 期间其余快捷按钮 disabled，当前行显示 loading；成功后提示动作并刷新列表，`loadNode` 会按 id 同步详情弹窗里的任务快照。
+- 状态机口径下沉到 `utils/task.ts` 的 `TASK_NEXT_ACTION` 并登记复用库。
+- 验证：lint/typecheck/build 通过、后端 17 个单测通过；Playwright 在测试库上实测四步——待完成（开始）→ 进行中（完成）→ 已完成（重新开始）→ 进行中，按钮文案与状态严格对应，无 console 错误。
+
+
 
 
 

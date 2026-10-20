@@ -8,3 +8,10 @@ export const TASK_STATUS_TYPES: Record<TaskStatus, 'info' | 'warning' | 'success
 
 /** 任务状态顺序：看板列、状态下拉都按此顺序渲染。 */
 export const TASK_STATUSES: TaskStatus[] = ['TODO', 'DOING', 'DONE']
+
+/** 列表快捷操作：按当前状态给出下一步动作（待完成→开始、进行中→完成、已完成→重新开始）。 */
+export const TASK_NEXT_ACTION: Record<TaskStatus, { label: string; next: TaskStatus }> = {
+  TODO: { label: '开始', next: 'DOING' },
+  DOING: { label: '完成', next: 'DONE' },
+  DONE: { label: '重新开始', next: 'DOING' }
+}

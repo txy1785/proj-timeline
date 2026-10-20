@@ -176,9 +176,14 @@ public class WorkService {
     }
 
     @Transactional
-    public Map<String, Object> taskStatus(long id, String status) {
+    public Map<String, Object> taskStatus(long id, String status, String expectedStatus) {
         permissions.requireTaskManager(id, true); if (!Set.of("TODO", "DOING", "DONE").contains(status)) throw BusinessException.badRequest("任务状态无效");
-        Map<String, Object> before = task(id); LocalDateTime doneAt = "DONE".equals(status) ? LocalDateTime.now(clock) : null;
+        Map<String, Object> before = task(id);
+        // 列表里的快捷操作带着点击时的状态一起提交，避免并发/多标签页下把已变化的任务改错
+        if (expectedStatus != null && !expectedStatus.isBlank() && !expectedStatus.equals(String.valueOf(before.get("status")))) {
+            throw BusinessException.conflict("任务状态已变化，请刷新后重试");
+        }
+        LocalDateTime doneAt = "DONE".equals(status) ? LocalDateTime.now(clock) : null;
         db.update("UPDATE tasks SET status=:status,done_at=:done WHERE id=:id", map("status", status, "done", doneAt, "id", id));
         log(number(before.get("nodeId")), "TASK_STATUS", "任务状态变更", Map.of("status", before.get("status")), Map.of("status", status)); return task(id);
     }
