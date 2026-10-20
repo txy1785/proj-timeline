@@ -207,6 +207,31 @@ Playwright 覆盖匿名跳转、管理员账号页、PM、成员、VIEWER 项目
 - 实现取舍：任务记录不写 `node_logs`——该表 `action` 是 ENUM，新增值需再改一次已发布表结构，而记录行本身已带作者与时间，足够追溯。
 - 验证：后端 17 个单测通过；前端 lint/typecheck/build 通过；测试库（V1–V6）7 组用例通过——新任务记录数为 0、追加与读回、列表 `noteCount`、状态三档切换、任务附件上传与汇总归属名、删除记录、VIEWER 可读不可写。
 
+## 文件在线查看（2026-10-20，feature/file-preview）
+
+- 需求确认：上传的文件要能在线查看，范围是 PDF、图片、TXT/Markdown/CSV，另加 Word(docx) 与 Excel(xlsx)；交互用页面内弹窗。
+- 方案：预览全部在浏览器完成，**不新增服务端接口、不引入 LibreOffice 等转换服务**。前端用现有的下载接口取 Blob（带 Authorization），按扩展名渲染。好处是服务端对非 PDF/图片继续返回 `attachment`，不扩大上次审核收敛掉的内联渲染面。
+- 实现：`utils/attachment.ts` 增加 `previewKind`（pdf/image/text/docx/xlsx/none）与 `fetchAttachmentBlob`（按扩展名补正确 MIME）；新增 `components/AttachmentPreview.vue`，docx 用 `docx-preview`、xlsx 用 `read-excel-file`，两者均 `await import()` 动态加载，主包体积不受影响（docx 单独 chunk 约 173KB）。
+- 依赖取舍：最初装了 `xlsx`(SheetJS)，npm audit 报 2 条 high 且**无修复版本**（原型污染、ReDoS），改用 `read-excel-file`——API 为一次读全部工作表，返回 `[{sheet,data}]`，正好满足按 sheet 分页展示；最终 `npm audit` 为 0 漏洞。
+- 入口：附件列表与项目文档「全部文件」都提供「预览」按钮，仅对可预览格式显示；弹窗底部保留「下载原文件」。
+- 限制：最多展示前 200 行、前 5 个工作表；docx/xlsx 超过 20MB 只提示下载；不在白名单内的格式不显示预览按钮。
+- 验证：lint/typecheck/build 通过；用 Playwright + Chromium 在临时实例上真实跑通——上传样例 docx/xlsx，打开项目文档页点「预览」，docx 渲染出正文文字、xlsx 渲染出表头与单元格（含数字 42），无 console 错误或页面异常。测试库与临时前后端实例验证后已删除。
+
+### 独立审核后的修复（同日）
+
+- 审核用 Playwright PoC 证明 `docx-preview` 默认 `renderAltChunks: true` 会把文档内嵌的 HTML 部件渲染成**无 sandbox 的同源 iframe**，上传者即可在应用源执行脚本（存储型 XSS）。修复：渲染参数改为 `renderAltChunks/renderChanges/renderComments: false`、`useBase64URL: true`（同时避免库内部 blob URL 泄漏），渲染后再清洗超链接（只保留 http(s)/mailto/锚点，外链加 `target=_blank rel=noopener noreferrer`）。
+- 同族问题：docx 里的 `javascript:` 超链接会被原样写进 `href`，点击即执行；已由上面的链接清洗覆盖。
+- SVG 重新内联的风险：blob: 文档继承应用源，右键「新标签页打开」即可执行 SVG 里的脚本读走 JWT。修复：预览白名单剔除 svg（与后端 `MediaTypes.INLINE_TYPES` 对齐），SVG 只下载。
+- 快速切换文件的竞态：加 `loadToken` 序号丢弃过期响应、`onBeforeUnmount` 清理 blob URL、docx 渲染前后比对 token。
+- 依赖锁精确版本（`docx-preview@0.4.1`、`read-excel-file@9.3.12`），避免小版本改默认安全选项。
+- 预览状态抽成 `composables/useAttachmentPreview.ts`，两个调用方共用；文档同步：不支持 `log/json` 预览（不在上传白名单）、不可预览格式不显示按钮。
+- 复验（Playwright + 构造攻击样本）：altChunk 文档渲染后 iframe 数 0、脚本未执行、内嵌内容不显示；`javascript:` 链接 href 被移除且点击不执行；SVG 行无预览按钮；正常 docx 仍正确渲染；全程无 console 错误。
+- 补充复验：含图片的 docx 在 `useBase64URL: true` 下渲染为 `data:image/png;base64,...`，`img.naturalWidth = 1`，说明该项不会破坏图片显示（此前审核的样本本身有缺陷，未覆盖到）。
+- PDF 预览用 `<iframe>` 直接加载 blob，**未加 `sandbox`**：PDF 由浏览器内置阅读器在独立扩展源中渲染，读不到应用 `sessionStorage`；加 sandbox 有较大概率让 Chrome 内置阅读器拒绝渲染，属于会直接打断主功能的改动，暂不启用。若后续要加固，需要先在目标浏览器上验证 `sandbox="allow-same-origin"` 是否仍能正常翻页。
+
+
+
+
 
 
 

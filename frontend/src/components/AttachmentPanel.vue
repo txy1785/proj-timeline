@@ -3,9 +3,11 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadFile } from 'element-plus'
 import { api, upload } from '../api/client'
-import { downloadAttachment, formatBytes } from '../utils/attachment'
+import { downloadAttachment, formatBytes, previewKind } from '../utils/attachment'
 import type { Attachment, AttachmentCategory, AttachmentOwnerType } from '../api/types'
 import { useAuthStore } from '../stores/auth'
+import AttachmentPreview from './AttachmentPreview.vue'
+import { useAttachmentPreview } from '../composables/useAttachmentPreview'
 
 const auth = useAuthStore()
 const props = withDefaults(defineProps<{
@@ -23,6 +25,7 @@ const loading = ref(false)
 const activeCode = ref('')
 const dialog = ref(false)
 const uploading = ref(false)
+const { previewOpen, previewItem, openPreview } = useAttachmentPreview()
 const form = reactive({ code: '', title: '', remark: '', fileName: '', raw: null as File | null })
 
 const ownCategories = computed(() => categories.value.filter(item => item.ownerType === props.ownerType))
@@ -102,8 +105,7 @@ async function save(row: Attachment) {
 
 async function remove(row: Attachment) {
   try {
-    await ElMessageBox.confirm(`确定删除「${row.title}」？删除后不再显示在列表中。`, '删除文件', { type: 'warning' })
-  } catch { return }
+    await ElMessageBox.confirm(`确定删除「${row.title}」？删除后不再显示在列表中。`, '删除文件', { type: 'warning' })  } catch { return }
   try {
     await api<void>('DELETE', `/attachments/${row.id}`)
     ElMessage.success('已删除')
@@ -159,8 +161,9 @@ onMounted(() => {
           <el-table-column label="大小" width="100"><template #default="scope">{{ size(scope.row.sizeBytes) }}</template></el-table-column>
           <el-table-column prop="uploaderName" label="上传人" width="110" />
           <el-table-column prop="createdAt" label="上传时间" width="170" />
-          <el-table-column label="操作" width="130">
+          <el-table-column label="操作" width="160">
             <template #default="scope">
+              <el-button v-if="previewKind(scope.row.originalName) !== 'none'" link type="primary" @click="openPreview(scope.row)">预览</el-button>
               <el-button link type="primary" @click="save(scope.row)">下载</el-button>
               <el-button v-if="canDeleteRow(scope.row)" link type="danger" @click="remove(scope.row)">删除</el-button>
             </template>
@@ -196,6 +199,8 @@ onMounted(() => {
         <el-button type="primary" :loading="uploading" @click="submit">上传</el-button>
       </template>
     </el-dialog>
+
+    <AttachmentPreview v-model="previewOpen" :attachment="previewItem" />
   </div>
 </template>
 
