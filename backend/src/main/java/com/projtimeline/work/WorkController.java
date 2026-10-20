@@ -55,7 +55,9 @@ public class WorkController {
     ApiResponse<Map<String, Object>> updateTask(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.updateTask(id, body)); }
 
     @PutMapping("/tasks/{id}/status")
-    ApiResponse<Map<String, Object>> taskStatus(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.taskStatus(id, String.valueOf(body.get("status")))); }
+    ApiResponse<Map<String, Object>> taskStatus(@PathVariable long id, @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(service.taskStatus(id, String.valueOf(body.get("status")), RequestValues.text(body, "expectedStatus")));
+    }
 
     @GetMapping("/tasks/{id}/notes")
     ApiResponse<List<Map<String, Object>>> taskNotes(@PathVariable long id) { return ApiResponse.ok(service.taskNotes(id)); }
