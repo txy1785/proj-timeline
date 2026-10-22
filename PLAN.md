@@ -298,6 +298,20 @@ Playwright 覆盖匿名跳转、管理员账号页、PM、成员、VIEWER 项目
 - 复验：`mvn test` 29 个单测通过（含新增 `DeliverableRulesTest` 6 个）；前端 lint/typecheck/build 通过。
 - 复审结论：通过（复审子代理原话：「通过（无遗留 Blocker/Major）」）；复审另指出 1 条显示回归——关闭节点编辑时因跳过 `loadFiles` 导致关联文件下拉显示裸 id，已改为只跳过新建场景，并复跑 lint/typecheck/build。
 
+## 阶段性目标量化指标（2026-10-22，feature/stage-target-metric）
+
+- 起因：P0 交付物上线后，访谈里勾选的痛点「季度目标达成了多少（要量化数字）」仍没有落点；但已确认不做 OKR。折中方案是给阶段性目标加**可选**量化指标，不引入 O/KR、周期、评分与对齐。
+- 数据：Flyway V10 给 `project_stage_targets` 加四个可空列（`metric_name/metric_unit/metric_target/metric_current`）。四列全空 = 原来的日期型里程碑，老数据不需要任何处理，向后兼容。
+- 口径：有指标时 `metric_name` 与 `metric_target` 必填、`metric_target > 0`、`metric_current` 缺省 0 且不得为负；`progress = 当前值 ÷ 目标值`，四舍五入后夹 0–100，超额按 100 显示。进度读取时派生、不落库，规则集中在 `ProgressRules.metricProgress`（已登记复用库，补 3 组单测）。
+- 兼容：编辑目标时若请求体完全不出现四个指标字段，保留原指标（旧前端缓存只传名称/日期时不会静默清空）；显式把四个字段都传 `null` 才清空。
+- 接口：没有新增接口，仍是 `#47`/`#48`；请求体扩展 4 个可选字段，响应在有指标时多一个 `progress`（无指标时因全局 `non_null` 策略省略该键），接口总数仍为 63。
+- 前端：项目设置的阶段目标表新增「量化指标」「达成度」两列，对话框加可选指标区（勾选后才填）；时间线阶段目标标签显示「达成 x%」；不填指标时行为与之前完全一致。
+- 边界：指标只做展示与复盘参考，不参与项目/模块/节点进度聚合、不进周报；也不做“目标挂节点自动派生”（留待确有需要再加）。
+- 回滚：停服回退到 V9 应用版本后 `ALTER TABLE project_stage_targets DROP COLUMN metric_name, DROP COLUMN metric_unit, DROP COLUMN metric_target, DROP COLUMN metric_current`；会丢失已填的指标值，其余目标字段不受影响，无需清理磁盘文件。
+- 验证：后端 `mvn test` 33 个单测通过（`ProgressRulesTest` 新增 3 组指标用例）；前端 lint/typecheck/build 通过；临时库端到端（`proj_timeline` dump 到 `proj_timeline_metric_check`，58082 起后端，Flyway 自动 V9→V10，`flyway_schema_history` 与 `project_stage_targets` 列均已确认）12 项断言全过——建带指标目标 `1/3→33%`、达成 `3/3→100%`、超额 `5/3→100%`、缺目标值/目标值 0/负当前值均 400、纯日期目标 `progress=null`、四字段传 null 可清回 `null`、VIEWER 写入 403、时间线带出 `progress`、删除清理。验证后临时库、临时文件与 58082 实例均已清理。
+- 独立审核（全新子代理）：通过，无 Blocker/Major；提 5 条 Minor、10 条 Nit。已修：`metricProgress` 改为先比较再相除（超大比值曾因 `intValue()` 溢出算出 0%）；补 `DECIMAL(12,2)` 的数值上限与小数位校验（越界会变成 409、`0.001` 会被数据库取整成 0）；接口文档 #7 与 §3.7 补指标字段与「无指标时省略 progress」；`PROJECT_MEMORY` 单测数；边界用例。另把编辑语义收紧为「请求体完全不出现指标字段＝保留原值」，旧前端缓存只传名称/日期时不会静默清空指标——用临时库手工验证：只传 name/targetDate 的 PUT 保留 `metricTarget=3.00`、`progress=33`，显式四个 null 的 PUT 清空成功；临时库与 58083 实例已清理。
+
+
 
 
 
