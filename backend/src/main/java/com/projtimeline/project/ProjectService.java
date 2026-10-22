@@ -10,6 +10,7 @@ import com.projtimeline.security.PermissionService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.*;
@@ -194,7 +195,9 @@ public class ProjectService {
 
     public List<Map<String, Object>> stageTargets(long projectId) {
         permissions.requireProjectRead(projectId);
-        return db.list("SELECT * FROM project_stage_targets WHERE project_id=:project ORDER BY target_date,sort_order,id", Map.of("project", projectId));
+        List<Map<String, Object>> rows = db.list("SELECT * FROM project_stage_targets WHERE project_id=:project ORDER BY target_date,sort_order,id", Map.of("project", projectId));
+        rows.forEach(this::decorateStageTarget);
+        return rows;
     }
 
     @Transactional
@@ -202,19 +205,32 @@ public class ProjectService {
         permissions.requireProjectManager(projectId);
         LocalDate targetDate = requiredDate(body, "targetDate");
         validateStageTargetDate(projectId, targetDate);
-        long id = db.insert("INSERT INTO project_stage_targets(project_id,name,description,target_date,sort_order) VALUES(:project,:name,:description,:date,:sort)",
-                map("project", projectId, "name", requiredText(body, "name"), "description", text(body, "description"), "date", targetDate, "sort", Optional.ofNullable(intValue(body, "sortOrder")).orElse(0)));
-        return db.one("SELECT * FROM project_stage_targets WHERE id=:id", Map.of("id", id), "阶段性目标不存在");
+        Map<String, Object> values = stageTargetValues(body, targetDate, null);
+        values.put("project", projectId);
+        long id = db.insert("""
+                INSERT INTO project_stage_targets(project_id,name,description,target_date,sort_order,
+                                                  metric_name,metric_unit,metric_target,metric_current)
+                VALUES(:project,:name,:description,:date,:sort,:metricName,:metricUnit,:metricTarget,:metricCurrent)
+                """, values);
+        return stageTarget(id);
     }
 
     @Transactional
     public Map<String, Object> updateStageTarget(long id, Map<String, Object> body) {
-        Map<String, Object> target = db.one("SELECT id,project_id FROM project_stage_targets WHERE id=:id", Map.of("id", id), "阶段性目标不存在");
+        Map<String, Object> target = db.one("SELECT id,project_id,metric_name,metric_unit,metric_target,metric_current FROM project_stage_targets WHERE id=:id",
+                Map.of("id", id), "阶段性目标不存在");
         long projectId = number(target.get("projectId")); permissions.requireProjectManager(projectId);
         LocalDate targetDate = requiredDate(body, "targetDate"); validateStageTargetDate(projectId, targetDate);
-        db.update("UPDATE project_stage_targets SET name=:name,description=:description,target_date=:date,sort_order=:sort WHERE id=:id",
-                map("id", id, "name", requiredText(body, "name"), "description", text(body, "description"), "date", targetDate, "sort", Optional.ofNullable(intValue(body, "sortOrder")).orElse(0)));
-        return db.one("SELECT * FROM project_stage_targets WHERE id=:id", Map.of("id", id), "阶段性目标不存在");
+        // 旧前端缓存或第三方调用只传名称/日期时保留原指标；显式传 null 才算清空
+        Map<String, Object> values = stageTargetValues(body, targetDate, target);
+        values.put("id", id);
+        db.update("""
+                UPDATE project_stage_targets
+                SET name=:name,description=:description,target_date=:date,sort_order=:sort,
+                    metric_name=:metricName,metric_unit=:metricUnit,metric_target=:metricTarget,metric_current=:metricCurrent
+                WHERE id=:id
+                """, values);
+        return stageTarget(id);
     }
 
     @Transactional
@@ -305,6 +321,83 @@ public class ProjectService {
         if (projectEnd != null && targetDate.isAfter(projectEnd)) throw BusinessException.badRequest("阶段性目标日期不能晚于项目完成日期");
     }
 
+    private Map<String, Object> stageTarget(long id) {
+        Map<String, Object> row = db.one("SELECT * FROM project_stage_targets WHERE id=:id", Map.of("id", id), "阶段性目标不存在");
+        decorateStageTarget(row);
+        return row;
+    }
+
+    /** 量化进度实时派生，不落库；没有指标（日期型里程碑）时返回 null，前端据此决定是否显示进度。 */
+    private void decorateStageTarget(Map<String, Object> row) {
+        Object target = row.get("metricTarget");
+        row.put("progress", target == null ? null : ProgressRules.metricProgress((BigDecimal) row.get("metricCurrent"), (BigDecimal) target));
+    }
+
+    /** 名称、说明、目标日期与排序照旧；量化指标四列可选，existing 非空时表示编辑，未传指标字段则保留原值。 */
+    private Map<String, Object> stageTargetValues(Map<String, Object> body, LocalDate targetDate, Map<String, Object> existing) {
+        Map<String, Object> values = new HashMap<>();
+        values.put("name", requiredText(body, "name"));
+        values.put("description", text(body, "description"));
+        values.put("date", targetDate);
+        values.put("sort", Optional.ofNullable(intValue(body, "sortOrder")).orElse(0));
+        Map<String, Object> metric = metricValues(body);
+        if (metric == null) metric = existing == null ? emptyMetric() : metricOfRow(existing);
+        values.putAll(metric);
+        return values;
+    }
+
+    private static Map<String, Object> emptyMetric() {
+        Map<String, Object> values = new HashMap<>();
+        values.put("metricName", null); values.put("metricUnit", null);
+        values.put("metricTarget", null); values.put("metricCurrent", null);
+        return values;
+    }
+
+    private static Map<String, Object> metricOfRow(Map<String, Object> row) {
+        Map<String, Object> values = new HashMap<>();
+        values.put("metricName", row.get("metricName")); values.put("metricUnit", row.get("metricUnit"));
+        values.put("metricTarget", row.get("metricTarget")); values.put("metricCurrent", row.get("metricCurrent"));
+        return values;
+    }
+
+    /**
+     * 量化指标：四个字段都没出现在请求体里时返回 null（调用方保留原值，兼容旧前端缓存）；
+     * 出现任意一个就按"要么全空=日期型里程碑，要么必须给名称与大于 0 的目标值"处理。
+     */
+    private Map<String, Object> metricValues(Map<String, Object> body) {
+        boolean touched = body.containsKey("metricName") || body.containsKey("metricUnit")
+                || body.containsKey("metricTarget") || body.containsKey("metricCurrent");
+        if (!touched) return null;
+        String name = text(body, "metricName");
+        String unit = text(body, "metricUnit");
+        BigDecimal target = decimal(body, "metricTarget");
+        BigDecimal current = decimal(body, "metricCurrent");
+        if (name == null && unit == null && target == null && current == null) return emptyMetric();
+        if (name == null) throw BusinessException.badRequest("填写量化指标时必须给出指标名称");
+        if (name.length() > 100) throw BusinessException.badRequest("指标名称不能超过 100 字");
+        if (target == null) throw BusinessException.badRequest("填写量化指标时必须给出目标值");
+        if (target.signum() <= 0) throw BusinessException.badRequest("目标值必须大于 0");
+        // 列是 DECIMAL(12,2)：超出范围或超过两位小数会被数据库取整/报错，这里提前按 4000 拒绝
+        checkMetricNumber(target, "目标值");
+        if (current != null) {
+            if (current.signum() < 0) throw BusinessException.badRequest("当前值不能小于 0");
+            checkMetricNumber(current, "当前值");
+        }
+        if (unit != null && unit.length() > 20) throw BusinessException.badRequest("指标单位不能超过 20 字");
+        Map<String, Object> values = new HashMap<>();
+        values.put("metricName", name); values.put("metricUnit", unit);
+        values.put("metricTarget", target); values.put("metricCurrent", current == null ? BigDecimal.ZERO : current);
+        return values;
+    }
+
+    /** DECIMAL(12,2) 能存的最大值；正整数部分最多 10 位，小数最多 2 位。 */
+    private static final BigDecimal METRIC_MAX = new BigDecimal("9999999999.99");
+
+    private static void checkMetricNumber(BigDecimal value, String label) {
+        if (value.abs().compareTo(METRIC_MAX) > 0) throw BusinessException.badRequest(label + "超出可存储范围");
+        if (value.stripTrailingZeros().scale() > 2) throw BusinessException.badRequest(label + "最多两位小数");
+    }
+
     private static LocalDate requiredDate(Map<String, Object> body, String key) {
         LocalDate value = date(body, key);
         if (value == null) throw BusinessException.badRequest(key + " 不能为空");
@@ -312,5 +405,4 @@ public class ProjectService {
     }
 
     private static boolean truthy(Object value) { return value instanceof Boolean b ? b : value != null && ((Number) value).intValue() != 0; }
-    private static Map<String, Object> map(Object... values) { Map<String, Object> result = new HashMap<>(); for (int i=0;i<values.length;i+=2) result.put(values[i].toString(), values[i+1]); return result; }
 }

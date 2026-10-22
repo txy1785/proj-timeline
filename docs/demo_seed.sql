@@ -26,10 +26,10 @@ INSERT INTO project_members (project_id, user_id, project_role, joined_at) VALUE
  (2,1,'MEMBER','2025-12-10'),(2,2,'PM','2025-12-10'),
  (2,3,'MEMBER','2025-12-10'),(2,6,'MEMBER','2025-12-10');
 
-INSERT INTO project_stage_targets (project_id, name, description, target_date, sort_order) VALUES
- (1,'核心交易链路可联调','用户、订单和支付主链路达到联调条件','2025-12-20',1),
- (1,'商城正式上线','完成验收并发布正式环境','2026-01-30',2),
- (2,'新版视觉定稿','完成主要页面视觉验收','2025-12-30',1);
+INSERT INTO project_stage_targets (project_id, name, description, metric_name, metric_unit, metric_target, metric_current, target_date, sort_order) VALUES
+ (1,'核心交易链路可联调','用户、订单和支付主链路达到联调条件','联调通过接口数','个',12,8,'2025-12-20',1),
+ (1,'商城正式上线','完成验收并发布正式环境','上线模块数','个',3,2,'2026-01-30',2),
+ (2,'新版视觉定稿','完成主要页面视觉验收',NULL,NULL,NULL,NULL,'2025-12-30',1);
 
 INSERT INTO modules (id, project_id, name, owner_id, sort_order) VALUES
  (1,1,'用户与登录',3,1),
