@@ -311,13 +311,26 @@ Playwright 覆盖匿名跳转、管理员账号页、PM、成员、VIEWER 项目
 - 验证：后端 `mvn test` 33 个单测通过（`ProgressRulesTest` 新增 3 组指标用例）；前端 lint/typecheck/build 通过；临时库端到端（`proj_timeline` dump 到 `proj_timeline_metric_check`，58082 起后端，Flyway 自动 V9→V10，`flyway_schema_history` 与 `project_stage_targets` 列均已确认）12 项断言全过——建带指标目标 `1/3→33%`、达成 `3/3→100%`、超额 `5/3→100%`、缺目标值/目标值 0/负当前值均 400、纯日期目标 `progress=null`、四字段传 null 可清回 `null`、VIEWER 写入 403、时间线带出 `progress`、删除清理。验证后临时库、临时文件与 58082 实例均已清理。
 - 独立审核（全新子代理）：通过，无 Blocker/Major；提 5 条 Minor、10 条 Nit。已修：`metricProgress` 改为先比较再相除（超大比值曾因 `intValue()` 溢出算出 0%）；补 `DECIMAL(12,2)` 的数值上限与小数位校验（越界会变成 409、`0.001` 会被数据库取整成 0）；接口文档 #7 与 §3.7 补指标字段与「无指标时省略 progress」；`PROJECT_MEMORY` 单测数；边界用例。另把编辑语义收紧为「请求体完全不出现指标字段＝保留原值」，旧前端缓存只传名称/日期时不会静默清空指标——用临时库手工验证：只传 name/targetDate 的 PUT 保留 `metricTarget=3.00`、`progress=33`，显式四个 null 的 PUT 清空成功；临时库与 58083 实例已清理。
 
+## 模块变更申请（2026-10-22，feature/module-change-request）
 
+- 起因：用户最早描述的权限诉求——「项目成员只能进自己参与的项目，管理自己负责的模块，改别人的模块需要申请」。这是权限缺口，不是新概念，所以按最小闭环做。
+- 范围（已确认）：只覆盖模块的**名称 / 描述 / 负责人**；只 PM 批；通过后**自动生效**；新增「待审批 / 审批结果」两类站内通知。
+- 数据：Flyway V11 建 `module_change_requests`，用 `pending_module_id` 生成列 + 唯一键保证同一模块同时只有一个待审批申请；`notifications.type` 扩到 7 类（原 5 类末尾追加）。
+- 后端：`ChangeRequestService` 负责提交、列表可见性、审批、撤回。提交要求项目成员且非 VIEWER，已有编辑权限（PM/管理员/模块负责人）返回 409；审批与改模块同一事务，审批前重新校验负责人仍可指派；驳回必须填原因；撤回仅申请人本人且仅待审批。
+- 通知：抽 `NotificationService` 作为唯一写入口，`WorkService.notifyUser` 与 `ReportingService` 周报发布改为调用它，避免出现第三份 `INSERT INTO notifications`。
+- 前端：新增 `ChangeRequestDialog`（模块页，无编辑权限的成员可见）；项目设置新增「模块变更申请」表——PM 可通过/驳回，申请人可撤回，状态与审批意见可见；`types.ts` 增加 `ChangeRequest`。
+- 验证：后端 33 个单测、前端 lint/typecheck/build 通过；空库起后端 Flyway 一次跑完 V1–V11，导入 `demo_seed` 后在临时库跑 10 项断言全过——成员提交、同模块重复 409、模块负责人自提 409、列表可见性（PM 全部 / 成员仅自己）、通过即改模块、申请人收到 `CHANGE_REQUEST_DECIDED`、驳回不填原因 400、仅申请人可撤回（PM 撤回 403）、内容无变化 400、VIEWER 提交 403 查询 200。临时库与 58084 实例已清理，未触碰 `proj_timeline`。
+- 未做：不支持批量审批；已通过的申请不能“撤回”（模块已改，只能再提一个新申请改回）；申请人提交时不通知被申请模块的负责人。
+- 回滚：停服回退到 V10 应用版本后，先 DELETE FROM notifications WHERE type IN ('CHANGE_REQUEST_SUBMITTED','CHANGE_REQUEST_DECIDED')，再把 
+otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_change_requests（先删通知，否则缩枚举会失败或截断）。
+### 独立审核与修复（同日）
 
-
-
-
-
-
-
-
-
+- 审核（全新子代理，只读）结论：需修复后通过；1 个 Major + 11 Minor + 15 Nit。已实跑后端 33 单测与前端 lint/typecheck/build。
+- Major（已修）：V11 的 `fk_request_module` 是 RESTRICT，而模块是物理删除——模块一旦有申请记录（含已驳回/撤回）就永远删不掉，返回 409「数据约束冲突」。`deleteModule` 改为：锁模块行 → 有待审批申请先返回明确 409 → 同事务删除该模块的申请记录 → 再软删模块文档、删模块；并给 `module_id` 补显式索引。
+- 加锁顺序：审批改为「模块行 → 申请行」，与 `deleteModule` 同向，避免与删模块互等。
+- 并发提示：唯一键兜底现在 catch `DuplicateKeyException` 转成「该模块已有待审批的变更申请」，不再暴露「数据约束冲突」。
+- 通知复用：`NotificationService` 增加 `notifyProjectPm`，`WorkService.notifyPm` 与 `ChangeRequestService.create` 都改用它，查 PM 的 SQL 只剩一份。
+- 审批参数：`approved` 只接受 JSON 布尔，`{"approved":1}`/`"yes"` 不再被 `Boolean.valueOf` 静默当成驳回。
+- 前端：归档项目隐藏通过/驳回/撤回；提交成功后模块页显示「变更申请待审批」；设置页文案改为指向模块页入口；状态映射改成 `Record<ChangeRequestStatus, …>`；通知中心用 `notificationLabel` 显示中文类型，不再露出英文枚举。
+- 文档：接口文档修「同日待审批」笔误、补归档语义与页面映射去重；需求文档补 7 类通知、ER 图与实体清单、权限矩阵「撤回」行；`PROJECT_MEMORY` 数字改 67 接口 / 16 表；演示数据补一条 `CHANGE_REQUEST_SUBMITTED` 通知；本段补回滚步骤。`schema.d.ts` 用运行中的 OpenAPI 重新生成（含 4 个 change-request 路径）。
+- 复验：后端 33 单测、前端 lint/typecheck/build 全过；临时库与 58085 实例已清理。

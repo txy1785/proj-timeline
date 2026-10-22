@@ -109,6 +109,9 @@ INSERT INTO node_deliverables (id, node_id, project_id, name, status, owner_id, 
  (4,106,1,'联调与压测报告','WANTED',4,'压测报告待测试组出具',NULL,1,2,'2025-11-08 15:35:00'),
  (5,107,1,'银联入网证书','WANTED',4,'证书由渠道方提供，收到后归档',NULL,0,2,'2025-11-18 09:20:00');
 
+INSERT INTO module_change_requests (id, project_id, module_id, requested_by, name, description, owner_id, reason, status, created_at) VALUES
+ (1,1,3,3,'后台管理（拆出报表）','把报表相关节点拆成独立模块',5,'报表需求变多，想单独排期','PENDING','2025-12-16 10:20:00');
+
 INSERT INTO node_logs (node_id, user_id, action, detail, created_at) VALUES
  (106,2,'CREATE','李经理 创建节点，指定负责人 赵工（继承自模块）','2025-10-28 16:20:00'),
  (106,4,'STATUS_CHANGE','赵工 状态流转 未开始 → 进行中','2025-11-01 09:00:00'),
@@ -122,7 +125,8 @@ INSERT INTO notifications (user_id, type, title, content, link, read_at, created
  (2,'BLOCK_ALERT','受阻提醒 · 「支付渠道接入」被标记受阻','受阻原因：等待银联入网证书审批（预计 12/22）。','/node/107',NULL,'2025-12-10 11:30:00'),
  (6,'TASK_ASSIGN','任务指派 · 赵工 指派任务「库存扣减接口」给你','所属节点：订单接口开发 · 计划 2 人天 · 截止 12-10。','/node/106',NULL,'2025-11-25 10:00:00'),
  (2,'NODE_DONE','节点完成 · 「登录/注册开发」已完成','节点负责人 王工 标记完成，实际结束 12-12。','/node/102','2025-12-12 18:00:00','2025-12-12 17:40:00'),
- (2,'WEEKLY_PUBLISHED','周报发布 · 李经理 发布了第 50 周周报','本周完成 1 个节点，1 个延期，1 个受阻。','/report/50','2025-12-15 09:30:00','2025-12-15 09:00:00');
+ (2,'WEEKLY_PUBLISHED','周报发布 · 李经理 发布了第 50 周周报','本周完成 1 个节点，1 个延期，1 个受阻。','/report/50','2025-12-15 09:30:00','2025-12-15 09:00:00'),
+ (2,'CHANGE_REQUEST_SUBMITTED','模块「后台管理（拆出报表）」变更待审批','王工 申请调整模块名称与描述：报表需求变多，想单独排期。','/projects/1/settings',NULL,'2025-12-16 10:20:00');
 
 INSERT INTO weekly_reports (project_id, week_start, week_end, content, note, status, created_by, published_at, created_at) VALUES
  (1,'2025-12-15','2025-12-21',

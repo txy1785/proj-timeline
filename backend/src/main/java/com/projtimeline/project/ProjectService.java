@@ -185,9 +185,15 @@ public class ProjectService {
 
     @Transactional
     public void deleteModule(long id) {
-        Map<String, Object> module = db.one("SELECT id,project_id FROM modules WHERE id=:id", Map.of("id", id), "模块不存在");
+        // 先锁模块行：与审批/撤回的加锁方向保持一致（模块 → 申请），避免与并发审批互相等待
+        Map<String, Object> module = db.one("SELECT id,project_id FROM modules WHERE id=:id FOR UPDATE", Map.of("id", id), "模块不存在");
         permissions.requireProjectManager(number(module.get("projectId")));
         if (db.count("SELECT COUNT(*) FROM nodes WHERE module_id=:id", Map.of("id", id)) > 0) throw BusinessException.conflict("含节点的模块不能删除");
+        // 变更申请外键指向模块：待审批的先让 PM 处理；历史记录随模块一起删除（模块没了，记录也无从查看）
+        if (db.count("SELECT COUNT(*) FROM module_change_requests WHERE module_id=:id AND status='PENDING'", Map.of("id", id)) > 0) {
+            throw BusinessException.conflict("该模块有待审批的变更申请，请先审批或驳回");
+        }
+        db.update("DELETE FROM module_change_requests WHERE module_id=:id", Map.of("id", id));
         // 模块文档随之软删除，避免不可见却仍可按 id 下载的孤儿附件
         db.update("UPDATE attachments SET deleted=1 WHERE owner_type='MODULE' AND owner_id=:id", Map.of("id", id));
         db.update("DELETE FROM modules WHERE id=:id", Map.of("id", id));

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.projtimeline.common.BusinessException;
 import com.projtimeline.common.DeliverableRules;
 import com.projtimeline.data.DataAccess;
+import com.projtimeline.notification.NotificationService;
 import com.projtimeline.project.ProjectService;
 import com.projtimeline.security.PermissionService;
 import org.springframework.stereotype.Service;
@@ -35,11 +36,12 @@ public class WorkService {
     private final DataAccess db;
     private final PermissionService permissions;
     private final ProjectService projects;
+    private final NotificationService notifications;
     private final ObjectMapper json;
     private final Clock clock;
 
-    public WorkService(DataAccess db, PermissionService permissions, ProjectService projects, ObjectMapper json, Clock clock) {
-        this.db = db; this.permissions = permissions; this.projects = projects; this.json = json; this.clock = clock;
+    public WorkService(DataAccess db, PermissionService permissions, ProjectService projects, NotificationService notifications, ObjectMapper json, Clock clock) {
+        this.db = db; this.permissions = permissions; this.projects = projects; this.notifications = notifications; this.json = json; this.clock = clock;
     }
 
     public Map<String, Object> node(long id) {
@@ -446,11 +448,11 @@ public class WorkService {
     }
 
     private void notifyPm(long projectId, String type, String title, String link) {
-        db.list("SELECT user_id FROM project_members WHERE project_id=:project AND project_role='PM'", Map.of("project", projectId)).forEach(r -> notifyUser(number(r.get("userId")), type, title, link));
+        notifications.notifyProjectPm(projectId, type, title, link);
     }
 
     private void notifyUser(long userId, String type, String title, String link) {
-        db.insert("INSERT INTO notifications(user_id,type,title,link) VALUES(:user,:type,:title,:link)", Map.of("user", userId, "type", type, "title", title, "link", link));
+        notifications.notify(userId, type, title, link);
     }
 
     private static String detailText(Map<String, Object> body, String key) {

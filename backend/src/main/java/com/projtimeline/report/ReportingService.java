@@ -6,6 +6,7 @@ import com.projtimeline.common.BusinessException;
 import com.projtimeline.common.BusinessCalendar;
 import com.projtimeline.common.PageResponse;
 import com.projtimeline.data.DataAccess;
+import com.projtimeline.notification.NotificationService;
 import com.projtimeline.security.CurrentUser;
 import com.projtimeline.security.PermissionService;
 import org.springframework.stereotype.Service;
@@ -21,11 +22,12 @@ import static com.projtimeline.security.PermissionService.number;
 public class ReportingService {
     private final DataAccess db;
     private final PermissionService permissions;
+    private final NotificationService notifications;
     private final ObjectMapper json;
     private final Clock clock;
 
-    public ReportingService(DataAccess db, PermissionService permissions, ObjectMapper json, Clock clock) {
-        this.db = db; this.permissions = permissions; this.json = json; this.clock = clock;
+    public ReportingService(DataAccess db, PermissionService permissions, NotificationService notifications, ObjectMapper json, Clock clock) {
+        this.db = db; this.permissions = permissions; this.notifications = notifications; this.json = json; this.clock = clock;
     }
 
     public Map<String, Object> workload(LocalDate anyDate) {
@@ -102,7 +104,8 @@ public class ReportingService {
         LocalDate start = (LocalDate) row.get("weekStart"), end = (LocalDate) row.get("weekEnd"); String content = toJson(aggregate(projectId, start, end));
         db.update("UPDATE weekly_reports SET content=:content,status='PUBLISHED',published_at=NOW() WHERE id=:id AND status='DRAFT'", Map.of("content", content, "id", reportId));
         List<Map<String, Object>> members = db.list("SELECT DISTINCT user_id FROM project_members WHERE project_id=:project", Map.of("project", projectId));
-        for (Map<String, Object> member : members) db.insert("INSERT INTO notifications(user_id,type,title,link) VALUES(:user,'WEEKLY_PUBLISHED','项目周报已发布',:link)", Map.of("user", number(member.get("userId")), "link", "/projects/" + projectId + "/reports"));
+        String link = "/projects/" + projectId + "/reports";
+        for (Map<String, Object> member : members) notifications.notify(number(member.get("userId")), "WEEKLY_PUBLISHED", "项目周报已发布", link);
         return report(projectId, start);
     }
 
