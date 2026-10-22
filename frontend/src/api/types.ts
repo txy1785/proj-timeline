@@ -3,6 +3,7 @@ export type ProjectRole = 'PM' | 'MEMBER'
 export type ProjectStatus = 'ACTIVE' | 'ARCHIVED'
 export type NodeStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED'
 export type TaskStatus = 'TODO' | 'DOING' | 'DONE'
+export type DeliverableStatus = 'WANTED' | 'PROVIDED'
 export type ReportStatus = 'DRAFT' | 'PUBLISHED'
 export type AttachmentOwnerType = 'PROJECT' | 'MODULE' | 'NODE' | 'TASK'
 
@@ -12,12 +13,14 @@ export interface User { id: number; username: string; name: string; email?: stri
 export interface ProjectStats { total: number; done: number; inProgress: number; overdue: number; blocked: number; near: number }
 export interface Project { id: number; name: string; code: string; description?: string; planStart: string; planEnd?: string; status: ProjectStatus; progress: number; stats: ProjectStats }
 export interface NodeFlags { overdue: boolean; near: boolean; blocked: boolean }
-export interface NodeItem { id: number; projectId: number; moduleId: number; moduleName?: string; moduleOwnerId?: number; projectStatus?: ProjectStatus; name: string; description?: string; planStart: string; planEnd: string; actualStart?: string; actualEnd?: string; status: NodeStatus; progress: number; totalTasks?: number; doneTasks?: number; ownerId: number; ownerName: string; flags: NodeFlags; tasks?: Task[] }
+export interface NodeItem { id: number; projectId: number; moduleId: number; moduleName?: string; moduleOwnerId?: number; projectStatus?: ProjectStatus; name: string; description?: string; planStart: string; planEnd: string; actualStart?: string; actualEnd?: string; status: NodeStatus; progress: number; totalTasks?: number; doneTasks?: number; deliverableTotal?: number; deliverableProvided?: number; ownerId: number; ownerName: string; flags: NodeFlags; tasks?: Task[]; deliverables?: Deliverable[] }
 export interface ModuleItem { id: number; projectId: number; name: string; description?: string; ownerId: number; ownerName: string; progress?: number; nodeCount?: number; overdueCount?: number; nodes?: NodeItem[] }
 export interface StageTarget { id: number; projectId: number; name: string; description?: string; targetDate: string; sortOrder?: number }
 export interface Timeline extends Project { modules: ModuleItem[]; stageTargets: StageTarget[] }
 export interface Task { id: number; nodeId: number; name: string; description?: string; situation?: string; handling?: string; assigneeId: number; assigneeName: string; status: TaskStatus; dueDate?: string; estimateDays?: number; actualDays?: number; noteCount?: number }
 export interface TaskNote { id: number; taskId: number; authorId: number; authorName: string; content: string; createdAt: string }
+/** 节点交付物清单项：文件复用节点附件，attachmentId 可选。 */
+export interface Deliverable { id: number; nodeId: number; projectId: number; name: string; status: DeliverableStatus; ownerId?: number; ownerName?: string; remark?: string; attachmentId?: number; attachmentTitle?: string; attachmentOriginalName?: string; attachmentDeleted?: number; sortOrder?: number; createdAt?: string; updatedAt?: string }
 export interface WorkLog { id: number; taskId: number; userId: number; userName: string; workDate: string; days: number; note?: string }
 export interface Notification { id: number; type: string; title: string; content?: string; link?: string; readAt?: string; createdAt: string }
 export interface Report { id?: number; projectId: number; weekStart: string; weekEnd: string; note?: string; status: ReportStatus; content: Record<string, unknown> & { actualDays?: number; plannedDays?: number; completedNodes?: Record<string, unknown>[]; exceptionNodes?: Record<string, unknown>[] } }

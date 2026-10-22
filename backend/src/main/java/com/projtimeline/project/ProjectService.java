@@ -79,7 +79,9 @@ public class ProjectService {
         List<Map<String, Object>> nodes = db.list("""
                 SELECT n.*,u.name owner_name,
                        (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id) total_tasks,
-                       (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id AND t.status='DONE') done_tasks
+                       (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id AND t.status='DONE') done_tasks,
+                       (SELECT COUNT(*) FROM node_deliverables d WHERE d.node_id=n.id) deliverable_total,
+                       (SELECT COUNT(*) FROM node_deliverables d WHERE d.node_id=n.id AND d.status='PROVIDED') deliverable_provided
                 FROM nodes n JOIN users u ON u.id=n.owner_id WHERE n.project_id=:project ORDER BY n.plan_start,n.sort_order,n.id
                 """, Map.of("project", projectId));
         nodes.forEach(this::decorateNode);

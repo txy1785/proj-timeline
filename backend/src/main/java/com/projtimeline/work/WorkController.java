@@ -56,6 +56,18 @@ public class WorkController {
     @PostMapping("/nodes/{id}/tasks")
     ApiResponse<Map<String, Object>> createTask(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.createTask(id, body)); }
 
+    @GetMapping("/nodes/{id}/deliverables")
+    ApiResponse<List<Map<String, Object>>> deliverables(@PathVariable long id) { return ApiResponse.ok(service.deliverables(id)); }
+
+    @PostMapping("/nodes/{id}/deliverables")
+    ApiResponse<Map<String, Object>> createDeliverable(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.createDeliverable(id, body)); }
+
+    @PutMapping("/deliverables/{id}")
+    ApiResponse<Map<String, Object>> updateDeliverable(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.updateDeliverable(id, body)); }
+
+    @DeleteMapping("/deliverables/{id}")
+    ApiResponse<Void> deleteDeliverable(@PathVariable long id) { service.deleteDeliverable(id); return ApiResponse.ok(null); }
+
     @PutMapping("/tasks/{id}")
     ApiResponse<Map<String, Object>> updateTask(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.updateTask(id, body)); }
 

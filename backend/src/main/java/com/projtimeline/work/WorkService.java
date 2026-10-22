@@ -3,6 +3,7 @@ package com.projtimeline.work;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.projtimeline.common.BusinessException;
+import com.projtimeline.common.DeliverableRules;
 import com.projtimeline.data.DataAccess;
 import com.projtimeline.project.ProjectService;
 import com.projtimeline.security.PermissionService;
@@ -20,6 +21,17 @@ import static com.projtimeline.security.PermissionService.number;
 
 @Service
 public class WorkService {
+    /** 交付物列表与单行共用列清单，避免两处 SELECT 漂移；调用方需保证 d（交付物）别名可用。 */
+    private static final String DELIVERABLE_SQL = """
+            SELECT d.id, d.node_id, d.project_id, d.name, d.status, d.owner_id, u.name owner_name, d.remark,
+                   d.attachment_id, a.title attachment_title, a.original_name attachment_original_name,
+                   CASE WHEN a.id IS NOT NULL AND a.deleted=1 THEN 1 ELSE 0 END attachment_deleted,
+                   d.sort_order, d.created_at, d.updated_at
+            FROM node_deliverables d
+            LEFT JOIN users u ON u.id=d.owner_id
+            LEFT JOIN attachments a ON a.id=d.attachment_id
+            """;
+
     private final DataAccess db;
     private final PermissionService permissions;
     private final ProjectService projects;
@@ -35,13 +47,16 @@ public class WorkService {
         Map<String, Object> node = db.one("""
                 SELECT n.*, u.name owner_name, m.name module_name, m.owner_id module_owner_id, p.status project_status,
                        (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id) total_tasks,
-                       (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id AND t.status='DONE') done_tasks
+                       (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id AND t.status='DONE') done_tasks,
+                       (SELECT COUNT(*) FROM node_deliverables d WHERE d.node_id=n.id) deliverable_total,
+                       (SELECT COUNT(*) FROM node_deliverables d WHERE d.node_id=n.id AND d.status='PROVIDED') deliverable_provided
                 FROM nodes n JOIN users u ON u.id=n.owner_id JOIN modules m ON m.id=n.module_id
                 JOIN projects p ON p.id=n.project_id
                 WHERE n.id=:id
                 """, Map.of("id", id), "节点不存在");
         projects.decorateNode(node);
         node.put("tasks", tasks(id));
+        node.put("deliverables", listDeliverables(id));
         node.put("logs", logs(id));
         return node;
     }
@@ -148,12 +163,76 @@ public class WorkService {
         return db.list("SELECT t.*,u.name assignee_name,(SELECT SUM(w.days) FROM task_work_logs w WHERE w.task_id=t.id) actual_days,(SELECT COUNT(*) FROM task_notes n WHERE n.task_id=t.id) note_count FROM tasks t JOIN users u ON u.id=t.assignee_id WHERE t.node_id=:node ORDER BY FIELD(t.status,'DOING','TODO','DONE'),t.due_date,t.id", Map.of("node", nodeId));
     }
 
+    /**
+     * 节点交付物清单：回答"这个节点要交什么、还缺什么、文件在哪"。
+     * 文件继续复用 attachments 的节点级文件，清单项只可选关联其中一个，不新建文件体系。
+     */
+    public List<Map<String, Object>> deliverables(long nodeId) {
+        permissions.requireProjectRead(permissions.projectForNode(nodeId));
+        return listDeliverables(nodeId);
+    }
+
+    private List<Map<String, Object>> listDeliverables(long nodeId) {
+        return db.list(DELIVERABLE_SQL + " WHERE d.node_id=:node ORDER BY d.sort_order, d.id", Map.of("node", nodeId));
+    }
+
+    @Transactional
+    public Map<String, Object> createDeliverable(long nodeId, Map<String, Object> body) {
+        permissions.requireNodeManager(nodeId);
+        // 与新增任务同一锁顺序：先锁节点行，避免与"完成节点"并发时给已关闭节点补清单
+        Map<String, Object> node = db.one("SELECT id,project_id,status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "节点不存在");
+        requireNodeOpen(node, "已完成或已取消的节点不能新增交付物");
+        long projectId = number(node.get("projectId"));
+        Map<String, Object> values = deliverableValues(body, projectId, nodeId, null);
+        values.put("node", nodeId); values.put("project", projectId); values.put("creator", permissions.current().id());
+        long id = db.insert("""
+                INSERT INTO node_deliverables(node_id,project_id,name,status,owner_id,remark,attachment_id,sort_order,created_by)
+                VALUES(:node,:project,:name,:status,:owner,:remark,:attachment,:sort,:creator)
+                """, values);
+        log(nodeId, "DELIVERABLE_ADD", "新增交付物", null, Map.of("deliverableId", id, "name", values.get("name")));
+        return deliverable(id);
+    }
+
+    @Transactional
+    public Map<String, Object> updateDeliverable(long id, Map<String, Object> body) {
+        // 先按 id 取所属节点做授权，再锁节点与交付物行：避免用锁前快照判断"关闭节点只允许改状态"
+        long nodeId = nodeOfDeliverable(id);
+        permissions.requireNodeManager(nodeId);
+        Map<String, Object> node = db.one("SELECT id,project_id,status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "节点不存在");
+        lockDeliverable(id);
+        Map<String, Object> before = deliverable(id);
+        Map<String, Object> values = deliverableValues(body, number(node.get("projectId")), nodeId, before);
+        // 已关闭节点只允许补标记"已提供"（补资料是常态），改名、改派、换文件一律拒绝，避免事后改写交付事实
+        if (Set.of("DONE", "CANCELLED").contains(Objects.toString(node.get("status"))) && !DeliverableRules.onlyStatusChanged(before, values)) {
+            throw BusinessException.conflict("节点已完成或已取消，只能更新交付物状态");
+        }
+        // 整表回传但没有任何变化时不写日志，与任务状态接口的幂等口径一致
+        if (DeliverableRules.unchanged(before, values)) return before;
+        values.put("id", id);
+        // 可写列发生变化时，同步更新 DeliverableRules.onlyStatusChanged 的比较键，否则关闭节点上会漏判新增列
+        db.update("UPDATE node_deliverables SET name=:name,status=:status,owner_id=:owner,remark=:remark,attachment_id=:attachment,sort_order=:sort WHERE id=:id", values);
+        log(nodeId, "DELIVERABLE_UPDATE", "更新交付物", Map.of("name", before.get("name"), "status", before.get("status")), Map.of("name", values.get("name"), "status", values.get("status")));
+        return deliverable(id);
+    }
+
+    @Transactional
+    public void deleteDeliverable(long id) {
+        long nodeId = nodeOfDeliverable(id);
+        permissions.requireNodeManager(nodeId);
+        Map<String, Object> node = db.one("SELECT status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "节点不存在");
+        lockDeliverable(id);
+        Map<String, Object> before = deliverable(id);
+        requireNodeOpen(node, "已完成或已取消的节点不能删除交付物");
+        if (db.update("DELETE FROM node_deliverables WHERE id=:id", Map.of("id", id)) != 1) throw BusinessException.conflict("交付物已被删除");
+        log(nodeId, "DELIVERABLE_DELETE", "删除交付物", Map.of("deliverableId", id, "name", before.get("name")), null);
+    }
+
     @Transactional
     public Map<String, Object> createTask(long nodeId, Map<String, Object> body) {
         permissions.requireNodeManager(nodeId);
         // 锁节点行，和完成节点、任务状态变更串行，避免并发下给已完成节点插入任务
         Map<String, Object> node = db.one("SELECT id,project_id,owner_id,status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "节点不存在");
-        if (Set.of("DONE", "CANCELLED").contains(Objects.toString(node.get("status")))) throw BusinessException.conflict("已完成或已取消的节点不能新增任务");
+        requireNodeOpen(node, "已完成或已取消的节点不能新增任务");
         long assignee = Optional.ofNullable(longValue(body, "assigneeId")).orElse(number(node.get("ownerId"))); permissions.requireAssignable(number(node.get("projectId")), assignee);
         BigDecimal estimate = decimal(body, "estimateDays"); validateDays(estimate, true);
         Map<String, Object> values = new HashMap<>(); values.put("node", nodeId); values.put("name", requiredText(body, "name")); values.put("description", text(body, "description"));
@@ -170,7 +249,7 @@ public class WorkService {
         permissions.requireTaskManager(id, false); Map<String, Object> before = task(id); long projectId = permissions.projectForTask(id);
         long nodeId = number(before.get("nodeId"));
         Map<String, Object> node = db.one("SELECT status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "节点不存在");
-        if (Set.of("DONE", "CANCELLED").contains(Objects.toString(node.get("status")))) throw BusinessException.conflict("已完成或已取消节点的任务不能修改");
+        requireNodeOpen(node, "已完成或已取消节点的任务不能修改");
         long assignee = Optional.ofNullable(longValue(body, "assigneeId")).orElse(number(before.get("assigneeId"))); permissions.requireAssignable(projectId, assignee);
         BigDecimal estimate = decimal(body, "estimateDays"); validateDays(estimate, true);
         Map<String, Object> values = new HashMap<>(); values.put("id", id); values.put("name", requiredText(body, "name")); values.put("description", text(body, "description"));
@@ -188,7 +267,7 @@ public class WorkService {
         Map<String, Object> task = db.one("SELECT id,node_id,name FROM tasks WHERE id=:id", Map.of("id", id), "任务不存在");
         long nodeId = number(task.get("nodeId"));
         Map<String, Object> node = db.one("SELECT status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "节点不存在");
-        if (Set.of("DONE", "CANCELLED").contains(Objects.toString(node.get("status")))) throw BusinessException.conflict("已完成或已取消节点的任务不能删除");
+        requireNodeOpen(node, "已完成或已取消节点的任务不能删除");
         task = db.one("SELECT id,node_id,name FROM tasks WHERE id=:id FOR UPDATE", Map.of("id", id), "任务不存在");
         // 任务附件软删除保留磁盘文件；记录与工时随任务一起清理，避免外键孤儿
         db.update("UPDATE attachments SET deleted=1 WHERE owner_type='TASK' AND owner_id=:id", Map.of("id", id));
@@ -208,6 +287,7 @@ public class WorkService {
         String nodeStatus = Objects.toString(node.get("status"));
         String currentStatus = String.valueOf(db.one("SELECT status FROM tasks WHERE id=:id FOR UPDATE", Map.of("id", id), "任务不存在").get("status"));
         if (Set.of("DONE", "CANCELLED").contains(nodeStatus)) {
+            // 这里不用 requireNodeOpen：关闭节点上重复提交同一状态要幂等返回，只有真的改状态才拒绝
             if (status.equals(currentStatus)) return task(id); // 幂等：关闭节点上重复提交同一状态不写日志
             throw BusinessException.conflict("节点已完成或已取消，任务状态不能再变更");
         }
@@ -297,6 +377,53 @@ public class WorkService {
     }
 
     private Map<String, Object> task(long id) { return db.one("SELECT t.*,u.name assignee_name,(SELECT SUM(days) FROM task_work_logs WHERE task_id=t.id) actual_days FROM tasks t JOIN users u ON u.id=t.assignee_id WHERE t.id=:id", Map.of("id", id), "任务不存在"); }
+
+    private Map<String, Object> deliverable(long id) {
+        return db.one(DELIVERABLE_SQL + " WHERE d.id=:id", Map.of("id", id), "交付物不存在");
+    }
+
+    /** 先按 id 取所属节点，用于在锁行前完成授权；读不到按 4004 处理。 */
+    private long nodeOfDeliverable(long id) {
+        return number(db.one("SELECT node_id FROM node_deliverables WHERE id=:id", Map.of("id", id), "交付物不存在").get("nodeId"));
+    }
+
+    /** 与节点锁保持同一顺序：先锁节点，再锁交付物行，最后读全量字段。 */
+    private void lockDeliverable(long id) {
+        db.one("SELECT id FROM node_deliverables WHERE id=:id FOR UPDATE", Map.of("id", id), "交付物不存在");
+    }
+
+    /** 新增（before 为 null）与编辑共用字段口径；编辑未传的字段保留原值，传 null 表示清空负责人或关联文件。 */
+    private Map<String, Object> deliverableValues(Map<String, Object> body, long projectId, long nodeId, Map<String, Object> before) {
+        String name = before == null || body.containsKey("name") ? requiredText(body, "name") : Objects.toString(before.get("name"));
+        if (name.length() > 200) throw BusinessException.badRequest("交付物名称不能超过 200 字");
+        String remark = before != null && !body.containsKey("remark") ? (String) before.get("remark") : text(body, "remark");
+        if (remark != null && remark.length() > 500) throw BusinessException.badRequest("交付物备注不能超过 500 字");
+        String status = DeliverableRules.status(body.get("status"), before == null ? DeliverableRules.WANTED : Objects.toString(before.get("status")));
+        Long owner = before != null && !body.containsKey("ownerId") ? longOrNull(before.get("ownerId")) : longValue(body, "ownerId");
+        // 只校验真正改动的负责人：成员被停用后，纯状态更新不应被 400 拦住（该由关闭节点规则给出 409）
+        if (owner != null && (before == null || !Objects.equals(longOrNull(before.get("ownerId")), owner))) permissions.requireAssignable(projectId, owner);
+        Long attachment = before != null && !body.containsKey("attachmentId") ? longOrNull(before.get("attachmentId")) : longValue(body, "attachmentId");
+        // 同理：关联文件被软删除后，未改动的引用不能挡住"标为已提供"
+        if (attachment != null && (before == null || !Objects.equals(longOrNull(before.get("attachmentId")), attachment))) requireNodeAttachment(nodeId, attachment);
+        Integer sort = intValue(body, "sortOrder");
+        Map<String, Object> values = new HashMap<>();
+        values.put("name", name); values.put("status", status); values.put("owner", owner); values.put("remark", remark);
+        values.put("attachment", attachment); values.put("sort", sort != null ? sort : before == null ? 0 : ((Number) before.get("sortOrder")).intValue());
+        return values;
+    }
+
+    private void requireNodeAttachment(long nodeId, long attachmentId) {
+        Map<String, Object> row = db.optional("SELECT id FROM attachments WHERE id=:id AND owner_type='NODE' AND owner_id=:node AND deleted=0",
+                Map.of("id", attachmentId, "node", nodeId));
+        if (row == null) throw BusinessException.badRequest("只能关联本节点已上传的文件");
+    }
+
+    private static void requireNodeOpen(Map<String, Object> node, String message) {
+        if (Set.of("DONE", "CANCELLED").contains(Objects.toString(node.get("status")))) throw BusinessException.conflict(message);
+    }
+
+    private static Long longOrNull(Object value) { return value == null ? null : ((Number) value).longValue(); }
+
     /** 统一锁顺序：先锁节点再写任务/工时，避免与节点完成路径形成反向锁。 */
     private void lockNode(long nodeId) { db.one("SELECT id FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "节点不存在"); }
     private Map<String, Object> workLog(long id) { return db.one("SELECT * FROM task_work_logs WHERE id=:id", Map.of("id", id), "工时记录不存在"); }
