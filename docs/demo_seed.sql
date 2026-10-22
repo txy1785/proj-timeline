@@ -102,6 +102,13 @@ INSERT INTO task_work_logs (task_id, user_id, work_date, days) VALUES
  (16,6,'2025-11-12',1.0),
  (17,5,'2025-12-18',1.5);
 
+INSERT INTO node_deliverables (id, node_id, project_id, name, status, owner_id, remark, attachment_id, sort_order, created_by, created_at) VALUES
+ (1,103,1,'第三方登录接口文档 v1','PROVIDED',3,'接口文档放在仓库 docs/api/oauth.md，附件可选关联',NULL,0,2,'2025-11-25 10:00:00'),
+ (2,103,1,'微信/钉钉联调记录','WANTED',3,NULL,NULL,1,2,'2025-11-25 10:05:00'),
+ (3,106,1,'订单接口文档 v1','PROVIDED',4,NULL,NULL,0,2,'2025-11-08 15:30:00'),
+ (4,106,1,'联调与压测报告','WANTED',4,'压测报告待测试组出具',NULL,1,2,'2025-11-08 15:35:00'),
+ (5,107,1,'银联入网证书','WANTED',4,'证书由渠道方提供，收到后归档',NULL,0,2,'2025-11-18 09:20:00');
+
 INSERT INTO node_logs (node_id, user_id, action, detail, created_at) VALUES
  (106,2,'CREATE','李经理 创建节点，指定负责人 赵工（继承自模块）','2025-10-28 16:20:00'),
  (106,4,'STATUS_CHANGE','赵工 状态流转 未开始 → 进行中','2025-11-01 09:00:00'),

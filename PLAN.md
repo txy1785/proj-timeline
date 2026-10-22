@@ -271,6 +271,35 @@ Playwright 覆盖匿名跳转、管理员账号页、PM、成员、VIEWER 项目
 - 已知未处理：`AttachmentService.upload` 对 TASK 不锁节点（先写盘再插行），与删任务并发时可能留下 `owner_name` 为空的孤儿附件（attachments 无外键，概率低）；后续统一在任务附件上传前加节点锁。
 - 审核结论：通过（无遗留 Blocker/Major）。
 
+## 节点交付物清单（2026-10-22，feature/node-deliverables）
+
+- 起因：用户问「我们现在的项目属于 OKR 项目吗」。结论是**不改造成 OKR**——团队按项目交付为主、项目结束进维护期，管理方式是排期抓进度，没有季度量化目标、评分与对齐流程，负责人也不熟悉 OKR。判断口径、重新评估的触发条件记在 `PROJECT_MEMORY.md` 第 7 条。
+- 用户真实痛点（访谈得出）：`阶段性目标` 是带日期的里程碑，回答不了「节点要交什么、还缺什么、资料是哪个节点的」。因此做**节点交付物清单**，而不是把阶段目标升级成 O/KR。
+- 设计取舍：清单**平铺**，不区分「需要/产出」方向——区分只有在上下游节点之间做依赖关联时才有意义，而 P0 明确不做跨节点依赖，否则「需要」就是把上游产出再手抄一遍。归属由 `node_id` 表达，已经回答了「哪个节点的资料」。
+- 数据：Flyway V9 建 `node_deliverables`（名称、状态 `WANTED/PROVIDED`、负责人、备注、可选 `attachment_id`），并给 `node_logs.action` 追加 `DELIVERABLE_ADD/UPDATE/DELETE`；同步 `database.sql`、`demo_seed.sql`（节点 103/106/107 的 5 条示例）。
+- 文件复用：不新建文件体系，清单项只关联**同一节点下未删除**的节点级附件（`attachments.owner_type='NODE'`）；预览、下载、版本、软删除、按项目校验权限全部继承。附件被删除后清单保留，读取返回 `attachmentDeleted=1`，前端标「已删除」。
+- 后端：`WorkService` 内实现（与任务、日志、工时同属节点子资源，复用其 `log`/`json` 私有方法与锁顺序），新增 4 个接口 `GET/POST /nodes/{id}/deliverables`、`PUT/DELETE /deliverables/{id}`；写操作走 `requireNodeManager` 并先锁节点行；节点详情与时间线额外返回 `deliverableTotal/deliverableProvided`。
+- 关闭节点口径：已完成/已取消节点**只能改状态**（补标已提供是常态），改名、改派、换文件、删除一律 409；用「字段是否真的变了」判断，避免前端整表回传时误拒。
+- 不强制：清单不参与节点进度、不做完成节点前置条件，只在节点详情与时间线显示「已提供 x/y」。强制会卡住不适用项，等用一段时间再决定是否收紧。
+- 前端：新增 `components/DeliverablePanel.vue`（登记复用库），接入 `NodeDetailView`；`TimelineView` 节点条显示「已提供 x/y」；`types.ts` 增加 `Deliverable` 与节点计数字段。
+- 验证：后端 `mvn test` 通过（首轮 23 个单测，修复后增至 29 个）；前端 lint/typecheck/build 通过；V9 在**临时库**（`proj_timeline_v9_check`，由 `proj_timeline` 结构+数据 dump 而来）验证——建表、5 条外键、`node_logs.action` 枚举扩展均成功，并对清单 SQL 做了插入/关联查询/计数/日志写入的冒烟测试；验证后临时库已删除，未触碰 `proj_timeline` 库。
+- 未做：不重新生成 `schema.d.ts`（需运行中的后端；该文件当前不被应用代码引用，见 `PROJECT_MEMORY.md`），否则需另起 58080 实例。
+
+### 独立审核与修复（同日）
+
+- 审核（全新子代理，只看 git diff）结论：无 Blocker，1 个 Major、7 个 Minor、6 个 Nit。
+- Major 修复：`deliverableValues` 原来只要算出的负责人/关联文件非空就重新校验，导致「关联文件被软删除后，连只改状态都会被 400 拦住」，而关闭节点上文件下拉是禁用的，等于该项永远无法标「已提供」。改为**只在字段真的变了时**才校验（`before` 为空或新旧 id 不同）；停用的负责人同理，不再把纯状态更新变成 400。
+- 授权顺序与并发：`updateDeliverable`/`deleteDeliverable` 改为「先按 id 取 node_id → `requireNodeManager` → 锁节点行 → 锁交付物行 → 读全量」，避免先读整行造成的 404/403 探测，也避免用锁前快照判断关闭节点规则（并发下可把旧名写回）。与 `deleteTask` 的既定范式一致。
+- 幂等：完全无字段变化的更新直接返回当前行、不写 `DELIVERABLE_UPDATE`，与 `taskStatus` 在关闭节点上的幂等口径统一。
+- 抽公共逻辑：新增 `common/DeliverableRules`（状态归一化、`onlyStatusChanged`、`unchanged`）并补 6 个单测、登记复用库；前端新增 `utils/member.ts` 的 `selectableMembers`，替换 `ModuleFormDialog`/`ModuleDetailView`/`NodeDetailView`/`DeliverablePanel` 四处重复 filter 并登记复用库。修掉 `DeliverableRules.status(null, null)` 因 `Set.of(...).contains(null)` 触发 NPE 的边界（改为非法值 4000）。
+- 收敛：`createTask`/`updateTask`/`deleteTask` 三处内联的关闭节点判断回填 `requireNodeOpen`；`taskStatus` 因有幂等分支保留内联并注释原因。`node()` 内嵌清单改用不重复鉴权的 `listDeliverables`，省两次查询。
+- 文档：接口文档 §3.8 补 `sortOrder` 与日志字段措辞、§5 页面映射补 #60-#63；需求文档补排序与「关闭节点不能换文件/改备注/改排序」；`docs/部署与运维.md` Flyway 版本改 V9 并补 V9 回退步骤；`demo_seed.sql` 固定 `created_at`；前端时间线文案改为「已提供 x/y」。
+- 端到端验证（真实数据库 + 真实接口）：把 `proj_timeline` dump 到临时库 `proj_timeline_e2e`，用 `SPRING_DATASOURCE_URL` 指向它、58081 启动后端，Flyway 自动把 V8→V9；15 项断言全部通过——新增、非法状态 400、时间线计数、标已提供、无变更幂等且不写日志、跨节点附件 400、已完成节点新增/删除 409、已完成节点只改状态 200、改名 409、VIEWER 写 403 / 读 200、删除后计数回落。另单独回归 Major：关联文件软删除后仅更新状态返回 200 且列表返回 `attachmentDeleted=1`（修复前为 400）。验证后临时库、临时文件与 58081 实例均已清理，未触碰 `proj_timeline` 库。
+- 复验：`mvn test` 29 个单测通过（含新增 `DeliverableRulesTest` 6 个）；前端 lint/typecheck/build 通过。
+- 复审结论：通过（复审子代理原话：「通过（无遗留 Blocker/Major）」）；复审另指出 1 条显示回归——关闭节点编辑时因跳过 `loadFiles` 导致关联文件下拉显示裸 id，已改为只跳过新建场景，并复跑 lint/typecheck/build。
+
+
+
 
 
 
