@@ -213,7 +213,7 @@ CREATE TABLE node_logs (
 CREATE TABLE notifications (
   id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id    BIGINT UNSIGNED NOT NULL COMMENT '接收人',
-  type       ENUM('OVERDUE_ALERT','BLOCK_ALERT','TASK_ASSIGN','NODE_DONE','WEEKLY_PUBLISHED') NOT NULL,
+  type       ENUM('OVERDUE_ALERT','BLOCK_ALERT','TASK_ASSIGN','NODE_DONE','WEEKLY_PUBLISHED','CHANGE_REQUEST_SUBMITTED','CHANGE_REQUEST_DECIDED') NOT NULL,
   title      VARCHAR(200) NOT NULL,
   content    VARCHAR(500) NULL,
   link       VARCHAR(200) NULL COMMENT '跳转（如 /node/123）',
@@ -316,4 +316,36 @@ CREATE TABLE node_deliverables (
   CONSTRAINT fk_deliverable_attachment FOREIGN KEY (attachment_id) REFERENCES attachments(id),
   CONSTRAINT fk_deliverable_creator FOREIGN KEY (created_by) REFERENCES users(id)
 ) ENGINE=InnoDB COMMENT='节点交付物清单';
+
+-- ------------------------------------------------------------
+-- 14. 模块变更申请（Flyway V11）
+--     没有模块编辑权限的成员对「名称/描述/负责人」提申请，PM 审批通过后由服务端自动改模块。
+--     pending_module_id 是生成列 + 唯一键，保证同一模块同时只有一个待审批申请。
+-- ------------------------------------------------------------
+CREATE TABLE module_change_requests (
+  id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  project_id        BIGINT UNSIGNED NOT NULL,
+  module_id         BIGINT UNSIGNED NOT NULL,
+  requested_by      BIGINT UNSIGNED NOT NULL,
+  name              VARCHAR(100) NOT NULL COMMENT '申请生效后的模块名称',
+  description       TEXT NULL,
+  owner_id          BIGINT UNSIGNED NOT NULL COMMENT '申请生效后的模块负责人',
+  reason            VARCHAR(500) NULL COMMENT '申请说明',
+  status            ENUM('PENDING','APPROVED','REJECTED','CANCELLED') NOT NULL DEFAULT 'PENDING',
+  pending_module_id BIGINT UNSIGNED GENERATED ALWAYS AS (IF(status='PENDING', module_id, NULL)) STORED COMMENT '保证同一模块同时只有一个待审批申请',
+  decided_by        BIGINT UNSIGNED NULL,
+  decided_at        DATETIME NULL,
+  decision_remark   VARCHAR(500) NULL COMMENT '审批意见',
+  created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_request_pending_module (pending_module_id),
+  KEY idx_request_project (project_id, status, created_at),
+  KEY idx_request_module (module_id),
+  KEY idx_request_user (requested_by, created_at),
+  CONSTRAINT fk_request_project FOREIGN KEY (project_id) REFERENCES projects(id),
+  CONSTRAINT fk_request_module FOREIGN KEY (module_id) REFERENCES modules(id),
+  CONSTRAINT fk_request_user FOREIGN KEY (requested_by) REFERENCES users(id),
+  CONSTRAINT fk_request_owner FOREIGN KEY (owner_id) REFERENCES users(id),
+  CONSTRAINT fk_request_decider FOREIGN KEY (decided_by) REFERENCES users(id)
+) ENGINE=InnoDB COMMENT='模块变更申请';
 

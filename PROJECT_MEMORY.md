@@ -20,6 +20,7 @@
 7. **产品定位不做 OKR**（2026-10 明确）。团队按项目交付为主、项目结束后进入维护期，管理方式是排期抓进度，目前没有季度量化目标、评分与对齐流程，负责人也不熟悉 OKR。因此不引入 Objective/KeyResult、周期、评分、对齐等概念；`阶段性目标` 仍是“带日期的项目里程碑”，不升级为 O。重新评估的触发条件：真正按季度定 3–5 条量化目标且有人维护、目标达成度要跨部门比较或与绩效挂钩、超过 10 人需要逐层对齐——满足两条以上再讨论。
 8. **节点交付物清单**（替代“把目标改成 OKR”的方案）：一个节点一份**平铺清单**，字段为名称、状态（待提供/已提供）、负责人、备注，可选关联**同一节点**的一个未删除附件。不区分“需要/产出”方向（归属由节点表达，也没有跨节点依赖），不新建文件体系（文件仍走 `attachments` 的节点级文件），不参与节点进度，**不作为完成节点的前置条件**，只在节点详情与时间线显示“已提供 x/y”。已完成/已取消节点只能改状态，其余变更返回 409。
 9. **阶段性目标的量化指标是“可选附件式”扩展，不是 OKR**：`metricName / metricUnit / metricTarget / metricCurrent` 四列全空就是原来的日期型里程碑；填了才由 `ProgressRules.metricProgress` 派生 `progress`（当前值 ÷ 目标值，四舍五入，夹 0–100，超额按 100）。指标不参与项目/模块/节点进度聚合，不进周报，没有周期、评分、对齐、信心指数。这样回答“季度目标达成多少”但不需要引入 OKR 的方法论。
+10. **模块变更申请**（成员改别人模块的唯一通道）：只覆盖模块的**名称 / 描述 / 负责人**，没有模块编辑权限的项目成员（非 VIEWER）提交并可填申请说明，PM/ADMIN 审批。同一模块同时只允许一个待审批申请（`pending_module_id` 生成列 + 唯一键兜底）；通过时在**同一事务**内改模块并记录审批人/时间，驳回必须填原因；申请人可撤回自己待审批的申请。已有直接编辑权限的人（PM、该模块负责人）调用提交接口返回 409。审批结果与待审批各发一条站内通知（通知枚举扩到 7 类）。
 
 ## 当前实现定位
 
@@ -34,12 +35,14 @@
 | 项目时间线、节点详情 | `frontend/src/views/TimelineView.vue`、`NodeDetailView.vue` |
 | 路由、会话、HTTP 客户端 | `frontend/src/router.ts`、`stores/auth.ts`、`api/client.ts` |
 | 项目、模块、节点与任务的文档附件 | `backend/src/main/java/com/projtimeline/file/`、`frontend/src/components/AttachmentPanel.vue`、`AttachmentPreview.vue`、`ProjectDocsView.vue`、`utils/attachment.ts` |
+| 模块变更申请 | 后端 `project/ChangeRequestService.java`（提交/列表/审批/撤回）与 `project/ChangeRequestController.java`；前端 `components/ChangeRequestDialog.vue`（模块页提交）、`views/ProjectSettingsView.vue`（审批列表） |
+| 站内通知写入口 | `backend/src/main/java/com/projtimeline/notification/NotificationService.java`（读取与已读仍在 `report/ReportingService.java`） |
 | 节点交付物清单 | 口径 `backend/src/main/java/com/projtimeline/common/DeliverableRules.java`，读写 `work/WorkService.java`；前端 `frontend/src/components/DeliverablePanel.vue`（接入 `NodeDetailView.vue`，时间线计数在 `TimelineView.vue`） |
 
 - 后端：Java 17、Spring Boot 3.5.16、MyBatis-Plus 3.5.17、Spring Security、Flyway、MySQL 8。
 - 前端：Vue 3、TypeScript、Vite、Vue Router、Pinia、Element Plus、Axios；使用 npm 和 `package-lock.json`。文件预览额外依赖 `docx-preview` 与 `read-excel-file`（按需动态加载，不进入主包）。
-- 当前 Flyway 版本为 V10。V1 建表，V2 将项目开始日期设为必填并过渡性增加模块日期，V3 建立 `project_stage_targets` 并移除模块日期，V4 建立 `attachments` 文档附件表，V5 只修正 `owner_type` 注释（V4 已应用到环境，不得再改写），V6 建立 `task_notes` 并让 `attachments.owner_type` 支持 TASK，V7 只把 `nodes.progress` 列注释改为「已弃用」（进度改为任务完成率派生，保留列与历史值，不删列），V8 给 `tasks` 增加 `situation`/`handling` 并为 `node_logs.action` 增加 `TASK_UPDATE`/`TASK_DELETE`，V9 建立 `node_deliverables` 并为 `node_logs.action` 增加 `DELIVERABLE_ADD`/`DELIVERABLE_UPDATE`/`DELIVERABLE_DELETE`，V10 给 `project_stage_targets` 增加四个可空指标列（`metric_name/metric_unit/metric_target/metric_current`）。已有迁移文件不能改写；新变更追加 V11 及以后版本。
-- 当前 OpenAPI 有 63 个 `/api` 操作（V9 增加 4 个交付物接口）。前端生成类型在 `frontend/src/api/schema.d.ts`，后端运行时用 `npm --prefix frontend run api:types` 更新（脚本默认 8080，本机后端在 58080 时需手动指定 URL）。`schema.d.ts` 目前不被应用代码引用，未重新生成不影响类型检查，但接口变更后应补跑。
+- 当前 Flyway 版本为 V11。V1 建表，V2 将项目开始日期设为必填并过渡性增加模块日期，V3 建立 `project_stage_targets` 并移除模块日期，V4 建立 `attachments` 文档附件表，V5 只修正 `owner_type` 注释（V4 已应用到环境，不得再改写），V6 建立 `task_notes` 并让 `attachments.owner_type` 支持 TASK，V7 只把 `nodes.progress` 列注释改为「已弃用」（进度改为任务完成率派生，保留列与历史值，不删列），V8 给 `tasks` 增加 `situation`/`handling` 并为 `node_logs.action` 增加 `TASK_UPDATE`/`TASK_DELETE`，V9 建立 `node_deliverables` 并为 `node_logs.action` 增加 `DELIVERABLE_ADD`/`DELIVERABLE_UPDATE`/`DELIVERABLE_DELETE`，V10 给 `project_stage_targets` 增加四个可空指标列（`metric_name/metric_unit/metric_target/metric_current`），V11 建立 `module_change_requests` 并把 `notifications.type` 扩到 7 类。已有迁移文件不能改写；新变更追加 V12 及以后版本。
+- 当前 OpenAPI 有 67 个 `/api` 操作（V9 增加 4 个交付物接口，V11 增加 4 个变更申请接口）。前端生成类型在 `frontend/src/api/schema.d.ts`，后端运行时用 `npm --prefix frontend run api:types` 更新（脚本默认 8080，本机后端在 58080 时需手动指定 URL）。`schema.d.ts` 目前不被应用代码引用，未重新生成不影响类型检查，但接口变更后应补跑。
 - 认证为 8 小时 JWT，仅保存用户 ID；每次请求重新检查账号启用状态与角色。浏览器会话存于 `sessionStorage`。
 - 日期判定使用注入的 `Clock`，默认业务时区 `Asia/Shanghai`。延期和临近到期由服务端实时计算。
 - 演示数据只在显式执行 `docs/demo_seed.sql` 时导入；不属于 Flyway 正式迁移。根目录 `.env` 和本机数据库凭据不得写入文档或提交。
@@ -55,13 +58,14 @@
 - 文档内容类型由服务端按扩展名推导，不采用客户端声明；仅 PDF 与图片内联展示，其余强制下载，并带 `X-Content-Type-Options: nosniff`。
 - 在线预览在浏览器内完成，不新增服务端接口、不引入转换服务：PDF/图片用浏览器原生能力，txt/md/csv 用只读文本，docx 用 docx-preview，xlsx 用 read-excel-file；`doc/xls/ppt` 等旧格式与压缩包只提供下载。
 - 预览的安全边界：SVG 不提供预览（blob: 文档继承应用源，脚本可在新标签页执行）；docx 渲染必须保持 `renderAltChunks/renderChanges/renderComments: false`（altChunk 会把内嵌 HTML 渲染成同源 iframe），渲染后还要清洗超链接（只留 http(s)/mailto/锚点）。PDF 走浏览器内置阅读器（独立扩展源），未加 iframe `sandbox`，原因与待验证项见 PLAN。改动这两个库的选项前先看 PLAN 里的 PoC 记录。
+- 模块变更申请是成员改别人模块的**唯一通道**：只覆盖名称/描述/负责人，PM/ADMIN 审批，通过后同一事务内生效；同一模块同时只有一个待审批；撤回仅申请人。审批时会重新校验负责人是项目内有效且非 VIEWER 的成员。
 - 节点交付物清单的写入权限与节点级附件一致（节点负责人/模块负责人/PM，VIEWER 与归档项目只读）；关联文件必须是同一节点未删除的附件，但**只在真的改关联时才校验**——文件被软删除后，清单仍可只改状态（否则关闭节点上文件下拉禁用会让该项永远标不成“已提供”）。已完成/已取消节点只能改交付物状态，新增、改名、改派、换文件、改备注、改排序、删除一律 409。完全无变化的更新直接返回、不写日志；清单是物理删除，不删除关联文件。
 - 项目进度按未取消节点的进度直接平均；模块进度同样对本模块未取消节点直接平均。节点进度由 `ProgressRules` 按任务完成率派生（无任务时按状态估算，DONE 固定 100，未全部完成最高 99），不提供手动填写。延期、临近、受阻分别保留标记。周报按周一至周日归周。
 
 ## 验证与已知边界
 
-- 基本检查：`mvn -gs .mvn/settings.xml -s .mvn/settings.xml -f backend/pom.xml test`（当前 33 个单测）；`npm --prefix frontend run lint`、`typecheck`、`build`。浏览器路径测试在 `frontend/tests/roles.spec.ts`。
-- `PLAN.md` 中早期“47 个接口”“11 个页面”“10/11 张表”是当时版本的验证快照。当前接口为 63 个、表 15 张（含 `flyway_schema_history`），页面已新增模块工作页与项目文档页；不能把早期数字当成现状。
+- 基本检查：`mvn -gs .mvn/settings.xml -s .mvn/settings.xml -f backend/pom.xml test`（当前 33 个单测；变更申请这类依赖数据库的流程用临时库端到端覆盖，没有单测）；`npm --prefix frontend run lint`、`typecheck`、`build`。浏览器路径测试在 `frontend/tests/roles.spec.ts`。
+- `PLAN.md` 中早期“47 个接口”“11 个页面”“10/11 张表”是当时版本的验证快照。当前接口为 67 个、表 16 张（含 `flyway_schema_history`），页面已新增模块工作页与项目文档页；不能把早期数字当成现状。
 - 当前工作站此前未运行 Docker Compose 的真实构建；部署仍需在具备 Docker 的目标环境验证。
 - 文件存储当前用本地磁盘（`app.storage.root` 默认 `./data/files`，容器内 `/app/data/files` 挂 `file-data` 卷）。未接入 MinIO/对象存储：存储层已抽成 `FileStorage` 接口，切换时只加实现并改配置。单文件上限 50MB，Nginx 侧 `client_max_body_size 60m`，后端 `spring.servlet.multipart` 与 `app.storage.max-file-bytes` 同步。
 - Git 远程：`https://github.com/txy1785/proj-timeline.git`。分支模型：`main` 版本上线、`develop` 开发主线、`feature/<描述>` 功能分支从 `develop` 拉出；功能代码必须经独立审核（干净会话/子代理）后合并 `develop`，发布从 `develop` 合并 `main` 并打 tag。GitHub 默认分支为 `main`，远程仅保留 `main` 与 `develop`（旧 `master` 已删除）。提交前先 `git status` 核对未被 .gitignore 遗漏的文件。
