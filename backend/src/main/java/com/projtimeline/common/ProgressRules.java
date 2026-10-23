@@ -4,9 +4,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 /**
- * 进度口径：节点进度不再手填，由任务完成率实时派生；没有任务的节点按状态估算。
- * 模块/项目进度仍是对未取消节点进度做算术平均，见 ProjectService。
- * 阶段性目标的量化进度单独由 {@link #metricProgress} 计算，不参与节点聚合。
+ * 进度口径：工作项进度不再手填，由任务完成率实时派生；没有任务的工作项按状态估算。
+ * 模块/项目进度仍是对未取消工作项进度做算术平均，见 ProjectService。
+ * 阶段性目标的量化进度单独由 {@link #metricProgress} 计算，不参与工作项聚合。
  */
 public final class ProgressRules {
     private ProgressRules() {}
@@ -20,7 +20,7 @@ public final class ProgressRules {
         return doneTasks < totalTasks && percent >= 100 ? 99 : percent;
     }
 
-    /** 模块/项目进度：未取消节点进度的算术平均；只要还有节点没完成，平均值也封顶 99。 */
+    /** 模块/项目进度：未取消工作项进度的算术平均；只要还有工作项没完成，平均值也封顶 99。 */
     public static int aggregate(int activeNodes, int progressSum, int doneNodes) {
         if (activeNodes <= 0) return 0;
         int percent = Math.round((float) progressSum / activeNodes);

@@ -334,3 +334,21 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 前端：归档项目隐藏通过/驳回/撤回；提交成功后模块页显示「变更申请待审批」；设置页文案改为指向模块页入口；状态映射改成 `Record<ChangeRequestStatus, …>`；通知中心用 `notificationLabel` 显示中文类型，不再露出英文枚举。
 - 文档：接口文档修「同日待审批」笔误、补归档语义与页面映射去重；需求文档补 7 类通知、ER 图与实体清单、权限矩阵「撤回」行；`PROJECT_MEMORY` 数字改 67 接口 / 16 表；演示数据补一条 `CHANGE_REQUEST_SUBMITTED` 通知；本段补回滚步骤。`schema.d.ts` 用运行中的 OpenAPI 重新生成（含 4 个 change-request 路径）。
 - 复验：后端 33 单测、前端 lint/typecheck/build 全过；临时库与 58085 实例已清理。
+
+## 工作项模型与缺陷路由（2026-10-20，feature/work-item-model）
+
+- 背景：用户提出「模块按功能分，节点到底该叫什么、测试/维护/bug 修复放哪里」。讨论后确认：模块只做功能划分；节点概念升级为**工作项**；跨模块的测试、维护、缺陷修复、上线保障放到**项目级工作项**（`nodes.module_id` 为空），不再建“测试模块/维护模块”。
+- 模型：项目 → 模块 → 工作项 → 任务，另加项目级工作项。工作项类型 `FEATURE/TEST/MAINTENANCE/BUGFIX/OTHER`；任务类型 `FEATURE/FIX/BUG/TEST/OTHER`，并可用 `related_node_id` 关联原工作项。UI 统一把“节点”叫“工作项”，数据库/API 继续用 `node`。
+- 数据：Flyway V12 让 `nodes.module_id` 可空、增加 `nodes.type`；给 `tasks` 增加 `kind`、`related_node_id`（含索引与外键）。已在临时库按 V1→V12 顺序验证复合外键下 `module_id` 可空，并验证项目级工作项 + 关联任务的插入；主库重启后自动应用 V12。
+- 后端：`PermissionService` 改用 `LEFT JOIN modules`，项目级工作项由 PM/ADMIN 或工作项负责人管理；`createNode` 的 `moduleId` 可空，空时要求 `requireProjectManager`；`updateNode` 支持改类型；时间线拆出 `projectWorkItems`（模块节点不再包含项目级工作项）；任务列表/详情返回 `kind`、`relatedNodeId`、`relatedNodeName`；新增 `POST /projects/{id}/bugs`（#68），按“原工作项进行中→原工作项；否则→当前进行中的项目级 BUGFIX 工作项”路由，任务类型固定 `BUG`，执行人=落点工作项负责人，并复用 `NotificationService` 发 `TASK_ASSIGN`。
+- 前端：新增 `WorkItemFormDialog`（模块级/项目级新建与编辑共用）和 `BugReportDialog`；时间线增加“项目级工作项”泳道，模块视图增加项目级工作项区块；任务弹窗/表格/详情增加类型与关联工作项，任务区支持按类型筛选；节点/模块/看板/周报/负载/文档等文案统一改为“工作项”；新增 `utils/workItem.ts` 与任务类型常量并登记复用库。
+- 接口：新增 #68 `POST /projects/{id}/bugs`，OpenAPI 68 个操作；`schema.d.ts` 从运行中的 OpenAPI 重新生成。
+- 权限：模块工作项仍由模块负责人/PM 管理；项目级工作项由 PM/ADMIN 创建，负责人可为任意有效成员；成员提缺陷只允许项目成员（非 VIEWER），提交人不能指定执行人/状态/计划人天，任务建好后只有工作项负责人/模块负责人/PM/ADMIN 能编辑、改派、删除。
+- 验证：后端 33 个单测通过；前端 lint/typecheck/build 通过；临时库 pt_verify_wi（已删除）18 项断言通过——进行中工作项提缺陷落到原工作项（kind BUG、负责人=工作项负责人、关联原工作项）、DONE 工作项且无 BUGFIX 工作项返回 409、创建项目级 BUGFIX（module 为空）、开启后 DONE 工作项的缺陷与无关联缺陷都落到该 BUGFIX、VIEWER 403、成员编辑/删除缺陷任务 403、模块 TEST 工作项可创建、时间线 `projectWorkItems` 只含项目级且模块节点不含项目级、任务 kind/related 创建与更新、`relatedNodeName` 回传。主库 V12 应用后 Playwright 5175 实测：项目级泳道/类型标签/面包屑、模块视图项目级区块、任务弹窗类型/关联字段、成员提缺陷成功提示“已提交到「订单接口开发」”、缺陷任务可见，无 console 错误；测试数据已清理，演示库恢复 6 条任务、无项目级工作项残留。
+- 已知未做：项目级工作项暂无删除接口（工作项本身一直不支持删除）；提缺陷暂不支持提交人直接上传附件（任务附件权限仍归落点工作项负责人/管理者）；不做重复缺陷合并、严重程度、提交人通知；缺陷路由依赖数据库状态，暂无 Spring 集成测试（用临时库端到端覆盖）；`openBugfixWorkItem` 的 `FOR UPDATE` 没有覆盖索引（补索引走 V13）；NodeDetail 每次多拉一次 timeline 供关联工作项下拉。
+- 独立审核（子代理）结论：修复后合并，无 Blocker；1 个 Major、若干 Minor/Nit。Major：
+  1. ADMIN 非项目成员新建项目级工作项时默认负责人填成自己 → 前端改为从成员列表取项目 PM 作默认负责人；
+  2. `WorkItemFormDialog` 的编辑分支不可达 → NodeDetail 增加「编辑工作项」入口，接入 `:work-item` 与 `PUT /nodes/{id}`。
+- 同时修复：需求/开发文档“不做 Bug 管理”与 F4.1 冲突、需求权限矩阵项目级工作项负责人权限、名称统一 ≤200 校验、`ownerId/assigneeId` 的 0 归一为 null、删除未使用的 `requiredLong`、demo_seed 误替换文案、接口设计 4.3 负责人说明、时间线/模块视图 `active` 严格判断、编辑按钮等 `node` 加载后再显示。
+- 复审结论：可以合并（无 Blocker/Major）；V12 保持未改写，主库 Flyway 校验通过。
+- 回滚：停服回退到 V11 应用版本后，先删除 `related_node_id` 外键与索引、`tasks.kind`、`nodes.type`，再把 `nodes.module_id` 改回 `NOT NULL`；项目级工作项数据需先迁移到某个模块或删除，否则回退会失败。

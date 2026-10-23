@@ -31,7 +31,7 @@ const memberOptions=computed(()=>selectableMembers(props.members))
 const editing=computed(()=>props.items.find(item=>item.id===editingId.value))
 
 async function loadFiles(){
-  // 关闭节点不能新增，但编辑已有项仍需选项：否则下拉会显示裸 id（文件已删除时也看不到“已删除”提示）
+  // 关闭工作项不能新增，但编辑已有项仍需选项：否则下拉会显示裸 id（文件已删除时也看不到“已删除”提示）
   if(props.nodeClosed&&!editingId.value)return
   try{
     const list=await api<{id:number;title:string;version:number}[]>('GET','/attachments',undefined,{ownerType:'NODE',ownerId:props.nodeId})
@@ -88,7 +88,7 @@ async function remove(item:Deliverable){
     <div class="deliverable-head">
       <div>
         <h2>交付物</h2>
-        <p class="muted">本节点要交出的资料清单：开发文档、接口文档、测试记录等。标为「已提供」表示资料已经存在，可关联本节点已上传的文件，也可只写在备注里（例如放在外部仓库）。</p>
+        <p class="muted">本工作项要交出的资料清单：开发文档、接口文档、测试记录等。标为「已提供」表示资料已经存在，可关联本工作项已上传的文件，也可只写在备注里（例如放在外部仓库）。</p>
       </div>
       <div class="deliverable-actions">
         <el-tag :type="total&&provided===total?'success':'info'">已提供 {{provided}}/{{total}}</el-tag>
@@ -125,7 +125,7 @@ async function remove(item:Deliverable){
     </el-table>
 
     <el-dialog v-model="dialog" :title="editingId?'编辑交付物':'新增交付物'" width="560">
-      <el-alert v-if="nodeClosed" title="节点已完成或已取消，只能修改交付物状态" type="info" :closable="false" style="margin-bottom:14px" />
+      <el-alert v-if="nodeClosed" title="工作项已完成或已取消，只能修改交付物状态" type="info" :closable="false" style="margin-bottom:14px" />
       <el-form label-position="top">
         <el-form-item label="交付物名称" required>
           <el-input v-model="form.name" maxlength="200" :disabled="nodeClosed" placeholder="例如：接口文档 v1、联调记录、测试报告" />
@@ -142,7 +142,7 @@ async function remove(item:Deliverable){
               <el-option v-for="user in memberOptions" :key="user.id" :label="user.name" :value="user.id" />
             </el-select>
           </el-form-item>
-          <el-form-item label="关联本节点文件">
+          <el-form-item label="关联本工作项文件">
             <el-select v-model="form.attachmentId" clearable :disabled="nodeClosed" placeholder="可不关联" style="width:100%">
               <el-option v-for="option in fileOptions" :key="option.id" :label="option.label" :value="option.id" />
             </el-select>

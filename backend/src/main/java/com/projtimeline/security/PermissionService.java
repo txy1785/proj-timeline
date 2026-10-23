@@ -51,28 +51,32 @@ public class PermissionService {
     }
 
     public void requireNodeManager(long nodeId) {
-        Map<String, Object> node = db.one("SELECT n.id,n.project_id,n.owner_id,m.owner_id module_owner_id FROM nodes n JOIN modules m ON m.id=n.module_id WHERE n.id=:id",
-                Map.of("id", nodeId), "节点不存在");
+        Map<String, Object> node = db.one("SELECT n.id,n.project_id,n.owner_id,m.owner_id module_owner_id FROM nodes n LEFT JOIN modules m ON m.id=n.module_id WHERE n.id=:id",
+                Map.of("id", nodeId), "工作项不存在");
         long projectId = number(node.get("projectId"));
         requireProjectActive(projectId);
-        if (current().isAdmin() || isPm(projectId) || number(node.get("ownerId")) == current().id()
-                || number(node.get("moduleOwnerId")) == current().id()) return;
-        throw BusinessException.forbidden("无权管理该节点");
+        long userId = current().id();
+        if (current().isAdmin() || isPm(projectId) || number(node.get("ownerId")) == userId) return;
+        Object moduleOwner = node.get("moduleOwnerId");
+        if (moduleOwner != null && number(moduleOwner) == userId) return;
+        throw BusinessException.forbidden("无权管理工作项");
     }
 
     public void requireTaskManager(long taskId, boolean allowAssignee) {
-        Map<String, Object> task = db.one("SELECT t.id,t.assignee_id,n.id node_id,n.project_id,n.owner_id node_owner_id,m.owner_id module_owner_id FROM tasks t JOIN nodes n ON n.id=t.node_id JOIN modules m ON m.id=n.module_id WHERE t.id=:id",
+        Map<String, Object> task = db.one("SELECT t.id,t.assignee_id,n.id node_id,n.project_id,n.owner_id node_owner_id,m.owner_id module_owner_id FROM tasks t JOIN nodes n ON n.id=t.node_id LEFT JOIN modules m ON m.id=n.module_id WHERE t.id=:id",
                 Map.of("id", taskId), "任务不存在");
         long projectId = number(task.get("projectId"));
         requireProjectActive(projectId);
         long userId = current().id();
         if (current().isAdmin() || isPm(projectId) || number(task.get("nodeOwnerId")) == userId
-                || number(task.get("moduleOwnerId")) == userId || (allowAssignee && number(task.get("assigneeId")) == userId)) return;
+                || (allowAssignee && number(task.get("assigneeId")) == userId)) return;
+        Object moduleOwner = task.get("moduleOwnerId");
+        if (moduleOwner != null && number(moduleOwner) == userId) return;
         throw BusinessException.forbidden("无权管理该任务");
     }
 
     public long projectForNode(long nodeId) {
-        return number(db.one("SELECT project_id FROM nodes WHERE id=:id", Map.of("id", nodeId), "节点不存在").get("projectId"));
+        return number(db.one("SELECT project_id FROM nodes WHERE id=:id", Map.of("id", nodeId), "工作项不存在").get("projectId"));
     }
 
     public long projectForTask(long taskId) {

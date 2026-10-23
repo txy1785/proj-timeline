@@ -63,14 +63,14 @@ public final class DocumentCatalog {
             new Category(OWNER_MODULE, "模块开发", "JOINT_TEST", "联调与自测记录"),
             new Category(OWNER_MODULE, "模块开发", "DELIVERABLE", "交付物与截图"),
             new Category(OWNER_MODULE, "其他", "MODULE_OTHER", "其他模块文件"),
-            // 节点级 · 功能节点产出
-            new Category(OWNER_NODE, "节点产出", "NODE_DESIGN", "节点设计说明"),
-            new Category(OWNER_NODE, "节点产出", "NODE_FLOW", "流程图与时序图"),
-            new Category(OWNER_NODE, "节点产出", "NODE_API", "接口与数据说明"),
-            new Category(OWNER_NODE, "节点产出", "NODE_TEST", "自测与联调记录"),
-            new Category(OWNER_NODE, "节点产出", "NODE_SCREENSHOT", "截图与演示"),
-            new Category(OWNER_NODE, "节点产出", "NODE_DELIVERABLE", "节点交付物"),
-            new Category(OWNER_NODE, "其他", "NODE_OTHER", "其他节点文件"),
+            // 工作项级 · 功能工作项产出
+            new Category(OWNER_NODE, "工作项产出", "NODE_DESIGN", "工作项设计说明"),
+            new Category(OWNER_NODE, "工作项产出", "NODE_FLOW", "流程图与时序图"),
+            new Category(OWNER_NODE, "工作项产出", "NODE_API", "接口与数据说明"),
+            new Category(OWNER_NODE, "工作项产出", "NODE_TEST", "自测与联调记录"),
+            new Category(OWNER_NODE, "工作项产出", "NODE_SCREENSHOT", "截图与演示"),
+            new Category(OWNER_NODE, "工作项产出", "NODE_DELIVERABLE", "工作项交付物"),
+            new Category(OWNER_NODE, "其他", "NODE_OTHER", "其他工作项文件"),
             // 任务级 · 任务附件
             new Category(OWNER_TASK, "任务附件", "TASK_DELIVERABLE", "任务交付物"),
             new Category(OWNER_TASK, "任务附件", "TASK_REFERENCE", "参考资料"),

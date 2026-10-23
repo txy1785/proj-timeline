@@ -64,7 +64,7 @@ async function load(file: Attachment) {
         renderComments: false,
         useBase64URL: true
       })
-      // 无论在哪个阶段的渲染结果，都先清洗链接再判断 token，避免过期渲染残留未清洗的节点
+      // 无论在哪个阶段的渲染结果，都先清洗链接再判断 token，避免过期渲染残留未清洗的工作项
       sanitizeLinks(docxHost.value)
       if (token !== loadToken) return
     } else if (kind.value === 'xlsx') {

@@ -62,7 +62,7 @@ CREATE TABLE project_stage_targets (
 
 -- ------------------------------------------------------------
 -- 3. 项目成员（项目内职务：PM 项目经理 / MEMBER 成员）
---    模块负责人、节点负责人不在此表，由 modules.owner_id / nodes.owner_id 表达
+--    模块负责人、工作项负责人不在此表，由 modules.owner_id / nodes.owner_id 表达
 -- ------------------------------------------------------------
 CREATE TABLE project_members (
   id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -81,7 +81,7 @@ CREATE TABLE project_members (
 
 -- ------------------------------------------------------------
 -- 4. 模块（v1 一层；parent_id 预留多级树）
---    模块负责人 = 新建节点时的默认负责人
+--    模块负责人 = 新建工作项时的默认负责人
 -- ------------------------------------------------------------
 CREATE TABLE modules (
   id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -102,14 +102,15 @@ CREATE TABLE modules (
 ) ENGINE=InnoDB COMMENT='模块';
 
 -- ------------------------------------------------------------
--- 5. 节点（里程碑）
+-- 5. 工作项（原“节点”；模块内交付单元，也可为项目级）
 --    状态 4 态；受阻/延期为可叠加标记。
 --    延期与临近到期按状态、计划结束日和业务日期计算，不保存过期布尔值。
 -- ------------------------------------------------------------
 CREATE TABLE nodes (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   project_id    BIGINT UNSIGNED NOT NULL,
-  module_id     BIGINT UNSIGNED NOT NULL,
+  module_id     BIGINT UNSIGNED NULL COMMENT '所属功能模块；项目级工作项为空',
+  type          ENUM('FEATURE','TEST','MAINTENANCE','BUGFIX','OTHER') NOT NULL DEFAULT 'FEATURE' COMMENT '工作项类型',
   name          VARCHAR(200) NOT NULL,
   description   TEXT NULL,
   plan_start    DATE NOT NULL,
@@ -117,11 +118,11 @@ CREATE TABLE nodes (
   actual_start  DATE NULL,
   actual_end    DATE NULL,
   status        ENUM('NOT_STARTED','IN_PROGRESS','DONE','CANCELLED') NOT NULL DEFAULT 'NOT_STARTED',
-  progress      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '已弃用（V7 起）：节点进度由任务完成率派生，不再读写该列',
+  progress      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '已弃用（V7 起）：工作项进度由任务完成率派生，不再读写该列',
   blocked       TINYINT(1) NOT NULL DEFAULT 0,
   blocked_reason TEXT NULL,
   overdue_reason TEXT NULL,
-  owner_id      BIGINT UNSIGNED NOT NULL COMMENT '节点负责人（默认继承模块负责人）',
+  owner_id      BIGINT UNSIGNED NOT NULL COMMENT '工作项负责人（默认继承模块负责人）',
   sort_order    INT NOT NULL DEFAULT 0,
   created_by    BIGINT UNSIGNED NULL,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -138,19 +139,21 @@ CREATE TABLE nodes (
   CONSTRAINT fk_nodes_creator FOREIGN KEY (created_by) REFERENCES users(id),
   CONSTRAINT chk_node_dates CHECK (plan_start <= plan_end),
   CONSTRAINT chk_node_progress CHECK (progress <= 100)
-) ENGINE=InnoDB COMMENT='节点（里程碑）';
+) ENGINE=InnoDB COMMENT='工作项（里程碑）';
 
 -- ------------------------------------------------------------
--- 6. 任务（挂节点下，跨项目统计通过节点关联）
+-- 6. 任务（挂工作项下，跨项目统计通过工作项关联）
 -- ------------------------------------------------------------
 CREATE TABLE tasks (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   node_id       BIGINT UNSIGNED NOT NULL,
   name          VARCHAR(200) NOT NULL,
   description   TEXT NULL,
+  kind          ENUM('FEATURE','FIX','BUG','TEST','OTHER') NOT NULL DEFAULT 'FEATURE' COMMENT '任务类型：功能/修复/缺陷/测试/其他',
+  related_node_id BIGINT UNSIGNED NULL COMMENT '关联的原工作项（缺陷/修复溯源）',
   situation     TEXT NULL COMMENT '任务情况：当前进展、问题或背景',
   handling      TEXT NULL COMMENT '处理方式：准备怎么处理或已采取的措施',
-  assignee_id   BIGINT UNSIGNED NOT NULL COMMENT '执行人（默认继承节点负责人）',
+  assignee_id   BIGINT UNSIGNED NOT NULL COMMENT '执行人（默认继承工作项负责人）',
   status        ENUM('TODO','DOING','DONE') NOT NULL DEFAULT 'TODO',
   due_date      DATE NULL,
   estimate_days DECIMAL(5,1) NULL COMMENT '计划人天',
@@ -162,7 +165,10 @@ CREATE TABLE tasks (
   KEY idx_assignee (assignee_id),
   KEY idx_status (status),
   KEY idx_due (due_date),
+  KEY idx_task_kind (kind),
+  KEY idx_task_related_node (related_node_id),
   CONSTRAINT fk_tasks_node FOREIGN KEY (node_id) REFERENCES nodes(id),
+  CONSTRAINT fk_tasks_related_node FOREIGN KEY (related_node_id) REFERENCES nodes(id),
   CONSTRAINT fk_tasks_assignee FOREIGN KEY (assignee_id) REFERENCES users(id),
   CONSTRAINT fk_tasks_creator FOREIGN KEY (created_by) REFERENCES users(id),
   CONSTRAINT chk_task_estimate CHECK (estimate_days IS NULL OR estimate_days >= 0)
@@ -190,7 +196,7 @@ CREATE TABLE task_work_logs (
 ) ENGINE=InnoDB COMMENT='任务逐日工时';
 
 -- ------------------------------------------------------------
--- 8. 节点日志（周报草稿聚合 + 审计的数据来源）
+-- 8. 工作项日志（周报草稿聚合 + 审计的数据来源）
 -- ------------------------------------------------------------
 CREATE TABLE node_logs (
   id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -205,7 +211,7 @@ CREATE TABLE node_logs (
   KEY idx_node_time (node_id, created_at),
   CONSTRAINT fk_logs_node FOREIGN KEY (node_id) REFERENCES nodes(id),
   CONSTRAINT fk_logs_user FOREIGN KEY (user_id) REFERENCES users(id)
-) ENGINE=InnoDB COMMENT='节点变更日志';
+) ENGINE=InnoDB COMMENT='工作项变更日志';
 
 -- ------------------------------------------------------------
 -- 9. 站内通知
@@ -271,7 +277,7 @@ CREATE TABLE attachments (
   KEY idx_attachment_project (project_id, created_at),
   CONSTRAINT fk_attachment_project FOREIGN KEY (project_id) REFERENCES projects(id),
   CONSTRAINT fk_attachment_uploader FOREIGN KEY (uploader_id) REFERENCES users(id)
-) ENGINE=InnoDB COMMENT='项目、模块、节点与任务的文档附件';
+) ENGINE=InnoDB COMMENT='项目、模块、工作项与任务的文档附件';
 
 -- ------------------------------------------------------------
 -- 12. 任务进展记录（Flyway V6）
@@ -289,9 +295,9 @@ CREATE TABLE task_notes (
 ) ENGINE=InnoDB COMMENT='任务进展记录';
 
 -- ------------------------------------------------------------
--- 13. 节点交付物清单（Flyway V9）
---     回答"这个节点要交什么、还缺什么、文件在哪"；文件复用 attachments 的节点级文件，
---     清单项只可选关联一个同节点附件，不新建文件体系、不做跨节点依赖。
+-- 13. 工作项交付物清单（Flyway V9）
+--     回答"这个工作项要交什么、还缺什么、文件在哪"；文件复用 attachments 的工作项级文件，
+--     清单项只可选关联一个同工作项附件，不新建文件体系、不做跨工作项依赖。
 -- ------------------------------------------------------------
 CREATE TABLE node_deliverables (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -301,7 +307,7 @@ CREATE TABLE node_deliverables (
   status        ENUM('WANTED','PROVIDED') NOT NULL DEFAULT 'WANTED' COMMENT 'WANTED 待提供 / PROVIDED 已提供',
   owner_id      BIGINT UNSIGNED NULL COMMENT '负责人，为空表示未指定',
   remark        VARCHAR(500) NULL COMMENT '备注，如资料在外部系统的位置',
-  attachment_id BIGINT UNSIGNED NULL COMMENT '可选关联文件，必须是同一节点下的附件',
+  attachment_id BIGINT UNSIGNED NULL COMMENT '可选关联文件，必须是同一工作项下的附件',
   sort_order    INT NOT NULL DEFAULT 0,
   created_by    BIGINT UNSIGNED NULL,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -315,7 +321,7 @@ CREATE TABLE node_deliverables (
   CONSTRAINT fk_deliverable_owner FOREIGN KEY (owner_id) REFERENCES users(id),
   CONSTRAINT fk_deliverable_attachment FOREIGN KEY (attachment_id) REFERENCES attachments(id),
   CONSTRAINT fk_deliverable_creator FOREIGN KEY (created_by) REFERENCES users(id)
-) ENGINE=InnoDB COMMENT='节点交付物清单';
+) ENGINE=InnoDB COMMENT='工作项交付物清单';
 
 -- ------------------------------------------------------------
 -- 14. 模块变更申请（Flyway V11）

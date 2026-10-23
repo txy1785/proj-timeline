@@ -21,6 +21,9 @@ public class WorkController {
     @PostMapping("/projects/{id}/nodes")
     ApiResponse<Map<String, Object>> createNode(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.createNode(id, body)); }
 
+    @PostMapping("/projects/{id}/bugs")
+    ApiResponse<Map<String, Object>> reportBug(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.reportBug(id, body)); }
+
     @PutMapping("/nodes/{id}")
     ApiResponse<Map<String, Object>> updateNode(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.updateNode(id, body)); }
 
@@ -28,14 +31,14 @@ public class WorkController {
     ApiResponse<Map<String, Object>> nodeStatus(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.changeNodeStatus(id, String.valueOf(body.get("status")))); }
 
     /**
-     * 已废弃：节点进度改由任务完成率派生。保留路由只为让旧客户端得到明确提示，不修改任何数据；
+     * 已废弃：工作项进度改由任务完成率派生。保留路由只为让旧客户端得到明确提示，不修改任何数据；
      * 用 @Hidden 排除在 OpenAPI 之外，接口清单里不再出现。
      */
     @Deprecated
     @Hidden
     @PutMapping("/nodes/{id}/progress")
     ApiResponse<Void> progress(@PathVariable long id) {
-        throw BusinessException.conflict("节点进度由任务完成率自动计算，不再支持手动设置");
+        throw BusinessException.conflict("工作项进度由任务完成率自动计算，不再支持手动设置");
     }
 
     @PostMapping("/nodes/{id}/block")
