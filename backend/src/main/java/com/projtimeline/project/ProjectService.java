@@ -88,9 +88,10 @@ public class ProjectService {
         nodes.forEach(this::decorateNode);
         for (Map<String, Object> module : modules) {
             long moduleId = number(module.get("id"));
-            module.put("nodes", nodes.stream().filter(n -> number(n.get("moduleId")) == moduleId).toList());
+            module.put("nodes", nodes.stream().filter(n -> n.get("moduleId") != null && number(n.get("moduleId")) == moduleId).toList());
         }
         project.put("modules", modules);
+        project.put("projectWorkItems", nodes.stream().filter(n -> n.get("moduleId") == null).toList());
         project.put("stageTargets", stageTargets(projectId));
         return project;
     }
@@ -128,7 +129,7 @@ public class ProjectService {
         Map<String, Object> member = db.one("SELECT id,project_role FROM project_members WHERE project_id=:project AND user_id=:user", Map.of("project", projectId, "user", userId), "成员不存在");
         if ("PM".equals(member.get("projectRole"))) throw BusinessException.conflict("必须先转交项目经理");
         long duties = db.count("SELECT (SELECT COUNT(*) FROM modules WHERE project_id=:project AND owner_id=:user) + (SELECT COUNT(*) FROM nodes WHERE project_id=:project AND owner_id=:user) + (SELECT COUNT(*) FROM tasks t JOIN nodes n ON n.id=t.node_id WHERE n.project_id=:project AND t.assignee_id=:user)", Map.of("project", projectId, "user", userId));
-        if (duties > 0) throw BusinessException.conflict("该成员仍承担模块、节点或任务责任");
+        if (duties > 0) throw BusinessException.conflict("该成员仍承担模块、工作项或任务责任");
         db.update("DELETE FROM project_members WHERE project_id=:project AND user_id=:user", Map.of("project", projectId, "user", userId));
     }
 
@@ -188,7 +189,7 @@ public class ProjectService {
         // 先锁模块行：与审批/撤回的加锁方向保持一致（模块 → 申请），避免与并发审批互相等待
         Map<String, Object> module = db.one("SELECT id,project_id FROM modules WHERE id=:id FOR UPDATE", Map.of("id", id), "模块不存在");
         permissions.requireProjectManager(number(module.get("projectId")));
-        if (db.count("SELECT COUNT(*) FROM nodes WHERE module_id=:id", Map.of("id", id)) > 0) throw BusinessException.conflict("含节点的模块不能删除");
+        if (db.count("SELECT COUNT(*) FROM nodes WHERE module_id=:id", Map.of("id", id)) > 0) throw BusinessException.conflict("含工作项的模块不能删除");
         // 变更申请外键指向模块：待审批的先让 PM 处理；历史记录随模块一起删除（模块没了，记录也无从查看）
         if (db.count("SELECT COUNT(*) FROM module_change_requests WHERE module_id=:id AND status='PENDING'", Map.of("id", id)) > 0) {
             throw BusinessException.conflict("该模块有待审批的变更申请，请先审批或驳回");
@@ -304,7 +305,7 @@ public class ProjectService {
         node.put("progress", nodeProgress(node));
     }
 
-    /** 节点进度由任务完成率派生；调用方查询需带 total_tasks / done_tasks 两列。 */
+    /** 工作项进度由任务完成率派生；调用方查询需带 total_tasks / done_tasks 两列。 */
     private static int nodeProgress(Map<String, Object> node) {
         return ProgressRules.nodeProgress(Objects.toString(node.get("status")), intOf(node.get("totalTasks")), intOf(node.get("doneTasks")));
     }

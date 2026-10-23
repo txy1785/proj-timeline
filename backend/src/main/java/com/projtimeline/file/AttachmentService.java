@@ -22,9 +22,9 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * 文档与附件的读写口径，支持项目级 / 模块级 / 节点级 / 任务级四层归属。
+ * 文档与附件的读写口径，支持项目级 / 模块级 / 工作项级 / 任务级四层归属。
  * <p>
- * 权限：上传与删除按归属层级判定——项目级由 PM（或 ADMIN）、模块级由模块负责人、节点级由节点负责人、
+ * 权限：上传与删除按归属层级判定——项目级由 PM（或 ADMIN）、模块级由模块负责人、工作项级由工作项负责人、
  * 任务级由任务执行人或其上级管理者；读取统一走 {@code requireProjectRead}，
  * 因此 VIEWER 与项目成员只能下载，归档项目只读。删除为软删除，磁盘文件保留以维持"痕迹"。
  */
@@ -64,7 +64,7 @@ public class AttachmentService {
     }
 
     /**
-     * 项目下的全部文件（项目级 + 模块级 + 节点级 + 任务级），带归属名称，供项目文档页汇总查看。
+     * 项目下的全部文件（项目级 + 模块级 + 工作项级 + 任务级），带归属名称，供项目文档页汇总查看。
      */
     public List<Map<String, Object>> listByProject(long projectId) {
         permissions.requireProjectRead(projectId);
@@ -182,7 +182,7 @@ public class AttachmentService {
             db.update("UPDATE attachments SET deleted=1 WHERE id=:id", Map.of("id", id));
             return;
         }
-        // 与上传口径一致：任务由执行人/节点负责人管理，节点由节点负责人管理，模块由模块负责人管理，项目由项目经理管理
+        // 与上传口径一致：任务由执行人/工作项负责人管理，工作项由工作项负责人管理，模块由模块负责人管理，项目由项目经理管理
         String ownerType = String.valueOf(row.get("ownerType"));
         long ownerId = PermissionService.number(row.get("ownerId"));
         if (DocumentCatalog.OWNER_TASK.equals(ownerType)) {

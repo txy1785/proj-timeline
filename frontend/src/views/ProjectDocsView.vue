@@ -28,7 +28,7 @@ const SOURCES = [
   { value: '', label: '全部来源', tag: '' },
   { value: 'PROJECT', label: '项目级', tag: '项目' },
   { value: 'MODULE', label: '模块级', tag: '模块' },
-  { value: 'NODE', label: '节点级', tag: '节点' },
+  { value: 'NODE', label: '工作项级', tag: '工作项' },
   { value: 'TASK', label: '任务级', tag: '任务' }
 ]
 const ownerTag = (type: string) => SOURCES.find(item => item.value === type)?.tag || type
@@ -81,7 +81,7 @@ onMounted(load)
           <el-breadcrumb-item>项目文档</el-breadcrumb-item>
         </el-breadcrumb>
         <h1 style="margin-top:14px">项目文档</h1>
-        <p>项目、模块、节点与任务的全部文件，按分类归档并可追溯历史版本。</p>
+        <p>项目、模块、工作项与任务的全部文件，按分类归档并可追溯历史版本。</p>
       </div>
       <el-button @click="router.push(`/projects/${projectId}/timeline`)">返回时间线</el-button>
     </header>
@@ -92,7 +92,7 @@ onMounted(load)
           <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
             <div>
               <h2>全项目文件</h2>
-              <p class="muted">项目文档、各模块文档、节点文件与任务附件都汇总在这里，共 {{ visibleFiles.length }} 个。</p>
+              <p class="muted">项目文档、各模块文档、工作项文件与任务附件都汇总在这里，共 {{ visibleFiles.length }} 个。</p>
             </div>
             <el-select v-model="sourceType" size="small" style="width:140px">
               <el-option v-for="source in SOURCES" :key="source.value" :label="source.label" :value="source.value" />

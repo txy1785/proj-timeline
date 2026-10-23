@@ -6,7 +6,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * 节点交付物的纯规则：状态归一化，以及「除状态外是否真的改动」的判定。
+ * 工作项交付物的纯规则：状态归一化，以及「除状态外是否真的改动」的判定。
  * <p>
  * 放在 common 是因为它不依赖数据库、需要单测覆盖；WorkService 只负责取数与落库。
  * before 使用 DataAccess 的驼峰列名（name/ownerId/remark/attachmentId/sortOrder），
@@ -28,7 +28,7 @@ public final class DeliverableRules {
         return value;
     }
 
-    /** 除 status 外的字段是否完全未变：用于拒绝「已完成/已取消节点」上的改名、改派、换文件、改备注与改排序。 */
+    /** 除 status 外的字段是否完全未变：用于拒绝「已完成/已取消工作项」上的改名、改派、换文件、改备注与改排序。 */
     public static boolean onlyStatusChanged(Map<String, Object> before, Map<String, Object> values) {
         return Objects.equals(before.get("name"), values.get("name"))
                 && sameNumber(before.get("ownerId"), values.get("owner"))
