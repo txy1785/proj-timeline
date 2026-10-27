@@ -31,3 +31,8 @@ export function workItemCounts(items: Pick<NodeItem, 'status'>[]) {
   const active = items.filter(item => item.status !== 'CANCELLED')
   return { total: active.length, done: active.filter(item => item.status === 'DONE').length }
 }
+
+/** Closed features keep their original flags as history; current risk badges only describe open work. */
+export function hasWorkItemRisk(node: Pick<NodeItem, 'status' | 'flags'>, risk: keyof NodeItem['flags']): boolean {
+  return (node.status === 'NOT_STARTED' || node.status === 'IN_PROGRESS') && !!node.flags?.[risk]
+}

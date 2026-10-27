@@ -20,7 +20,7 @@ export async function prepare(page, role = 'USER', userId = 6, options = {}) {
     totalTasks: state.tasks.length, doneTasks: state.tasks.filter(task => task.status === 'DONE').length,
     deliverableTotal: state.deliverables.length, deliverableProvided: state.deliverables.filter(item=>item.status==='PROVIDED').length, deliverables: state.deliverables, logs: [],
     bugs: state.tasks.filter(task=>task.kind==='BUG' && task.originNodeId===106).map(taskView), bugCount: state.tasks.filter(task=>task.kind==='BUG' && task.originNodeId===106).length, openBugCount: state.tasks.filter(task=>task.kind==='BUG' && task.status!=='DONE' && task.originNodeId===106).length, legacyTaskCount: state.tasks.filter(task=>task.kind!=='BUG').length,
-    flags: { overdue: !options.closed, near: false, blocked: false }, overdueReason: '联调环境延后',
+    flags: { overdue: !options.closed, near: false, blocked: !!options.blocked }, overdueReason: '联调环境延后',
     tasks: state.tasks.map(taskView)
   })
   const project = () => ({

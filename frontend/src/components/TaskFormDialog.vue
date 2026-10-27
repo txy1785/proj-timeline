@@ -115,7 +115,7 @@ async function save() {
           <el-form-item label="描述"><el-input v-model="form.description" type="textarea" :rows="3" /></el-form-item>
           <div class="task-form-grid">
             <el-form-item v-if="!isBug" label="类型">
-              <el-select v-model="form.kind" style="width:100%"><el-option v-for="kind in TASK_KINDS" :key="kind" :value="kind" :label="TASK_KIND_LABELS[kind]" /></el-select>
+              <el-select v-model="form.kind" style="width:100%"><el-option v-for="kind in TASK_KINDS.filter(value => value !== 'BUG')" :key="kind" :value="kind" :label="TASK_KIND_LABELS[kind]" /></el-select>
             </el-form-item>
             <el-form-item v-if="!isBug" label="计划人天（可选）">
               <el-input-number v-model="form.estimateDays" :min="0" :step="0.5" placeholder="尚未估算" style="width:100%" />

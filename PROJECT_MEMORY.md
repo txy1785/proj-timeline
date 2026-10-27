@@ -51,7 +51,7 @@
 - 后端：Java 17、Spring Boot 3.5.16、MyBatis-Plus 3.5.17、Spring Security、Flyway、MySQL 8。
 - 前端：Vue 3、TypeScript、Vite、Vue Router、Pinia、Element Plus、Axios；使用 npm 和 `package-lock.json`。文件预览额外依赖 `docx-preview` 与 `read-excel-file`（按需动态加载，不进入主包）。
 - 当前 Flyway 版本为 V12。V1 建表，V2 将项目开始日期设为必填并过渡性增加模块日期，V3 建立 `project_stage_targets` 并移除模块日期，V4 建立 `attachments` 文档附件表，V5 只修正 `owner_type` 注释（V4 已应用到环境，不得再改写），V6 建立 `task_notes` 并让 `attachments.owner_type` 支持 TASK，V7 只把 `nodes.progress` 列注释改为「已弃用」（进度改为任务完成率派生，保留列与历史值，不删列），V8 给 `tasks` 增加 `situation`/`handling` 并为 `node_logs.action` 增加 `TASK_UPDATE`/`TASK_DELETE`，V9 建立 `node_deliverables` 并为 `node_logs.action` 增加 `DELIVERABLE_ADD`/`DELIVERABLE_UPDATE`/`DELIVERABLE_DELETE`，V10 给 `project_stage_targets` 增加四个可空指标列（`metric_name/metric_unit/metric_target/metric_current`），V11 建立 `module_change_requests` 并把 `notifications.type` 扩到 7 类，V12 让 `nodes.module_id` 可空、增加 `nodes.type`，给 `tasks` 增加 `kind` 和 `related_node_id`。已有迁移文件不能改写；新变更追加 V13 及以后版本。
-- 当前 OpenAPI 有 73 个 `/api` 操作：增加业务上下文、工作台任务/管理事项/负载工作项与缺陷接收预判 5 个读取接口。前端 `frontend/src/api/schema.d.ts` 已由运行中的新版后端生成；默认脚本端口 8080，本机服务其他端口需显式指定。
+- 当前 OpenAPI 有 75 个 `/api` 操作：本轮新增工作项交付/独立Bug两个工作台读取接口，并保留此前上下文、历史任务、管理事项等读取。前端 `frontend/src/api/schema.d.ts` 已由运行中的新版后端生成；默认脚本端口 8080，本机服务其他端口需显式指定。
 - 认证为 8 小时 JWT，仅保存用户 ID；每次请求重新检查账号启用状态与角色。浏览器会话存于 `sessionStorage`。
 - 日期判定使用注入的 `Clock`，默认业务时区 `Asia/Shanghai`。延期和临近到期由服务端实时计算。
 - 演示数据只在显式执行 `docs/demo_seed.sql` 时导入；不属于 Flyway 正式迁移。根目录 `.env` 和本机数据库凭据不得写入文档或提交。
@@ -75,7 +75,7 @@
 
 - 2026-10-26 的体验走查问题现已按批准方案实施：修正工作项/模块的项目导航、增加我的工作与独立项目概览、按日期独立分行的时间线、按项目职务显示操作。历史问题证据保留在 [走查记录](docs/用户体验走查与简化建议.md)，不代表当前仍存在。
 
-- 本轮验证：Maven 55 项测试通过；前端 lint/typecheck/build 通过；Playwright 19 项角色、任务、模块与体验回归通过；另在明确命名的本机隔离 MySQL 库执行真实 HTTP 与浏览器流程。详细命令、截图、边界见 [验收记录](docs/体验改善验收/README.md)。
+- 本轮验证：Maven 71 项测试通过；前端 lint/typecheck/build 通过；Playwright 29 项角色、功能交付、Bug、历史任务、模块与体验回归通过；另在明确命名的本机隔离 MySQL 库执行真实 HTTP 与浏览器流程。详细命令、截图、边界见 [功能交付验收](docs/功能交付验收/README.md)。
 - `PLAN.md` 中早期接口/页面/表数量是历史快照。当前接口 73 个、表 16 张（含 flyway_schema_history），本轮无数据库结构或迁移变更；不可把早期数字当现状。
 - 当前工作站此前未运行 Docker Compose 的真实构建；部署仍需在具备 Docker 的目标环境验证。
 - 文件存储当前用本地磁盘（`app.storage.root` 默认 `./data/files`，容器内 `/app/data/files` 挂 `file-data` 卷）。未接入 MinIO/对象存储：存储层已抽成 `FileStorage` 接口，切换时只加实现并改配置。单文件上限 50MB，Nginx 侧 `client_max_body_size 60m`，后端 `spring.servlet.multipart` 与 `app.storage.max-file-bytes` 同步。

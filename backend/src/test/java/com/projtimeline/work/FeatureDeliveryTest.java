@@ -32,6 +32,17 @@ class FeatureDeliveryTest {
         assertThat(f.jdbc.queryForObject("SELECT status FROM nodes WHERE id=101",String.class)).isEqualTo("DONE");
     }
 
+    @Test void legacyTaskWritesCannotBypassBugSourceRulesOrConvertHistoryIntoBug(){
+        f.login(3,"USER");
+        assertThatThrownBy(()->f.work.createTask(101,Map.of("name","取消来源","kind","BUG","relatedNodeId",104L)))
+                .isInstanceOf(BusinessException.class);
+        Map<String,Object> bug=f.work.createTask(101,Map.of("name","旧客户端报告","kind","BUG","relatedNodeId",103L,"assigneeId",2L));
+        assertThat(bug).containsEntry("nodeId",103L).containsEntry("originNodeId",103L).containsEntry("assigneeId",3L);
+        assertThatThrownBy(()->f.work.updateTask(1002,Map.of("name","偷偷转换","kind","BUG","relatedNodeId",104L)))
+                .isInstanceOf(BusinessException.class);
+        assertThat(f.jdbc.queryForObject("SELECT kind FROM tasks WHERE id=1002",String.class)).isEqualTo("FEATURE");
+    }
+
     @Test void deliveredFeatureCanReceiveBugAndFixDoesNotReopenTheFeature(){
         Map<String,Object> bug=f.work.reportBug(10,Map.of("name","大文件上传失败","relatedNodeId",103L));
         long id=((Number)bug.get("id")).longValue();

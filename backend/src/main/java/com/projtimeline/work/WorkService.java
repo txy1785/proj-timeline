@@ -269,13 +269,19 @@ public class WorkService {
     @Transactional
     public Map<String, Object> createTask(long nodeId, Map<String, Object> body) {
         permissions.requireNodeManager(nodeId);
+        String kind = taskKind(body, "FEATURE");
+        if ("BUG".equals(kind)) {
+            Map<String,Object> bugBody = new HashMap<>(body);
+            Long related = longValue(body, "relatedNodeId");
+            bugBody.put("relatedNodeId", related == null || related == 0 ? nodeId : related);
+            return reportBug(permissions.projectForNode(nodeId), bugBody);
+        }
         // 锁工作项行，和完成工作项、任务状态变更串行，避免并发下给已完成工作项插入任务
         Map<String, Object> node = db.one("SELECT id,project_id,owner_id,status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "工作项不存在");
         requireNodeOpen(node, "已完成或已取消的工作项不能新增任务");
         long assignee = Optional.ofNullable(positiveLong(body, "assigneeId")).orElse(number(node.get("ownerId"))); permissions.requireAssignable(number(node.get("projectId")), assignee);
         BigDecimal estimate = decimal(body, "estimateDays"); validateDays(estimate, true);
         long projectId = number(node.get("projectId"));
-        String kind = taskKind(body, "FEATURE");
         Long related = relatedNodeValue(body, projectId, null);
         Map<String, Object> values = new HashMap<>(); values.put("node", nodeId); values.put("name", nameText(body)); values.put("description", text(body, "description"));
         values.put("kind", kind); values.put("related", related);
@@ -297,6 +303,8 @@ public class WorkService {
         long assignee = Optional.ofNullable(positiveLong(body, "assigneeId")).orElse(number(before.get("assigneeId"))); permissions.requireAssignable(projectId, assignee);
         BigDecimal estimate = decimal(body, "estimateDays"); validateDays(estimate, true);
         String kind = taskKind(body, Objects.toString(before.get("kind")));
+        if (!"BUG".equals(before.get("kind")) && "BUG".equals(kind))
+            throw BusinessException.badRequest("历史任务不能转换为Bug，请通过报告Bug创建独立问题");
         // Keep an unchanged legacy relation even if its target was removed/malformed; source resolution stays same-project safe.
         Long related = "BUG".equals(before.get("kind"))
                 ? (body.containsKey("relatedNodeId") ? longValue(body,"relatedNodeId") : longOrNull(before.get("relatedNodeId")))

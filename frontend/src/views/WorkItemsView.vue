@@ -7,7 +7,7 @@ import type { ModuleItem, NodeItem, NodeStatus } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import { useProjectContext } from '../composables/useProjectContext'
 import { canEditModule, isWorkItemManager } from '../utils/permissions'
-import { NODE_STATUS_LABELS, NODE_STATUS_TYPES, WORK_ITEM_TYPE_LABELS, workItemCounts } from '../utils/workItem'
+import { NODE_STATUS_LABELS, NODE_STATUS_TYPES, WORK_ITEM_TYPE_LABELS, workItemCounts, hasWorkItemRisk } from '../utils/workItem'
 import WorkItemFormDialog from '../components/WorkItemFormDialog.vue'
 import ModuleFormDialog from '../components/ModuleFormDialog.vue'
 import BugReportDialog from '../components/BugReportDialog.vue'
@@ -93,7 +93,7 @@ async function removeModule(module: ModuleItem) {
           <el-table-column prop="planEnd" label="计划完成" width="125" />
           <el-table-column label="状态" width="105"><template #default="scope"><el-tag size="small" :type="NODE_STATUS_TYPES[scope.row.status as NodeStatus]">{{ NODE_STATUS_LABELS[scope.row.status as NodeStatus] }}</el-tag></template></el-table-column>
           <el-table-column label="交付资料" width="130"><template #default="scope"><span v-if="scope.row.deliverableTotal">{{ scope.row.deliverableProvided || 0 }}/{{ scope.row.deliverableTotal }} 已提供</span><span v-else class="muted">未设交付要求</span></template></el-table-column>
-          <el-table-column label="风险" min-width="130"><template #default="scope"><div class="flags"><el-tag v-if="scope.row.flags?.overdue" size="small" type="danger">已延期</el-tag><el-tag v-if="scope.row.flags?.blocked" size="small" type="warning">受阻</el-tag><el-tag v-if="scope.row.flags?.near" size="small" type="warning">临近</el-tag><span v-if="!scope.row.flags?.overdue && !scope.row.flags?.blocked && !scope.row.flags?.near" class="muted">—</span></div></template></el-table-column>
+          <el-table-column label="风险" min-width="130"><template #default="scope"><div class="flags"><el-tag v-if="hasWorkItemRisk(scope.row, 'overdue')" size="small" type="danger">已延期</el-tag><el-tag v-if="hasWorkItemRisk(scope.row, 'blocked')" size="small" type="warning">受阻</el-tag><el-tag v-if="hasWorkItemRisk(scope.row, 'near')" size="small" type="warning">临近</el-tag><span v-if="!hasWorkItemRisk(scope.row, 'overdue') && !hasWorkItemRisk(scope.row, 'blocked') && !hasWorkItemRisk(scope.row, 'near')" class="muted">—</span></div></template></el-table-column>
         </el-table>
       </section>
       <el-dialog v-model="moduleManagement" :title="hasManagement ? '管理功能模块' : '功能模块'" width="min(820px, calc(100vw - 28px))">

@@ -5,7 +5,7 @@ import type { NodeItem } from '../api/types'
 import { useProjectContext } from '../composables/useProjectContext'
 import { useAuthStore } from '../stores/auth'
 import { addDays, dateValue, daysBetween, shortDate, weekStart } from '../utils/date'
-import { NODE_STATUS_LABELS } from '../utils/workItem'
+import { NODE_STATUS_LABELS, hasWorkItemRisk } from '../utils/workItem'
 import BugReportDialog from '../components/BugReportDialog.vue'
 import WorkItemFormDialog from '../components/WorkItemFormDialog.vue'
 
@@ -62,7 +62,7 @@ function bar(node:NodeItem){
   const end=node.planEnd>bounds.value.end?bounds.value.end:node.planEnd
   return{left:left(start)+'px',width:(daysBetween(start,end)+1)*dayWidth.value+'px'}
 }
-function hint(node:NodeItem){return node.name+' · '+node.ownerName+' · '+node.planStart+' 至 '+node.planEnd+' · '+NODE_STATUS_LABELS[node.status]+(node.flags.overdue?' · 已延期':'')+(node.flags.blocked?' · 受阻':'')}
+function hint(node:NodeItem){return node.name+' · '+node.ownerName+' · '+node.planStart+' 至 '+node.planEnd+' · '+NODE_STATUS_LABELS[node.status]+(hasWorkItemRisk(node, 'overdue')?' · 已延期':'')+(hasWorkItemRisk(node, 'blocked')?' · 受阻':'')}
 async function locateToday(){
   if(!businessDate.value)return
   range.value='FOUR'
@@ -84,7 +84,7 @@ async function saved(node?:NodeItem){await refresh();if(node?.id)void router.pus
           <div class="schedule-line schedule-goals" :style="{height:Math.max(70,visibleGoals.length*34+18)+'px'}"><div class="schedule-fixed"><strong>项目阶段目标</strong><small>{{bounds.start}} 至 {{bounds.end}}</small></div><div class="schedule-track"><div v-if="todayVisible" class="today-line" :style="{left:left(businessDate)+'px'}"><span>今天 {{shortDate(businessDate)}}</span></div><div v-for="(goal,index) in visibleGoals" :key="goal.id" class="goal-marker" :style="{left:left(goal.targetDate)+'px',top:(index*34+22)+'px'}"><span class="goal-symbol" aria-hidden="true">◆</span><el-tooltip :content="goal.targetDate+' · '+goal.name+(goal.progress!=null?' · 达成'+goal.progress+'%':'')"><span class="goal-caption" :class="{before:left(goal.targetDate)>plotWidth-240}">{{goal.name}} · {{shortDate(goal.targetDate)}}<template v-if="goal.progress!=null"> · {{goal.progress}}%</template></span></el-tooltip></div><span v-if="!visibleGoals.length" class="outside-range">此范围内没有阶段目标</span></div></div>
           <template v-for="group in groups" :key="group.id">
             <div class="schedule-group"><div class="schedule-fixed"><RouterLink v-if="group.id" :to="'/projects/'+id+'/modules/'+group.id">{{group.name}} <span class="muted">({{group.nodes.length}})</span></RouterLink><strong v-else>{{group.name}} ({{group.nodes.length}})</strong></div></div>
-            <div v-for="node in group.nodes" :key="node.id" class="schedule-line schedule-work-item"><div class="schedule-fixed schedule-node-label"><RouterLink :to="'/nodes/'+node.id">{{node.name}}<small v-if="node.deliverableTotal">资料 {{node.deliverableProvided||0}}/{{node.deliverableTotal}}</small></RouterLink><span>{{node.ownerName}}</span><span>{{NODE_STATUS_LABELS[node.status]}}</span></div><div class="schedule-track"><div v-if="todayVisible" class="today-line" :style="{left:left(businessDate)+'px'}"/><el-tooltip v-if="bar(node)" :content="hint(node)" placement="top"><button class="date-bar" :class="node.status.toLowerCase().replaceAll('_','-')" :style="bar(node)" :aria-label="hint(node)" @click="router.push('/nodes/'+node.id)"><span>{{shortDate(node.planStart)}}—{{shortDate(node.planEnd)}}</span><span v-if="node.flags.overdue" class="bar-risk">延期</span><span v-if="node.flags.near" class="bar-risk">临近</span><span v-if="node.flags.blocked" class="bar-risk">受阻</span></button></el-tooltip><RouterLink v-else class="outside-range" :to="'/nodes/'+node.id">{{node.planStart}}—{{node.planEnd}} · 在当前范围之外</RouterLink></div></div>
+            <div v-for="node in group.nodes" :key="node.id" class="schedule-line schedule-work-item"><div class="schedule-fixed schedule-node-label"><RouterLink :to="'/nodes/'+node.id">{{node.name}}<small v-if="node.deliverableTotal">资料 {{node.deliverableProvided||0}}/{{node.deliverableTotal}}</small></RouterLink><span>{{node.ownerName}}</span><span>{{NODE_STATUS_LABELS[node.status]}}</span></div><div class="schedule-track"><div v-if="todayVisible" class="today-line" :style="{left:left(businessDate)+'px'}"/><el-tooltip v-if="bar(node)" :content="hint(node)" placement="top"><button class="date-bar" :class="node.status.toLowerCase().replaceAll('_','-')" :style="bar(node)" :aria-label="hint(node)" @click="router.push('/nodes/'+node.id)"><span>{{shortDate(node.planStart)}}—{{shortDate(node.planEnd)}}</span><span v-if="hasWorkItemRisk(node, 'overdue')" class="bar-risk">延期</span><span v-if="hasWorkItemRisk(node, 'near')" class="bar-risk">临近</span><span v-if="hasWorkItemRisk(node, 'blocked')" class="bar-risk">受阻</span></button></el-tooltip><RouterLink v-else class="outside-range" :to="'/nodes/'+node.id">{{node.planStart}}—{{node.planEnd}} · 在当前范围之外</RouterLink></div></div>
             <div v-if="!group.nodes.length" class="schedule-line"><div class="schedule-fixed muted">尚无工作项</div><div class="schedule-track"><span class="outside-range">在该功能模块中建立首项交付</span></div></div>
           </template>
         </div>
