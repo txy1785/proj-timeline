@@ -31,12 +31,30 @@ public class ProjectService {
     }
 
     public PageResponse<Map<String, Object>> projects(int page, int size) {
+        return projects(page, size, null, null);
+    }
+
+    public PageResponse<Map<String, Object>> projects(int page, int size, String requestedStatus, String query) {
         page = Math.max(1, page); size = Math.min(100, Math.max(1, size));
         CurrentUser user = permissions.current();
-        String filter = user.isAdmin() || user.isViewer() ? "" : " JOIN project_members mine ON mine.project_id=p.id AND mine.user_id=:user ";
-        Map<String, Object> params = Map.of("user", user.id(), "offset", (page - 1) * size, "size", size);
-        long total = db.count("SELECT COUNT(DISTINCT p.id) FROM projects p " + filter, params);
-        List<Map<String, Object>> rows = db.list("SELECT DISTINCT p.* FROM projects p " + filter + " ORDER BY p.status,p.created_at DESC LIMIT :offset,:size", params);
+        String status = requestedStatus == null || requestedStatus.isBlank() ? "ALL" : requestedStatus.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("ACTIVE", "ARCHIVED", "ALL").contains(status)) throw BusinessException.badRequest("status 无效");
+        String search = query == null ? "" : query.trim();
+        if (search.length() > 200) throw BusinessException.badRequest("搜索内容不能超过 200 字");
+        String filter = " WHERE 1=1" + permissions.readableProjectFilter();
+        Map<String, Object> params = new HashMap<>();
+        params.put("current", user.id()); params.put("offset", ((long) page - 1) * size); params.put("size", size);
+        if (!"ALL".equals(status)) { filter += " AND p.status=:status"; params.put("status", status); }
+        if (!search.isEmpty()) {
+            filter += " AND (p.name LIKE :query ESCAPE '!' OR p.code LIKE :query ESCAPE '!' OR p.description LIKE :query ESCAPE '!')";
+            params.put("query", "%" + search.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%");
+        }
+        long total = db.count("SELECT COUNT(*) FROM projects p " + filter, params);
+        List<Map<String, Object>> rows = db.list("""
+                SELECT p.*,pm.user_id pm_id,manager.name pm_name FROM projects p
+                LEFT JOIN project_members pm ON pm.project_id=p.id AND pm.project_role='PM'
+                LEFT JOIN users manager ON manager.id=pm.user_id
+                """ + filter + " ORDER BY p.status,p.created_at DESC,p.id DESC LIMIT :offset,:size", params);
         rows.forEach(this::decorateProject);
         return new PageResponse<>(rows, total, page, size);
     }
@@ -170,16 +188,26 @@ public class ProjectService {
 
     @Transactional
     public Map<String, Object> updateModule(long id, Map<String, Object> body) {
-        Map<String, Object> module = db.one("SELECT id,project_id,sort_order FROM modules WHERE id=:id", Map.of("id", id), "模块不存在");
+        permissions.requireModuleManager(id);
+        Map<String, Object> module = db.one("SELECT id,project_id,owner_id,sort_order FROM modules WHERE id=:id FOR UPDATE", Map.of("id", id), "模块不存在");
         long projectId = number(module.get("projectId"));
-        permissions.requireProjectManager(projectId);
+        // Recheck the locked owner after waiting: a transferred former owner must not retain write access.
+        if (!permissions.current().isAdmin() && !permissions.isPm(projectId)
+                && number(module.get("ownerId")) != permissions.current().id()) {
+            throw BusinessException.forbidden("无权管理该模块");
+        }
         Long requestedOwnerId = longValue(body, "ownerId");
         if (requestedOwnerId == null) throw BusinessException.badRequest("ownerId 不能为空");
         long ownerId = requestedOwnerId; permissions.requireAssignable(projectId, ownerId);
+        Integer requestedSort = intValue(body, "sortOrder");
+        if (requestedSort != null && requestedSort != ((Number) module.get("sortOrder")).intValue()
+                && !permissions.current().isAdmin() && !permissions.isPm(projectId)) {
+            throw BusinessException.forbidden("模块排序仅项目经理可调整");
+        }
         Map<String, Object> values = new HashMap<>(); values.put("id", id); values.put("name", requiredText(body, "name"));
         values.put("description", text(body, "description"));
         // 未显式传 sortOrder 时保留原顺序，避免改名把模块排到最前
-        values.put("owner", ownerId); values.put("sort", Optional.ofNullable(intValue(body, "sortOrder")).orElse((int) number(module.get("sortOrder"))));
+        values.put("owner", ownerId); values.put("sort", requestedSort == null ? ((Number) module.get("sortOrder")).intValue() : requestedSort);
         db.update("UPDATE modules SET name=:name,description=:description,owner_id=:owner,sort_order=:sort WHERE id=:id", values);
         return db.one("SELECT m.*,u.name owner_name FROM modules m JOIN users u ON u.id=m.owner_id WHERE m.id=:id", Map.of("id", id), "模块不存在");
     }

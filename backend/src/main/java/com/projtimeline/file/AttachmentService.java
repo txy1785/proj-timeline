@@ -75,12 +75,14 @@ public class AttachmentService {
                          WHEN 'MODULE' THEN m.name
                          WHEN 'NODE' THEN n.name
                          WHEN 'TASK' THEN t.name
-                       END AS owner_name
+                       END AS owner_name,
+                       CASE a.owner_type WHEN 'NODE' THEN n.id WHEN 'TASK' THEN t.node_id END AS node_id
                 FROM attachments a
                 JOIN projects p ON p.id = a.project_id
-                LEFT JOIN modules m ON a.owner_type = 'MODULE' AND m.id = a.owner_id
-                LEFT JOIN nodes n ON a.owner_type = 'NODE' AND n.id = a.owner_id
+                LEFT JOIN modules m ON a.owner_type = 'MODULE' AND m.id = a.owner_id AND m.project_id = a.project_id
+                LEFT JOIN nodes n ON a.owner_type = 'NODE' AND n.id = a.owner_id AND n.project_id = a.project_id
                 LEFT JOIN tasks t ON a.owner_type = 'TASK' AND t.id = a.owner_id
+                  AND EXISTS(SELECT 1 FROM nodes task_node WHERE task_node.id=t.node_id AND task_node.project_id=a.project_id)
                 LEFT JOIN users u ON u.id = a.uploader_id
                 WHERE a.project_id = :project AND a.deleted = 0
                 ORDER BY a.created_at DESC, a.id DESC

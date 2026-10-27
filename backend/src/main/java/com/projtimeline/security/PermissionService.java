@@ -92,6 +92,16 @@ public class PermissionService {
         return member != null && "PM".equals(member.get("projectRole"));
     }
 
+    /**
+     * Shared read-query boundary. Caller must join the owning project as p and bind current=user id.
+     * This is for list reads only; business writes must still call the resource-specific require methods.
+     */
+    public String readableProjectFilter() {
+        CurrentUser user = current();
+        return user.isAdmin() || user.isViewer() ? ""
+                : " AND EXISTS(SELECT 1 FROM project_members readable WHERE readable.project_id=p.id AND readable.user_id=:current)";
+    }
+
     public void requireAssignable(long projectId, long userId) {
         Map<String, Object> row = db.optional("SELECT u.id,u.active,u.global_role FROM users u JOIN project_members pm ON pm.user_id=u.id WHERE pm.project_id=:project AND u.id=:user",
                 Map.of("project", projectId, "user", userId));

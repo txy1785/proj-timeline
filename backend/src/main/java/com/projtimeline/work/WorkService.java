@@ -263,7 +263,7 @@ public class WorkService {
         values.put("assignee", assignee); values.put("due", date(body, "dueDate")); values.put("estimate", estimate); values.put("creator", permissions.current().id());
         long id = db.insert("INSERT INTO tasks(node_id,name,description,kind,related_node_id,situation,handling,assignee_id,due_date,estimate_days,created_by) VALUES(:node,:name,:description,:kind,:related,:situation,:handling,:assignee,:due,:estimate,:creator)", values);
         log(nodeId, "TASK_ADD", "创建任务", null, map("taskId", id, "name", values.get("name"), "kind", kind));
-        notifyUser(assignee, "TASK_ASSIGN", "新任务已指派", "/nodes/" + nodeId);
+        notifyUser(assignee, "TASK_ASSIGN", "新任务已指派", "/nodes/" + nodeId + "?task=" + id);
         return task(id);
     }
 
@@ -283,7 +283,7 @@ public class WorkService {
         values.put("assignee", assignee); values.put("due", date(body, "dueDate")); values.put("estimate", estimate);
         db.update("UPDATE tasks SET name=:name,description=:description,kind=:kind,related_node_id=:related,situation=:situation,handling=:handling,assignee_id=:assignee,due_date=:due,estimate_days=:estimate WHERE id=:id", values);
         log(nodeId, "TASK_UPDATE", "更新任务", before, values);
-        if (assignee != number(before.get("assigneeId"))) notifyUser(assignee, "TASK_ASSIGN", "任务已改派", "/nodes/" + nodeId);
+        if (assignee != number(before.get("assigneeId"))) notifyUser(assignee, "TASK_ASSIGN", "任务已改派", "/nodes/" + nodeId + "?task=" + id);
         return task(id);
     }
 
@@ -311,25 +311,9 @@ public class WorkService {
         String description = detailText(body, "description");
         String situation = detailText(body, "situation");
         Long relatedRequested = longValue(body, "relatedNodeId");
-        Long relatedId = null;
-        Map<String, Object> target = null;
-        if (relatedRequested != null && relatedRequested > 0) {
-            Map<String, Object> related = db.one("""
-                    SELECT n.id,n.project_id,n.status,n.owner_id,n.name,m.name module_name
-                    FROM nodes n LEFT JOIN modules m ON m.id=n.module_id WHERE n.id=:id
-                    """, Map.of("id", relatedRequested), "关联工作项不存在");
-            if (number(related.get("projectId")) != projectId) throw BusinessException.badRequest("关联工作项不属于该项目");
-            relatedId = relatedRequested;
-            if ("IN_PROGRESS".equals(Objects.toString(related.get("status")))) {
-                // 锁住原工作项后再确认一次：防止等待期间被完成/取消，把缺陷挂到已关闭的工作项上
-                Map<String, Object> locked = db.one("""
-                        SELECT n.id,n.name,n.owner_id,n.status,m.name module_name
-                        FROM nodes n LEFT JOIN modules m ON m.id=n.module_id WHERE n.id=:id FOR UPDATE
-                        """, Map.of("id", relatedRequested), "关联工作项不存在");
-                if ("IN_PROGRESS".equals(Objects.toString(locked.get("status")))) target = locked;
-            }
-        }
-        if (target == null) target = openBugfixWorkItem(projectId);
+        Long relatedId = relatedRequested != null && relatedRequested > 0 ? relatedRequested : null;
+        Map<String, Object> target = resolveBugTarget(projectId, relatedRequested, true);
+        if (target == null) throw BusinessException.conflict("维护负责人尚未开启缺陷修复工作项");
         long nodeId = number(target.get("id"));
         long assignee = number(target.get("ownerId"));
         permissions.requireAssignable(projectId, assignee);
@@ -341,7 +325,7 @@ public class WorkService {
                 VALUES(:node,:name,:description,'BUG',:related,:situation,:assignee,'TODO',:creator)
                 """, values);
         log(nodeId, "TASK_ADD", "提交缺陷", null, map("taskId", id, "name", name, "relatedNodeId", relatedId));
-        notifications.notify(assignee, "TASK_ASSIGN", "新缺陷已指派", "/nodes/" + nodeId);
+        notifications.notify(assignee, "TASK_ASSIGN", "新缺陷已指派", "/nodes/" + nodeId + "?task=" + id);
         Map<String, Object> result = new LinkedHashMap<>(task(id));
         result.put("routedNodeId", nodeId);
         result.put("routedNodeName", target.get("name"));
@@ -349,16 +333,41 @@ public class WorkService {
         return result;
     }
 
-    /** 成员提的缺陷：原工作项进行中就落在原工作项，否则落到当前进行中的项目级「缺陷修复」工作项。 */
-    private Map<String, Object> openBugfixWorkItem(long projectId) {
-        Map<String, Object> node = db.optional("""
+    /** Read-only preflight. The POST always reruns the same resolver under node locks. */
+    @Transactional(readOnly = true)
+    public Map<String, Object> bugRouting(long projectId, Long relatedNodeId) {
+        permissions.requireProjectActive(projectId);
+        Map<String, Object> target = resolveBugTarget(projectId, relatedNodeId, false);
+        if (target == null) return Map.of("canSubmit", false, "message", "暂无接收工作项，请联系项目经理开启缺陷修复");
+        long owner = number(target.get("ownerId"));
+        try { permissions.requireAssignable(projectId, owner); }
+        catch (BusinessException ex) {
+            if (ex.code() != 4000) throw ex;
+            return Map.of("canSubmit", false, "message", "接收负责人已失效，请联系项目经理调整工作项负责人");
+        }
+        String ownerName = Objects.toString(db.one("SELECT name FROM users WHERE id=:id", Map.of("id", owner), "负责人不存在").get("name"), "");
+        return Map.of("canSubmit", true, "nodeId", target.get("id"), "nodeName", target.get("name"),
+                "ownerId", owner, "ownerName", ownerName, "message", "将提交给" + ownerName + " · " + target.get("name"));
+    }
+
+    /** Single routing rule shared by preflight and submission; false must never acquire write locks. */
+    private Map<String, Object> resolveBugTarget(long projectId, Long relatedNodeId, boolean lock) {
+        if (relatedNodeId != null && relatedNodeId < 0) throw BusinessException.badRequest("relatedNodeId 必须是正整数");
+        String suffix = lock ? " FOR UPDATE" : "";
+        if (relatedNodeId != null && relatedNodeId > 0) {
+            Map<String, Object> related = db.one("""
+                    SELECT n.id,n.project_id,n.status,n.owner_id,n.name,m.name module_name
+                    FROM nodes n LEFT JOIN modules m ON m.id=n.module_id WHERE n.id=:id
+                    """ + suffix, Map.of("id", relatedNodeId), "关联工作项不存在");
+            if (number(related.get("projectId")) != projectId) throw BusinessException.badRequest("关联工作项不属于该项目");
+            if ("IN_PROGRESS".equals(Objects.toString(related.get("status")))) return related;
+        }
+        return db.optional("""
                 SELECT n.id,n.name,n.owner_id,n.status,m.name module_name
                 FROM nodes n LEFT JOIN modules m ON m.id=n.module_id
                 WHERE n.project_id=:project AND n.module_id IS NULL AND n.type='BUGFIX' AND n.status='IN_PROGRESS'
-                ORDER BY n.plan_start DESC,n.id DESC LIMIT 1 FOR UPDATE
-                """, Map.of("project", projectId));
-        if (node == null || !"IN_PROGRESS".equals(Objects.toString(node.get("status")))) throw BusinessException.conflict("维护负责人尚未开启缺陷修复工作项");
-        return node;
+                ORDER BY n.plan_start DESC,n.id DESC LIMIT 1
+                """ + suffix, Map.of("project", projectId));
     }
 
     @Transactional

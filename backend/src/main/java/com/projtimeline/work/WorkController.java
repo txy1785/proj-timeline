@@ -24,6 +24,11 @@ public class WorkController {
     @PostMapping("/projects/{id}/bugs")
     ApiResponse<Map<String, Object>> reportBug(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.reportBug(id, body)); }
 
+    @GetMapping("/projects/{id}/bug-routing")
+    ApiResponse<Map<String, Object>> bugRouting(@PathVariable long id, @RequestParam(required = false) Long relatedNodeId) {
+        return ApiResponse.ok(service.bugRouting(id, relatedNodeId));
+    }
+
     @PutMapping("/nodes/{id}")
     ApiResponse<Map<String, Object>> updateNode(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.updateNode(id, body)); }
 
