@@ -80,4 +80,5 @@
 - 当前工作站此前未运行 Docker Compose 的真实构建；部署仍需在具备 Docker 的目标环境验证。
 - 文件存储当前用本地磁盘（`app.storage.root` 默认 `./data/files`，容器内 `/app/data/files` 挂 `file-data` 卷）。未接入 MinIO/对象存储：存储层已抽成 `FileStorage` 接口，切换时只加实现并改配置。单文件上限 50MB，Nginx 侧 `client_max_body_size 60m`，后端 `spring.servlet.multipart` 与 `app.storage.max-file-bytes` 同步。
 - Git 远程：`https://github.com/txy1785/proj-timeline.git`。分支模型：`main` 版本上线、`develop` 开发主线、`feature/<描述>` 功能分支从 `develop` 拉出；功能代码必须经独立审核（干净会话/子代理）后合并 `develop`，发布从 `develop` 合并 `main` 并打 tag。GitHub 默认分支为 `main`，远程仅保留 `main` 与 `develop`（旧 `master` 已删除）。提交前先 `git status` 核对未被 .gitignore 遗漏的文件。
-- 曾在本机启动 Vite 5173 与后端 8080 供用户试用；进程是否仍运行应实时检查，不能依据本文假定。最近浏览器停在登录页，可能只是会话过期。
+- 曾在本机启动 Vite 5173 与后端供用户试用（后端默认端口 8080，用户本机 `.env` 设 `SERVER_PORT=58080`，当前实际监听 58080）；进程是否仍运行应实时检查，不能依据本文假定。最近浏览器停在登录页，可能只是会话过期。
+- 2026-10-27 起本地试用服务需支持局域网访问：`frontend/vite.config.ts` 固定 `server.host: true`（监听 0.0.0.0、`strictPort`），局域网客户端访问 `http://<本机IP>:5173` 即可，`/api`、`/actuator` 仍由 Vite 服务端代理到后端 58080，客户端无需直连后端端口；不要再以 `--host 127.0.0.1` 启动开发服务。后端 58080 已监听全网卡（Java 双栈），Windows 防火墙对 node.exe（Private 网络）有入站放行；换机器或换网段时若仍拒绝访问，先查网络配置文件与防火墙入站规则，而不是改应用代码。

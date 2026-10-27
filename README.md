@@ -30,7 +30,7 @@
 4. 正常启动后端：`mvn -f backend/pom.xml spring-boot:run`。
 5. 安装并启动前端：`npm --prefix frontend install`，然后执行 `npm --prefix frontend run dev`。
 
-开发环境访问 `http://localhost:5173`，API 默认位于 `http://localhost:8080/api`。完整部署和演示数据说明见 [`docs/部署与运维.md`](docs/部署与运维.md)。
+开发环境访问 `http://localhost:5173`；开发服务默认监听所有网卡，同一局域网的其他机器可用启动日志打印的 `http://<本机IP>:5173` 访问（`/api` 由 Vite 代理到后端，不需要单独开放后端端口）。后端默认端口 `8080`，而前端代理默认目标是 `58080`；如果后端就用 8080，启动前端前需设置 `API_PROXY_TARGET=http://localhost:8080`，否则接口会 502。完整部署、局域网访问与演示数据说明见 [`docs/部署与运维.md`](docs/部署与运维.md)。
 
 ## 验证
 
