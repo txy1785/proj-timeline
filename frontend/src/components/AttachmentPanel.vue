@@ -34,7 +34,7 @@ const groupCategories = (group: string) => ownCategories.value.filter(item => it
 const visibleFiles = computed(() => activeCode.value ? files.value.filter(item => item.category === activeCode.value) : files.value)
 const canUpload = computed(() => props.canManage && !props.archived)
 const activeName = computed(() => ownCategories.value.find(item => item.code === activeCode.value)?.name || '全部文件')
-const canDeleteRow = (row: Attachment) => !props.archived && (props.canManage || row.uploaderId === auth.user?.id)
+const canDeleteRow = (row: Attachment) => !auth.isViewer && !props.archived && (props.canManage || row.uploaderId === auth.user?.id)
 const MAX_BYTES = 50 * 1024 * 1024
 
 async function load() {

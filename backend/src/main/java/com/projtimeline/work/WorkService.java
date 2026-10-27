@@ -47,7 +47,7 @@ public class WorkService {
     public Map<String, Object> node(long id) {
         long projectId = permissions.projectForNode(id); permissions.requireProjectRead(projectId);
         Map<String, Object> node = db.one("""
-                SELECT n.*, u.name owner_name, m.name module_name, m.owner_id module_owner_id, p.status project_status,
+                SELECT n.*, u.name owner_name, m.name module_name, m.owner_id module_owner_id, p.status project_status,p.name project_name,
                        (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id) total_tasks,
                        (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id AND t.status='DONE') done_tasks,
                        (SELECT COUNT(*) FROM node_deliverables d WHERE d.node_id=n.id) deliverable_total,

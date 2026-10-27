@@ -302,7 +302,8 @@ public class ProjectService {
             String status = Objects.toString(node.get("status"));
             if ("DONE".equals(status)) done++; if ("IN_PROGRESS".equals(status)) inProgress++;
             Map<String, Boolean> flags = flags(status, (LocalDate) node.get("planEnd"), truthy(node.get("blocked")));
-            if (flags.get("overdue")) overdue++; if (flags.get("near")) near++; if (flags.get("blocked")) blocked++;
+            if (flags.get("overdue")) overdue++; if (flags.get("near")) near++;
+            if (Set.of("NOT_STARTED", "IN_PROGRESS").contains(status) && flags.get("blocked")) blocked++;
             if (!"CANCELLED".equals(status)) { progressSum += nodeProgress(node); active++; }
         }
         project.put("progress", ProgressRules.aggregate(active, progressSum, done));

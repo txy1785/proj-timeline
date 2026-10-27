@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, ApiError } from '../api/client'
 import type { Report } from '../api/types'
@@ -65,18 +65,16 @@ watch(() => route.query.week, async value => {
     selectedWeek.value = report.value.weekStart
     return
   }
-  if (!(await mayDiscard())) {
-    if (report.value) {
-      selectedWeek.value = report.value.weekStart
-      loadedKey = report.value.weekStart
-      await router.replace({ path: route.path, query: { ...route.query, week: report.value.weekStart } })
-    }
-    return
-  }
   await load(week)
 }, { immediate: true })
 
 onBeforeRouteLeave(() => !busy.value && mayDiscard())
+onBeforeRouteUpdate(async (to, from) => {
+  if (to.query.week === from.query.week) return true
+  const allowed = !busy.value && await mayDiscard()
+  if (!allowed && report.value) selectedWeek.value = report.value.weekStart
+  return allowed
+})
 
 function chooseWeek(value?: string | null) {
   const week = value ? weekStart(value) : undefined
@@ -124,9 +122,9 @@ async function save() {
 }
 async function publish() {
   if (busy.value || !canWrite.value) return
-  try { await ElMessageBox.confirm('发布后保留本次数据快照，并通知项目成员。当前填写的说明会先保存再发布。', '发布周报', { confirmButtonText: '保存并发布', cancelButtonText: '继续检查', type: 'info' }) }
-  catch { return }
   busy.value = true
+  try { await ElMessageBox.confirm('发布后保留本次数据快照，并通知项目成员。当前填写的说明会先保存再发布。', '发布周报', { confirmButtonText: '保存并发布', cancelButtonText: '继续检查', type: 'info' }) }
+  catch { busy.value = false; return }
   mutationError.value = ''
   let noteSaved = false
   try {

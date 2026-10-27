@@ -88,6 +88,14 @@ async function saveNote(): Promise<boolean> {
 async function allowLeave(): Promise<boolean> {
   if (pending.value || editing.value) { ElMessage.info('请先完成当前操作'); return false }
   if (!noteText.value.trim()) return true
+  if (!canAct.value) {
+    try {
+      await ElMessageBox.confirm('当前任务已不可写入。请先复制草稿保留；关闭后将放弃本次输入。', '未保存的进展记录', {
+        type: 'warning', confirmButtonText: '放弃并关闭', cancelButtonText: '返回保留草稿', distinguishCancelAndClose: true
+      })
+      return true
+    } catch { return false }
+  }
   try {
     await ElMessageBox.confirm('记录尚未保存。可以保存后关闭，或放弃本次输入；关闭此提示可继续编辑。', '未保存的进展记录', {
       type: 'warning', confirmButtonText: '保存并关闭', cancelButtonText: '放弃并关闭', distinguishCancelAndClose: true
@@ -180,6 +188,7 @@ async function openWorkItem() {
           </el-tab-pane>
           <el-tab-pane :label="`进展记录 ${notes.length}`" name="records">
             <div v-if="canAct" class="note-composer"><el-input v-model="noteText" type="textarea" :rows="4" maxlength="2000" show-word-limit :disabled="savingNote" placeholder="记录本次进展、问题或结果" aria-label="进展记录内容" /><el-button type="primary" :loading="savingNote" :disabled="pending && !savingNote" @click="saveNote">追加记录</el-button></div>
+            <div v-else-if="noteText.trim()" class="note-composer"><p class="muted">当前任务不可写入。未保存的草稿仍保留在这里，可复制后保存到其他位置。</p><el-input :model-value="noteText" type="textarea" :rows="4" readonly aria-label="未保存的记录草稿" /></div>
             <el-alert v-if="notesError" :title="`记录暂时无法加载：${notesError}`" type="error" :closable="false" />
             <div v-else-if="!notes.length" class="empty">暂无记录<template v-if="canAct">，可补充本次进展或处理结果。</template></div>
             <article v-for="note in notes" :key="note.id" class="task-note"><div class="note-meta"><strong>{{ note.authorName }}</strong><time>{{ formatDateTime(note.createdAt) }}</time><el-button v-if="canDeleteNote(note)" link type="danger" :loading="deletingNote === note.id" :disabled="pending && deletingNote !== note.id" @click="removeNote(note)">删除</el-button></div><p>{{ note.content }}</p></article>

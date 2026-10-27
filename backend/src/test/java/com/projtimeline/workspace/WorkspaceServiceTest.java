@@ -61,6 +61,26 @@ class WorkspaceServiceTest {
         assertThat(f.workspace.tasks("OPEN",null,null,2L,null,1,20,null).total()).isEqualTo(7);
     }
 
+    @Test void weeklyPlanDrilldownIncludesCompletedTasksAndMatchesEstimateSum() {
+        f.jdbc.update("UPDATE tasks SET estimate_days=2 WHERE id=1001");
+        f.jdbc.update("UPDATE tasks SET estimate_days=3,due_date='2026-10-27' WHERE id=1005");
+        WorkspaceTaskPage plan=f.workspace.tasks("WORKLOAD_PLAN",null,null,2L,null,1,100,LocalDate.of(2026,10,27));
+        assertThat(plan.list()).extracting(r->((Number)r.get("id")).longValue()).contains(1001L,1005L).doesNotContain(2001L,1030L);
+        @SuppressWarnings("unchecked") List<Map<String,Object>> rows=(List<Map<String,Object>>)f.reporting.workload(LocalDate.of(2026,10,27)).get("people");
+        Map<String,Object> mine=rows.stream().filter(r->((Number)r.get("id")).longValue()==2L).findFirst().orElseThrow();
+        double detailSum=plan.list().stream().mapToDouble(r->r.get("estimateDays")==null?0:((Number)r.get("estimateDays")).doubleValue()).sum();
+        assertThat(detailSum).isEqualTo(((Number)mine.get("weekDueEstimateDays")).doubleValue());
+        assertThatThrownBy(()->tasks("WORKLOAD_PLAN")).isInstanceOf(BusinessException.class);
+    }
+
+    @Test void projectRiskCountsExcludeClosedItemsWhileRetainingTheirBlockedHistory() {
+        f.jdbc.update("UPDATE nodes SET blocked=TRUE WHERE id IN(103,104)");
+        var project=f.projects.projects(1,20,"ACTIVE","共享商城").list().get(0);
+        @SuppressWarnings("unchecked") Map<String,Object> stats=(Map<String,Object>)project.get("stats");
+        assertThat(stats).containsEntry("blocked",1);
+        assertThat(f.jdbc.queryForObject("SELECT blocked FROM nodes WHERE id=103",Boolean.class)).isTrue();
+    }
+
     @Test void paginationFiltersAndLiteralKeywordSearchRemainCoherent() {
         WorkspaceTaskPage page=f.workspace.tasks("OPEN",null,null,null,null,2,2,null);
         assertThat(page.list()).extracting(r->((Number)r.get("id")).longValue()).containsExactly(1003L,4001L);

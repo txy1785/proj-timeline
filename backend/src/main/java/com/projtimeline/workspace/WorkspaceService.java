@@ -58,13 +58,15 @@ public class WorkspaceService {
 
     public WorkspaceTaskPage tasks(String requestedScope, String requestedStatus, Long projectId, Long assigneeId,
                                    String query, int page, int size, LocalDate dueWeek) {
-        String scope = option(requestedScope, "OPEN", Set.of("OPEN", "DONE", "HISTORY", "WORKLOAD"), "scope");
+        String scope = option(requestedScope, "OPEN", Set.of("OPEN", "DONE", "HISTORY", "WORKLOAD", "WORKLOAD_PLAN"), "scope");
         String status = requestedStatus == null || requestedStatus.isBlank() ? null
                 : option(requestedStatus, null, Set.of("TODO", "DOING", "DONE"), "status");
         positiveId(projectId, "projectId"); positiveId(assigneeId, "assigneeId");
         String search = query == null ? "" : query.trim();
         if (search.length() > 200) throw BusinessException.badRequest("搜索内容不能超过 200 字");
-        if (dueWeek != null && !"WORKLOAD".equals(scope)) throw BusinessException.badRequest("dueWeek 仅用于人员负载展开");
+        boolean workload = "WORKLOAD".equals(scope) || "WORKLOAD_PLAN".equals(scope);
+        if (dueWeek != null && !workload) throw BusinessException.badRequest("dueWeek 仅用于人员负载展开");
+        if ("WORKLOAD_PLAN".equals(scope) && dueWeek == null) throw BusinessException.badRequest("本周计划展开必须指定 dueWeek");
         CurrentUser current = permissions.current();
         if (projectId != null) permissions.requireProjectRead(projectId);
         page = Math.max(1, page); size = Math.min(100, Math.max(1, size));
@@ -80,7 +82,7 @@ public class WorkspaceService {
         }
         String open = "p.status='ACTIVE' AND n.status IN('NOT_STARTED','IN_PROGRESS') AND t.status IN('TODO','DOING')";
         String done = "p.status='ACTIVE' AND n.status<>'CANCELLED' AND t.status='DONE'";
-        if ("WORKLOAD".equals(scope)) {
+        if (workload) {
             // Match ReportingService.workload, including readable archived-project history.
             base.append(" AND n.status<>'CANCELLED'");
             open = "t.status IN('TODO','DOING')";

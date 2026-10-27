@@ -45,7 +45,7 @@ function created(node: NodeItem) { void refresh(); router.push(`/nodes/${node.id
       <el-alert v-if="!active" title="项目已归档，以下为保留的交付记录。业务内容只读。" type="info" :closable="false" class="section-gap" />
       <section class="surface project-facts section-gap" aria-label="项目交付信息">
         <div><small>项目经理</small><strong>{{ pm?.name || '未读取到负责人' }}</strong></div>
-        <div><small>项目计划</small><strong>{{ shortDate(project.planStart) }} — {{ project.planEnd ? shortDate(project.planEnd) : '完成日期未定' }}</strong></div>
+        <div><small>项目计划</small><strong>{{ project.planStart }} — {{ project.planEnd || '完成日期未定' }}</strong></div>
         <div class="fact-progress"><small>项目进度</small><div class="progress-inline"><strong>{{ project.progress }}%</strong><el-progress :percentage="project.progress" :show-text="false" /></div></div>
         <div><small>未取消工作项</small><strong>{{ done }}/{{ activeNodes.length }} 已完成</strong></div>
       </section>

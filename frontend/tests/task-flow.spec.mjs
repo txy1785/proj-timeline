@@ -1,0 +1,100 @@
+import { test, expect } from '@playwright/test'
+import { prepare } from './helpers/task-fixture.mjs'
+
+test('ordinary assignee sees only task actions, keeps note draft across 409, then saves independently', async ({ page }) => {
+  const state = await prepare(page)
+  await page.goto('/nodes/106')
+  await expect(page.getByRole('heading', { name: '订单接口开发', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '编辑工作项', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '新建任务', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '完成工作项', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '标记受阻', exact: true })).toHaveCount(0)
+  await page.getByRole('button', { name: '库存扣减接口', exact: true }).click()
+  await expect(page).toHaveURL(/task=11/)
+  await page.getByRole('tab', { name: /进展记录/ }).click()
+  const draft = page.getByRole('textbox', { name: '进展记录内容' })
+  await draft.fill('本次未保存的进展')
+  state.failNextStatus = true
+  await page.getByRole('button', { name: '标记完成', exact: true }).click()
+  await expect(page.getByRole('button', { name: '开始任务', exact: true })).toBeVisible()
+  await expect(draft).toHaveValue('本次未保存的进展')
+  const statusWrite = state.writes.find(write => write.path === '/tasks/11/status')
+  expect(statusWrite.body).toEqual({ status: 'DONE', expectedStatus: 'DOING' })
+  await page.getByRole('button', { name: '追加记录', exact: true }).click()
+  await expect(draft).toHaveValue('')
+  await expect(page.getByText('本次未保存的进展', { exact: true })).toBeVisible()
+  expect(state.writes.filter(write => write.path.endsWith('/notes'))).toHaveLength(1)
+})
+
+test('PM core form leaves estimate unset and editing preserves collapsed legacy fields', async ({ page }) => {
+  const state = await prepare(page, 'USER', 2)
+  await page.goto('/nodes/106')
+  await expect(page.getByRole('button', { name: '完成工作项', exact: true })).toBeDisabled()
+  await page.getByRole('button', { name: '新建任务', exact: true }).click()
+  let dialog = page.getByRole('dialog', { name: '新建任务', exact: true })
+  await expect(dialog.getByLabel('任务情况', { exact: true })).toBeHidden()
+  await dialog.getByLabel('任务名称', { exact: true }).fill('新任务')
+  await dialog.getByRole('button', { name: '创建任务', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  const created = state.writes.find(write => write.path === '/nodes/106/tasks').body
+  expect(created.estimateDays).toBeNull()
+  expect(created.dueDate).toBeNull()
+  expect(created.assigneeId).toBe(4)
+  const row = page.getByRole('row').filter({ hasText: '库存扣减接口' })
+  await row.getByRole('button', { name: '更多', exact: true }).hover()
+  await page.getByRole('menuitem', { name: '编辑任务', exact: true }).click()
+  dialog = page.getByRole('dialog', { name: '编辑任务', exact: true })
+  await dialog.getByLabel('任务名称', { exact: true }).fill('库存扣减接口更名')
+  await dialog.getByRole('button', { name: '保存任务', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  const edited = state.writes.find(write => write.path === '/tasks/11').body
+  expect(edited).toMatchObject({ description: '已有说明', kind: 'BUG', relatedNodeId: 107, situation: '已有情况', handling: '已有处理方式', estimateDays: 2 })
+})
+
+test('kanban task opens same drawer; closed node disables statuses but permits allowed notes', async ({ page }) => {
+  await prepare(page, 'USER', 6, { closed: true })
+  await page.goto('/nodes/106/kanban')
+  await page.getByRole('button', { name: '库存扣减接口', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '库存扣减接口', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '重新开始', exact: true })).toHaveCount(0)
+  await page.getByRole('tab', { name: /进展记录/ }).click()
+  await expect(page.getByRole('textbox', { name: '进展记录内容' })).toBeVisible()
+})
+
+test('archived task and VIEWER do not expose mutations', async ({ page }) => {
+  await prepare(page, 'VIEWER', 6, { archived: true })
+  await page.goto('/nodes/106?task=11')
+  await expect(page.getByRole('heading', { name: '库存扣减接口', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '标记完成', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '编辑任务', exact: true })).toHaveCount(0)
+  await page.getByRole('tab', { name: /进展记录/ }).click()
+  await expect(page.getByRole('textbox', { name: '进展记录内容' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '追加记录', exact: true })).toHaveCount(0)
+})
+
+
+test('drawer draft prompts before close and invalid task link has an explicit unavailable state', async ({ page }) => {
+  await prepare(page)
+  await page.goto('/nodes/106?task=11')
+  await page.getByRole('tab', {name:/进展记录/}).click()
+  const draft = page.getByRole('textbox', {name:'进展记录内容'})
+  await draft.fill('待补充的处理结果')
+  await page.getByRole('button', {name:'关闭任务详情'}).click()
+  await expect(page.getByRole('button', {name:'保存并关闭',exact:true})).toBeVisible()
+  await page.getByRole('button', {name:'放弃并关闭',exact:true}).click()
+  await expect(page).not.toHaveURL(/task=/)
+  await page.goto('/nodes/106?task=999')
+  await expect(page.getByText('任务已删除或不属于这个工作项',{exact:true})).toBeVisible()
+  await expect(page.getByRole('button', {name:'追加记录',exact:true})).toHaveCount(0)
+})
+
+test('mobile task cards retain the task detail entry', async ({page}) => {
+ await page.setViewportSize({width:390,height:844})
+ await prepare(page)
+ await page.goto('/nodes/106')
+ await page.getByRole('button',{name:'库存扣减接口',exact:true}).click()
+ await expect(page.getByRole('heading',{name:'库存扣减接口',exact:true})).toBeVisible()
+ await expect.poll(async()=>Math.round((await page.locator('.el-drawer').boundingBox()).x)).toBe(0)
+ await page.screenshot({path:'test-results/task-mobile.png'})
+})
+

@@ -110,7 +110,7 @@ async function save() {
     <el-form label-position="top" :disabled="saving || initializing" @submit.prevent="save">
       <el-form-item label="工作项名称" required><el-input v-model="form.name" maxlength="200" placeholder="例如：支付渠道接入" /></el-form-item>
       <el-form-item label="所属位置" required>
-        <el-select v-if="chooseLocation" v-model="location" placeholder="选择功能模块或项目级位置" style="width:100%" @change="changeLocation">
+        <el-select v-if="chooseLocation" :model-value="location < 0 ? undefined : location" placeholder="选择功能模块或项目级位置" style="width:100%" @update:model-value="location = Number($event)" @change="changeLocation">
           <el-option v-for="module in modules" :key="module.id" :label="module.name" :value="module.id" />
           <el-option v-if="projectLevelAllowed" label="项目级工作项" :value="0" />
         </el-select>
@@ -118,7 +118,7 @@ async function save() {
         <small class="field-hint">{{ form.id ? '已有工作项的所属位置保持不变。' : '功能工作选择功能模块；跨模块测试、维护和上线保障选择项目级工作项。' }}</small>
       </el-form-item>
       <el-form-item label="负责人" required>
-        <el-select v-model="form.ownerId" style="width:100%" filterable @change="ownerTouched = true">
+        <el-select :model-value="form.ownerId || undefined" style="width:100%" filterable placeholder="选择负责人" @update:model-value="form.ownerId = Number($event)" @change="ownerTouched = true">
           <el-option v-for="member in selectableMembers(members)" :key="member.id" :label="member.name" :value="member.id" />
         </el-select>
         <small class="field-hint">默认带入模块负责人；项目级工作项默认由项目经理负责。</small>

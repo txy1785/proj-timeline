@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-import { api } from '../api/client'
+import { api, ApiError } from '../api/client'
 import type { Timeline, User } from '../api/types'
 import { useAuthStore } from './auth'
 import { useAppStore } from './app'
@@ -33,14 +33,20 @@ export const useProjectStore = defineStore('project-context', () => {
           api<Timeline>('GET', `/projects/${id}/timeline`), api<User[]>('GET', `/projects/${id}/members`), app.ensure()
         ])
         if (current !== generation) return
-        value.modules.forEach(module => module.nodes?.forEach(node => Object.assign(node, {
-          projectId: id, projectStatus: value.status, moduleId: module.id,
-          moduleName: module.name, moduleOwnerId: module.ownerId
-        })))
+        value.modules.forEach(module => {
+          module.projectId = id
+          module.nodes?.forEach(node => Object.assign(node, {
+            projectId: id, projectStatus: value.status, moduleId: module.id,
+            moduleName: module.name, moduleOwnerId: module.ownerId
+          }))
+        })
         value.projectWorkItems?.forEach(node => Object.assign(node, { projectId: id, projectStatus: value.status }))
         project.value = value; members.value = people
       } catch (e) {
-        if (current === generation) { error.value = (e as Error).message; project.value = undefined; members.value = [] }
+        if (current === generation) {
+          error.value = (e as Error).message
+          if (e instanceof ApiError && (e.status === 403 || e.status === 404)) { project.value = undefined; members.value = [] }
+        }
       } finally {
         if (current === generation) { loading.value = false; pending = undefined }
       }

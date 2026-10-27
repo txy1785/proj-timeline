@@ -8,7 +8,7 @@
 - 业务主线：项目 → 功能模块 → 工作项 → 任务；项目下另有**项目级工作项**（不属于功能模块），承接跨模块的测试、维护、缺陷修复和上线保障。项目还有独立的阶段性目标、成员、周报。逐日工时挂在任务下。工作项另有**交付物清单**，回答“这个工作项要交什么、还缺什么、文件在哪”。
 - `docs/需求文档与产品设计方案.md` 说明产品需求；`docs/接口设计.md` 说明 HTTP 路径、权限和统计口径；`docs/database.sql` 是新库 DDL 参考；实际应用升级由 `backend/src/main/resources/db/migration/` 中的 Flyway 脚本完成。
 - `prototype/` 是早期视觉参考，界面实现以 `frontend/src/` 为准。
-- 2026-10-27 用户要求先设计改善文档与原型图、暂不写代码。本轮设计评审稿见 `docs/体验改善设计方案-v1.md`，静态原型图册见 `prototype/ux-v1/README.md`；它们是待评审方案，不代表当前已实现功能，也不替换现行实体、权限与统计契约。
+- 2026-10-27 已先交付改善文档与原型，随后用户明确授权按方案改动。已实施 [体验改善设计方案-v1](docs/体验改善设计方案-v1.md)：我的工作、项目概览、统一工作项与任务详情、独立日期行时间线、设置/周报流程；验收见 [记录](docs/体验改善验收/README.md)。静态图册仍是视觉参考，正式契约见需求和接口设计。
 
 ## 用户已经确认的关键决定
 
@@ -24,16 +24,21 @@
 10. **模块变更申请**（成员改别人模块的唯一通道）：只覆盖模块的**名称 / 描述 / 负责人**，没有模块编辑权限的项目成员（非 VIEWER）提交并可填申请说明，PM/ADMIN 审批。同一模块同时只允许一个待审批申请（`pending_module_id` 生成列 + 唯一键兜底）；通过时在**同一事务**内改模块并记录审批人/时间，驳回必须填原因；申请人可撤回自己待审批的申请。已有直接编辑权限的人（PM、该模块负责人）调用提交接口返回 409。审批结果与待审批各发一条站内通知（通知枚举扩到 7 类）。
 11. **工作项模型（原“节点”升级）**：模块只做功能划分；模块下是工作项，项目下允许**项目级工作项**（`nodes.module_id` 为空），承接跨模块的测试、维护、缺陷修复和上线保障。工作项类型为 `FEATURE/TEST/MAINTENANCE/BUGFIX/OTHER`；任务类型为 `FEATURE/FIX/BUG/TEST/OTHER`，并可用 `related_node_id` 关联原工作项。成员提缺陷走 `POST /projects/{id}/bugs`：关联工作项进行中则落到该工作项，否则落到当前进行中的项目级 BUGFIX 工作项（没有则 409）；VIEWER 与归档项目拒绝。项目级工作项由 PM/ADMIN 创建，负责人可为任意有效成员；模块工作项仍由模块负责人/PM 管理。模块进度只算本模块工作项，项目进度算全部工作项（含项目级）。
 
+12. **体验主线**：USER 登录默认进入“我的工作”；ADMIN/VIEWER 默认进入项目总览。项目内固定概览、工作项、时间线、文档、周报、设置导航。模块负责人直接编辑本模块名称/描述/负责人，创建/删除/排序仍仅 PM/ADMIN。任务状态提交 expectedStatus，记录独立保存；权限变化保留可复制草稿。
+13. **当前风险与负载展开**：当前受阻风险只计未关闭工作项；关闭项保留历史字段。人员负载的未完成/本周到期数字展开分别与原数字同范围；本周计划人天包含已完成任务，使用 WORKLOAD_PLAN 按周展开。统计数不改变进度算法。
+
 ## 当前实现定位
 
 | 内容 | 当前位置 |
 |---|---|
+| 工作台读取与业务上下文 | `backend/src/main/java/com/projtimeline/workspace/`、`frontend/src/views/MyWorkView.vue` |
+| 项目概览与共享上下文 | `frontend/src/views/ProjectOverviewView.vue`、`stores/project.ts`、`stores/app.ts`、`composables/useProjectContext.ts` |
 | 项目、成员、模块、阶段目标与时间线业务 | `backend/src/main/java/com/projtimeline/project/` |
 | 工作项、任务、逐日工时、工作项交付物 | `backend/src/main/java/com/projtimeline/work/` |
 | 进度派生与聚合口径 | `backend/src/main/java/com/projtimeline/common/ProgressRules.java`（工作项、模块/项目聚合、阶段性目标量化进度）、`project/ProjectService.java`（模块/项目聚合） |
 | 项目权限 | `backend/src/main/java/com/projtimeline/security/PermissionService.java` |
 | 项目设置与阶段目标编辑 | `frontend/src/views/ProjectSettingsView.vue` |
-| 模块卡片与模块工作页 | `frontend/src/views/ModulesView.vue`、`ModuleDetailView.vue` |
+| 工作项/模块工作页 | `frontend/src/views/WorkItemsView.vue`、`ModuleDetailView.vue`；`ModulesView.vue` 为旧路由兼容 |
 | 项目时间线、工作项详情 | `frontend/src/views/TimelineView.vue`、`NodeDetailView.vue` |
 | 路由、会话、HTTP 客户端 | `frontend/src/router.ts`、`stores/auth.ts`、`api/client.ts` |
 | 项目、模块、工作项与任务的文档附件 | `backend/src/main/java/com/projtimeline/file/`、`frontend/src/components/AttachmentPanel.vue`、`AttachmentPreview.vue`、`ProjectDocsView.vue`、`utils/attachment.ts` |
@@ -45,7 +50,7 @@
 - 后端：Java 17、Spring Boot 3.5.16、MyBatis-Plus 3.5.17、Spring Security、Flyway、MySQL 8。
 - 前端：Vue 3、TypeScript、Vite、Vue Router、Pinia、Element Plus、Axios；使用 npm 和 `package-lock.json`。文件预览额外依赖 `docx-preview` 与 `read-excel-file`（按需动态加载，不进入主包）。
 - 当前 Flyway 版本为 V12。V1 建表，V2 将项目开始日期设为必填并过渡性增加模块日期，V3 建立 `project_stage_targets` 并移除模块日期，V4 建立 `attachments` 文档附件表，V5 只修正 `owner_type` 注释（V4 已应用到环境，不得再改写），V6 建立 `task_notes` 并让 `attachments.owner_type` 支持 TASK，V7 只把 `nodes.progress` 列注释改为「已弃用」（进度改为任务完成率派生，保留列与历史值，不删列），V8 给 `tasks` 增加 `situation`/`handling` 并为 `node_logs.action` 增加 `TASK_UPDATE`/`TASK_DELETE`，V9 建立 `node_deliverables` 并为 `node_logs.action` 增加 `DELIVERABLE_ADD`/`DELIVERABLE_UPDATE`/`DELIVERABLE_DELETE`，V10 给 `project_stage_targets` 增加四个可空指标列（`metric_name/metric_unit/metric_target/metric_current`），V11 建立 `module_change_requests` 并把 `notifications.type` 扩到 7 类，V12 让 `nodes.module_id` 可空、增加 `nodes.type`，给 `tasks` 增加 `kind` 和 `related_node_id`。已有迁移文件不能改写；新变更追加 V13 及以后版本。
-- 当前 OpenAPI 有 68 个 `/api` 操作（V12 增加成员提缺陷接口 `POST /projects/{id}/bugs`）。前端生成类型在 `frontend/src/api/schema.d.ts`，后端运行时用 `npm --prefix frontend run api:types` 更新（脚本默认 8080，本机后端在 58080 时需手动指定 URL）。
+- 当前 OpenAPI 有 73 个 `/api` 操作：增加业务上下文、工作台任务/管理事项/负载工作项与缺陷接收预判 5 个读取接口。前端 `frontend/src/api/schema.d.ts` 已由运行中的新版后端生成；默认脚本端口 8080，本机服务其他端口需显式指定。
 - 认证为 8 小时 JWT，仅保存用户 ID；每次请求重新检查账号启用状态与角色。浏览器会话存于 `sessionStorage`。
 - 日期判定使用注入的 `Clock`，默认业务时区 `Asia/Shanghai`。延期和临近到期由服务端实时计算。
 - 演示数据只在显式执行 `docs/demo_seed.sql` 时导入；不属于 Flyway 正式迁移。根目录 `.env` 和本机数据库凭据不得写入文档或提交。
@@ -67,10 +72,10 @@
 
 ## 验证与已知边界
 
-- 2026-10-26 用户反馈：整体繁琐、目的不清晰、操作流程不明确。已用本地真实服务按 PM、普通执行成员、VIEWER 三种角色走查，现状与待确认建议见 [用户体验走查与简化建议](docs/用户体验走查与简化建议.md)。已观察到工作项页侧栏误用工作项 ID、模块详情丢失项目导航、时间线条块重叠/无日期刻度、缺少“我的任务”、部分管理按钮未按项目职务隐藏等问题；本轮未改功能，建议尚未确认为新产品契约。
+- 2026-10-26 的体验走查问题现已按批准方案实施：修正工作项/模块的项目导航、增加我的工作与独立项目概览、按日期独立分行的时间线、按项目职务显示操作。历史问题证据保留在 [走查记录](docs/用户体验走查与简化建议.md)，不代表当前仍存在。
 
-- 基本检查：`mvn -gs .mvn/settings.xml -s .mvn/settings.xml -f backend/pom.xml test`（当前 33 个单测；变更申请这类依赖数据库的流程用临时库端到端覆盖，没有单测）；`npm --prefix frontend run lint`、`typecheck`、`build`。浏览器路径测试在 `frontend/tests/roles.spec.ts`。
-- `PLAN.md` 中早期“47 个接口”“11 个页面”“10/11 张表”是当时版本的验证快照。当前接口为 68 个、表 16 张（含 `flyway_schema_history`），页面已新增模块工作页与项目文档页；不能把早期数字当成现状。
+- 本轮验证：Maven 55 项测试通过；前端 lint/typecheck/build 通过；Playwright 15 项角色、任务与体验回归通过；另在明确命名的本机隔离 MySQL 库执行真实 HTTP 与浏览器流程。详细命令、截图、边界见 [验收记录](docs/体验改善验收/README.md)。
+- `PLAN.md` 中早期接口/页面/表数量是历史快照。当前接口 73 个、表 16 张（含 flyway_schema_history），本轮无数据库结构或迁移变更；不可把早期数字当现状。
 - 当前工作站此前未运行 Docker Compose 的真实构建；部署仍需在具备 Docker 的目标环境验证。
 - 文件存储当前用本地磁盘（`app.storage.root` 默认 `./data/files`，容器内 `/app/data/files` 挂 `file-data` 卷）。未接入 MinIO/对象存储：存储层已抽成 `FileStorage` 接口，切换时只加实现并改配置。单文件上限 50MB，Nginx 侧 `client_max_body_size 60m`，后端 `spring.servlet.multipart` 与 `app.storage.max-file-bytes` 同步。
 - Git 远程：`https://github.com/txy1785/proj-timeline.git`。分支模型：`main` 版本上线、`develop` 开发主线、`feature/<描述>` 功能分支从 `develop` 拉出；功能代码必须经独立审核（干净会话/子代理）后合并 `develop`，发布从 `develop` 合并 `main` 并打 tag。GitHub 默认分支为 `main`，远程仅保留 `main` 与 `develop`（旧 `master` 已删除）。提交前先 `git status` 核对未被 .gitignore 遗漏的文件。
