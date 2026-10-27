@@ -1,0 +1,207 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { api } from '../api/client'
+import type { NodeItem, Task, TaskNote, TaskStatus, Timeline, User } from '../api/types'
+import { useAuthStore } from '../stores/auth'
+import { canManageNode, canManageTask, isNodeClosed } from '../utils/permissions'
+import { TASK_KIND_LABELS, TASK_NEXT_ACTION, TASK_STATUS_LABELS, TASK_STATUS_TYPES } from '../utils/task'
+import { formatDateTime } from '../utils/format'
+import AttachmentPanel from './AttachmentPanel.vue'
+import TaskFormDialog from './TaskFormDialog.vue'
+
+const props = defineProps<{ modelValue: boolean; nodeId: number; taskId: number }>()
+const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void; (e: 'updated'): void; (e: 'closed'): void }>()
+const auth = useAuthStore()
+const router = useRouter()
+const node = ref<NodeItem>()
+const task = ref<Task>()
+const members = ref<User[]>([])
+const notes = ref<TaskNote[]>([])
+const noteText = ref('')
+const loading = ref(false)
+const error = ref('')
+const notesError = ref('')
+const savingNote = ref(false)
+const savingStatus = ref(false)
+const deletingNote = ref(0)
+const activeTab = ref('description')
+const editing = ref(false)
+const relatedWorkItems = ref<NodeItem[]>([])
+let generation = 0
+const pending = computed(() => savingNote.value || savingStatus.value || deletingNote.value > 0)
+const canAct = computed(() => !!task.value && !loading.value && !error.value && canManageTask(auth.user, members.value, node.value, task.value))
+const canChangeStatus = computed(() => canAct.value && !isNodeClosed(node.value))
+const canEdit = computed(() => !loading.value && !error.value && canManageNode(auth.user, members.value, node.value) && !isNodeClosed(node.value))
+const archived = computed(() => node.value?.projectStatus === 'ARCHIVED')
+const nextAction = computed(() => task.value ? TASK_NEXT_ACTION[task.value.status] : undefined)
+
+async function load() {
+  const current = ++generation
+  const nodeId = props.nodeId
+  const taskId = props.taskId
+  loading.value = true; error.value = ''; notesError.value = ''
+  try {
+    if (!Number.isSafeInteger(nodeId) || nodeId <= 0 || !Number.isSafeInteger(taskId) || taskId <= 0) throw new Error('任务链接无效')
+    const value = await api<NodeItem>('GET', `/nodes/${nodeId}`)
+    const found = value.tasks?.find(item => item.id === taskId && item.nodeId === nodeId)
+    if (!found) throw new Error('任务已删除或不属于这个工作项')
+    const [people, records] = await Promise.allSettled([
+      api<User[]>('GET', `/projects/${value.projectId}/members`),
+      api<TaskNote[]>('GET', `/tasks/${taskId}/notes`)
+    ])
+    if (current !== generation || !props.modelValue) return
+    if (people.status === 'rejected') throw people.reason
+    node.value = value; task.value = found; members.value = people.value
+    if (records.status === 'fulfilled') notes.value = records.value
+    else { notes.value = []; notesError.value = (records.reason as Error).message }
+  } catch (e) {
+    if (current === generation) { error.value = (e as Error).message; task.value = undefined; node.value = undefined; members.value = [] }
+  } finally { if (current === generation) loading.value = false }
+}
+
+watch([() => props.modelValue, () => props.nodeId, () => props.taskId], ([open, nodeId, taskId], old) => {
+  if (!open) { generation++; loading.value = false; return }
+  if (!old?.[0] || nodeId !== old[1] || taskId !== old[2]) {
+    noteText.value = ''; notes.value = []; node.value = undefined; task.value = undefined
+    activeTab.value = 'description'; relatedWorkItems.value = []
+    void load()
+  }
+}, { immediate: true })
+
+async function saveNote(): Promise<boolean> {
+  if (!canAct.value || !task.value || savingNote.value) return false
+  const content = noteText.value.trim()
+  if (!content) { ElMessage.warning('请先填写本次进展、问题或结果'); return false }
+  savingNote.value = true
+  try {
+    await api('POST', `/tasks/${task.value.id}/notes`, { content })
+    noteText.value = ''
+    await load()
+    emit('updated'); ElMessage.success('进展记录已保存')
+    return true
+  } catch (e) { ElMessage.error((e as Error).message); return false }
+  finally { savingNote.value = false }
+}
+
+async function allowLeave(): Promise<boolean> {
+  if (pending.value || editing.value) { ElMessage.info('请先完成当前操作'); return false }
+  if (!noteText.value.trim()) return true
+  try {
+    await ElMessageBox.confirm('记录尚未保存。可以保存后关闭，或放弃本次输入；关闭此提示可继续编辑。', '未保存的进展记录', {
+      type: 'warning', confirmButtonText: '保存并关闭', cancelButtonText: '放弃并关闭', distinguishCancelAndClose: true
+    })
+    return await saveNote()
+  } catch (action) { return action === 'cancel' }
+}
+
+async function requestClose(done?: () => void) {
+  if (!await allowLeave()) return
+  noteText.value = ''
+  if (done) done()
+  else emit('update:modelValue', false)
+}
+
+onBeforeRouteLeave(async () => !props.modelValue || await allowLeave())
+onBeforeRouteUpdate(async (to, from) => !props.modelValue || (to.path === from.path && to.query.task === from.query.task) || await allowLeave())
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (props.modelValue && noteText.value.trim()) { event.preventDefault(); event.returnValue = '' }
+}
+onMounted(() => window.addEventListener('beforeunload', beforeUnload))
+onBeforeUnmount(() => { generation++; window.removeEventListener('beforeunload', beforeUnload) })
+
+async function changeStatus(status: TaskStatus) {
+  const current = task.value
+  if (!current || !canChangeStatus.value || pending.value || status === current.status) return
+  savingStatus.value = true
+  try {
+    await api<Task>('PUT', `/tasks/${current.id}/status`, { status, expectedStatus: current.status })
+    await load(); emit('updated')
+    ElMessage.success(`任务已设为${TASK_STATUS_LABELS[status]}`)
+  } catch (e) {
+    ElMessage.error((e as Error).message)
+    await load(); emit('updated')
+  } finally { savingStatus.value = false }
+}
+
+function canDeleteNote(note: TaskNote) {
+  return !loading.value && !error.value && node.value?.projectStatus === 'ACTIVE' && !!auth.user
+    && auth.user.active !== false && !auth.isViewer
+    && (canManageNode(auth.user, members.value, node.value) || note.authorId === auth.user.id)
+}
+async function removeNote(note: TaskNote) {
+  if (!canDeleteNote(note) || pending.value) return
+  try { await ElMessageBox.confirm('删除后不能恢复这条记录，确定删除？', '删除记录', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '保留' }) }
+  catch { return }
+  deletingNote.value = note.id
+  try { await api('DELETE', `/task-notes/${note.id}`); await load(); emit('updated'); ElMessage.success('记录已删除') }
+  catch (e) { ElMessage.error((e as Error).message) }
+  finally { deletingNote.value = 0 }
+}
+
+async function openEdit() {
+  if (!canEdit.value || !node.value || pending.value) return
+  try {
+    const timeline = await api<Timeline>('GET', `/projects/${node.value.projectId}/timeline`)
+    relatedWorkItems.value = [...timeline.modules.flatMap(module => module.nodes || []), ...(timeline.projectWorkItems || [])]
+    editing.value = true
+  } catch (e) { ElMessage.error((e as Error).message) }
+}
+async function afterEdit() { await load(); emit('updated') }
+async function openWorkItem() {
+  if (!node.value || !await allowLeave()) return
+  noteText.value = ''
+  emit('update:modelValue', false)
+  await router.push(`/nodes/${node.value.id}`)
+}
+</script>
+
+<template>
+  <el-drawer :model-value="modelValue" size="min(760px, 100vw)" :with-header="false" :before-close="requestClose" :close-on-click-modal="false" class="task-detail-drawer" @update:model-value="emit('update:modelValue', $event)" @closed="emit('closed')">
+    <div v-loading="loading" class="task-drawer-content">
+      <header class="drawer-heading">
+        <div><p class="muted">{{ node?.projectName || '项目任务' }}<template v-if="node"> / {{ node.name }}</template></p><h2>{{ task?.name || (loading ? '正在加载任务' : '任务详情') }}</h2></div>
+        <el-button text aria-label="关闭任务详情" :disabled="pending" @click="requestClose()">关闭</el-button>
+      </header>
+      <div v-if="error" class="drawer-error" role="alert"><el-alert :title="error" type="error" :closable="false" /><p class="muted">任务可能已删除，或你的读取权限已变化。</p><template v-if="noteText.trim()"><p class="muted">未保存的记录草稿，可复制后保留：</p><el-input :model-value="noteText" type="textarea" :rows="4" readonly aria-label="未保存的记录草稿" /></template><el-button @click="load">重新加载</el-button><el-button @click="requestClose()">返回列表</el-button></div>
+      <template v-else-if="task && node">
+        <div class="task-meta"><el-tag :type="TASK_STATUS_TYPES[task.status]">{{ TASK_STATUS_LABELS[task.status] }}</el-tag><span>执行人 {{ task.assigneeName }}</span><span>截止 {{ task.dueDate || '未设置' }}</span></div>
+        <el-alert v-if="archived" title="项目已归档，任务、记录与附件只读" type="info" :closable="false" />
+        <el-alert v-else-if="isNodeClosed(node)" title="工作项已关闭，不能再修改任务内容或状态；补充记录和附件仍按原有权限处理" type="info" :closable="false" />
+        <div v-if="canChangeStatus || canEdit" class="task-drawer-actions">
+          <el-button v-if="canChangeStatus && nextAction" type="primary" :loading="savingStatus" :disabled="pending && !savingStatus" @click="changeStatus(nextAction.next)">{{ task.status === 'DOING' ? '标记完成' : task.status === 'TODO' ? '开始任务' : '重新开始' }}</el-button>
+          <el-button v-if="canEdit" :disabled="pending" @click="openEdit">编辑任务</el-button>
+          <el-dropdown v-if="canChangeStatus && task.status !== 'TODO'" :disabled="pending" @command="changeStatus('TODO')"><el-button :disabled="pending">更多</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="TODO">设为待完成</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
+        </div>
+        <el-tabs v-model="activeTab" class="task-drawer-tabs">
+          <el-tab-pane label="说明" name="description">
+            <dl class="task-description"><dt>类型</dt><dd>{{ TASK_KIND_LABELS[task.kind || 'FEATURE'] }}</dd><template v-if="task.relatedNodeName"><dt>关联工作项</dt><dd>{{ task.relatedNodeName }}</dd></template><dt>描述</dt><dd>{{ task.description || '暂无描述，可在进展记录中补充执行情况。' }}</dd><template v-if="task.situation"><dt>任务情况</dt><dd>{{ task.situation }}</dd></template><template v-if="task.handling"><dt>处理方式</dt><dd>{{ task.handling }}</dd></template><dt>计划人天</dt><dd>{{ task.estimateDays ?? '尚未估算' }}</dd></dl>
+          </el-tab-pane>
+          <el-tab-pane :label="`进展记录 ${notes.length}`" name="records">
+            <div v-if="canAct" class="note-composer"><el-input v-model="noteText" type="textarea" :rows="4" maxlength="2000" show-word-limit :disabled="savingNote" placeholder="记录本次进展、问题或结果" aria-label="进展记录内容" /><el-button type="primary" :loading="savingNote" :disabled="pending && !savingNote" @click="saveNote">追加记录</el-button></div>
+            <el-alert v-if="notesError" :title="`记录暂时无法加载：${notesError}`" type="error" :closable="false" />
+            <div v-else-if="!notes.length" class="empty">暂无记录<template v-if="canAct">，可补充本次进展或处理结果。</template></div>
+            <article v-for="note in notes" :key="note.id" class="task-note"><div class="note-meta"><strong>{{ note.authorName }}</strong><time>{{ formatDateTime(note.createdAt) }}</time><el-button v-if="canDeleteNote(note)" link type="danger" :loading="deletingNote === note.id" :disabled="pending && deletingNote !== note.id" @click="removeNote(note)">删除</el-button></div><p>{{ note.content }}</p></article>
+          </el-tab-pane>
+          <el-tab-pane label="附件" name="files" lazy><AttachmentPanel :key="task.id" owner-type="TASK" :owner-id="task.id" :can-manage="canAct" :archived="archived" :show-category-nav="false" hint="任务执行人可以上传交付物或参考资料；项目成员可预览、下载。" /></el-tab-pane>
+        </el-tabs>
+        <div class="drawer-parent"><span class="muted">所属工作项</span><el-button link type="primary" @click="openWorkItem">{{ node.name }} →</el-button></div>
+        <TaskFormDialog v-model="editing" :node-id="node.id" :task="task" :members="members" :default-owner-id="node.ownerId" :work-items="relatedWorkItems" @saved="afterEdit" />
+      </template>
+    </div>
+  </el-drawer>
+</template>
+
+<style scoped>
+.task-drawer-content{min-height:200px;padding:8px 6px 28px}
+.drawer-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:22px}
+.drawer-heading p{margin:0 0 9px;font-size:14px}.drawer-heading h2{margin:0;font-size:26px;overflow-wrap:anywhere}
+.task-meta{display:flex;gap:18px;align-items:center;flex-wrap:wrap;font-size:14px;color:var(--muted);margin-bottom:20px}
+.task-drawer-actions{display:flex;gap:10px;flex-wrap:wrap;margin:22px 0}
+.task-drawer-tabs{margin-top:22px}.task-description{margin:8px 0 24px}.task-description dt{color:var(--muted);font-size:14px;margin:19px 0 6px}.task-description dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.note-composer{margin:8px 0 22px}.note-composer .el-button{margin-top:12px}
+.task-note{padding:18px 0;border-bottom:1px solid var(--line)}.note-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:14px}.note-meta time{color:var(--muted)}.task-note p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;margin:12px 0 0}
+.drawer-parent{border-top:1px solid var(--line);padding-top:20px;margin-top:24px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}.drawer-error p{line-height:1.7}
+@media(max-width:600px){.drawer-heading h2{font-size:22px}.task-meta{gap:10px}.task-drawer-content{padding:0}}
+</style>
