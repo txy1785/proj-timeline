@@ -16,7 +16,25 @@ export function canManageNode(user: User | null | undefined, members: User[], no
 
 export function canManageTask(user: User | null | undefined, members: User[], node: NodeItem | null | undefined, task: Task): boolean {
   return !!user && user.active !== false && user.globalRole !== 'VIEWER' && node?.projectStatus === 'ACTIVE'
-    && (isWorkItemManager(user, members, node) || task.assigneeId === user.id)
+    && (isWorkItemManager(user, members, taskWorkItemContext(node, task)) || task.assigneeId === user.id)
+}
+
+export function taskWorkItemContext(node: NodeItem | null | undefined, task: Task): NodeItem | undefined {
+  if (!node) return undefined
+  if (task.kind !== 'BUG' || !task.originNodeId) return node
+  return { ...node, id: task.originNodeId, name: task.originNodeName || node.name,
+    status: task.originNodeStatus || node.status, ownerId: task.originOwnerId ?? node.ownerId,
+    moduleOwnerId: task.originModuleOwnerId ?? undefined }
+}
+
+export function canChangeTaskStatus(user: User | null | undefined, members: User[], node: NodeItem | null | undefined, task: Task): boolean {
+  const origin = taskWorkItemContext(node, task)
+  return canManageTask(user, members, node, task) && (task.kind === 'BUG' ? origin?.status !== 'CANCELLED' : !isNodeClosed(origin))
+}
+
+export function canEditTask(user: User | null | undefined, members: User[], node: NodeItem | null | undefined, task: Task): boolean {
+  const origin = taskWorkItemContext(node, task)
+  return canManageNode(user, members, origin) && (task.kind === 'BUG' ? origin?.status !== 'CANCELLED' : !isNodeClosed(origin))
 }
 
 export function canEditModule(user: User | null | undefined, members: User[], module: ModuleItem): boolean {
