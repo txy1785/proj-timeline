@@ -3,7 +3,7 @@
 export async function prepare(page, role = 'USER', userId = 6, options = {}) {
   const state = {
     status: options.closed ? 'DONE' : 'IN_PROGRESS', projectStatus: options.archived ? 'ARCHIVED' : 'ACTIVE',
-    failNextStatus: false, writes: [], notes: [], tasks: [
+    failNextStatus: false, writes: [], notes: [], extraModules: [], tasks: [
       { id: 11, nodeId: 106, name: '库存扣减接口', assigneeId: 6, assigneeName: '钱工', status: options.closed ? 'DONE' : 'DOING', dueDate: '2026-10-26', description: '已有说明', kind: 'BUG', relatedNodeId: 107, relatedNodeName: '原功能工作项', situation: '已有情况', handling: '已有处理方式', estimateDays: 2 },
       { id: 12, nodeId: 106, name: '接口联调', assigneeId: 4, assigneeName: '赵工', status: options.closed ? 'DONE' : 'TODO' },
       { id: 13, nodeId: 106, name: '接口说明', assigneeId: 4, assigneeName: '赵工', status: 'DONE' }
@@ -26,7 +26,7 @@ export async function prepare(page, role = 'USER', userId = 6, options = {}) {
   const project = () => ({
     id: 1, name: '商城系统开发', code: 'MALL', planStart: '2026-10-05', planEnd: '2026-11-13', status: state.projectStatus, progress: 33,
     stats: { total: 1, done: 0, inProgress: 1, overdue: 1, near: 0, blocked: 0 },
-    stageTargets: [], modules: [{ id: 2, projectId: 1, name: '订单与支付', ownerId: 4, ownerName: '赵工', nodes: [node()] }],
+    stageTargets: [], modules: [{ id: 2, projectId: 1, name: '订单与支付', ownerId: 4, ownerName: '赵工', nodes: [node()] }, ...state.extraModules],
     projectWorkItems: [{ id: 107, projectId: 1, name: '原功能工作项', type: 'FEATURE', status: 'IN_PROGRESS', ownerId: 4, ownerName: '赵工', planStart: '2026-10-01', planEnd: '2026-10-20', progress: 0, flags: { overdue: false, blocked: false, near: false } }]
   })
   await page.addInitScript(({ role, userId }) => {

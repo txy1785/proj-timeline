@@ -45,12 +45,14 @@ const filteredNodes = computed(() => allNodes.value.filter(node => {
   return true
 }))
 const groups = computed(() => {
+  const showEmptyModules = !filters.q.trim() && filters.owner === 'all' && filters.status === 'ALL' && !filters.risk && !filters.mine
   const modules = (project.value?.modules || []).map(module => ({ id: module.id, name: module.name, ownerId: module.ownerId,
-    ownerName: module.ownerName, nodes: filteredNodes.value.filter(node => node.moduleId === module.id) }))
-  const general = { id: 0, name: '项目级工作项', ownerId: pmId.value, ownerName: '跨模块的测试、维护与上线保障', nodes: filteredNodes.value.filter(node => !node.moduleId) }
-  return [...modules, general].filter(group => group.nodes.length)
+    ownerName: module.ownerName, totalNodes: module.nodes?.length || 0, nodes: filteredNodes.value.filter(node => node.moduleId === module.id) }))
+  const general = { id: 0, name: '项目级工作项', ownerId: pmId.value, ownerName: '跨模块的测试、维护与上线保障', totalNodes: project.value?.projectWorkItems.length || 0, nodes: filteredNodes.value.filter(node => !node.moduleId) }
+  return [...modules, general].filter(group => group.nodes.length || (group.id > 0 && showEmptyModules
+    && (filters.module === 'all' || filters.module === String(group.id))))
 })
-const filtering = computed(() => !!filters.q || filters.module !== 'all' || filters.owner !== 'all' || filters.status !== 'ALL' || !!filters.risk || filters.mine)
+const filtering = computed(() => !!filters.q.trim() || filters.module !== 'all' || filters.owner !== 'all' || filters.status !== 'ALL' || !!filters.risk || filters.mine)
 watch(() => route.query, query => {
   filters.risk = ['exception', 'overdue', 'blocked', 'near'].includes(String(query.risk)) ? String(query.risk) : ''
   filters.owner = query.ownerId && Number(query.ownerId) > 0 ? String(query.ownerId) : 'all'
@@ -82,10 +84,10 @@ async function removeModule(module: ModuleItem) {
         <el-select v-model="filters.risk" clearable placeholder="全部风险" aria-label="风险"><el-option label="延期或受阻" value="exception" /><el-option label="已延期" value="overdue" /><el-option label="受阻" value="blocked" /><el-option label="临近到期" value="near" /></el-select>
         <el-checkbox v-if="hasManagement" v-model="filters.mine">我的管理范围</el-checkbox><el-button v-if="filtering" link type="primary" @click="resetFilters">清除筛选</el-button>
       </section>
-      <section v-if="!filteredNodes.length" class="surface empty"><h2>{{ filtering ? '当前筛选下没有工作项' : '项目还没有工作项' }}</h2><p>{{ filtering ? '可以清除筛选查看全部工作项。' : '先建立一次明确交付，再拆分执行任务。' }}</p><el-button v-if="filtering" @click="resetFilters">清除筛选</el-button><el-button v-else-if="canCreateWorkItem" type="primary" @click="createWork()">建立首个工作项</el-button><el-button v-if="!filtering && isPm && active" @click="editModule()">新建功能模块</el-button></section>
+      <section v-if="!groups.length" class="surface empty"><h2>{{ filtering ? '当前筛选下没有工作项' : '项目还没有工作项' }}</h2><p>{{ filtering ? '可以清除筛选查看全部工作项。' : '先建立一次明确交付，再拆分执行任务。' }}</p><el-button v-if="filtering" @click="resetFilters">清除筛选</el-button><el-button v-else-if="canCreateWorkItem" type="primary" @click="createWork()">建立首个工作项</el-button><el-button v-if="!filtering && isPm && active" @click="editModule()">新建功能模块</el-button></section>
       <section v-for="group in groups" :key="group.id" class="surface work-group">
         <div class="section-heading"><div><h2><RouterLink v-if="group.id" :to="`/projects/${id}/modules/${group.id}`">{{ group.name }}</RouterLink><template v-else>{{ group.name }}</template> <small>{{ group.nodes.length }}</small></h2><p class="muted">{{ group.id ? '模块负责人 · ' + group.ownerName : group.ownerName }}</p></div><el-button v-if="active && !auth.isViewer && (isPm || (group.id > 0 && group.ownerId === auth.user?.id))" link type="primary" @click="createWork(group.id || null)">新建工作项</el-button></div>
-        <el-table :data="group.nodes" empty-text="暂无工作项" @row-click="openNode">
+        <el-table :data="group.nodes" :empty-text="group.totalNodes ? '暂无未取消的工作项' : '本模块还没有工作项'" @row-click="openNode">
           <el-table-column prop="name" label="工作项" min-width="210"><template #default="scope"><el-button link type="primary" @click.stop="openNode(scope.row)">{{ scope.row.name }}</el-button><small class="row-type">{{ WORK_ITEM_TYPE_LABELS[scope.row.type as NodeItem['type']] }}</small></template></el-table-column>
           <el-table-column prop="ownerName" label="负责人" width="105" />
           <el-table-column prop="planEnd" label="计划完成" width="125" />
