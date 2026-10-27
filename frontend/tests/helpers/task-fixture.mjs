@@ -63,4 +63,3 @@ export async function prepare(page, role = 'USER', userId = 6, options = {}) {
   })
   return state
 }
-

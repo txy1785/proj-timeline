@@ -97,4 +97,3 @@ test('mobile task cards retain the task detail entry', async ({page}) => {
  await expect.poll(async()=>Math.round((await page.locator('.el-drawer').boundingBox()).x)).toBe(0)
  await page.screenshot({path:'test-results/task-mobile.png'})
 })
-
