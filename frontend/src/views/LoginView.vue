@@ -22,7 +22,7 @@ async function submit() {
 </script>
 <template>
   <div class="login-page">
-    <section class="login-visual"><div class="brand"><span class="brand-mark">时</span>项目时间线</div><h1>知道下一步，推进每次交付。</h1><p>安排交付、推进任务、处理风险，让团队清楚谁在什么时候完成什么。</p></section>
+    <section class="login-visual"><div class="brand"><span class="brand-mark">时</span>项目时间线</div><h1>知道下一步，推进每次交付。</h1><p>安排功能交付、提交资料、跟进 Bug，让团队清楚谁在什么时候完成什么。</p></section>
     <section class="login-form"><div class="login-card"><p class="muted">欢迎回来</p><h2>登录工作台</h2><el-form label-position="top" @submit.prevent="submit"><el-form-item label="用户名"><el-input v-model="form.username" autocomplete="username" size="large" /></el-form-item><el-form-item label="密码"><el-input v-model="form.password" type="password" show-password autocomplete="current-password" size="large" @keyup.enter="submit" /></el-form-item><el-button type="primary" size="large" style="width:100%" :loading="loading" @click="submit">登录</el-button></el-form></div></section>
   </div>
 </template>

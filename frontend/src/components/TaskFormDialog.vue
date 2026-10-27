@@ -21,6 +21,7 @@ const form = reactive({
   relatedNodeId: undefined as number | undefined, situation: '', handling: '',
   estimateDays: undefined as number | undefined
 })
+const isBug = computed(() => props.task?.kind === 'BUG')
 const saving = ref(false)
 const expanded = ref<string[]>([])
 const baseline = ref('')
@@ -67,7 +68,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 
 async function save() {
   if (saving.value) return
-  if (!form.name.trim()) { ElMessage.warning('请填写任务名称'); return }
+  if (!form.name.trim()) { ElMessage.warning(isBug.value ? '请填写Bug标题' : '请填写任务名称'); return }
   if (!options.value.some(member => member.id === form.assigneeId)) {
     ElMessage.warning('请选择项目内有效且非只读的执行人'); return
   }
@@ -84,21 +85,21 @@ async function save() {
     baseline.value = JSON.stringify(form)
     emit('update:modelValue', false)
     emit('saved', task)
-    ElMessage.success(props.task ? '任务已更新' : '任务已创建')
+    ElMessage.success(isBug.value ? 'Bug已更新' : props.task ? '任务已更新' : '任务已创建')
   } catch (error) { ElMessage.error((error as Error).message) }
   finally { saving.value = false }
 }
 </script>
 
 <template>
-  <el-dialog :model-value="modelValue" :title="task ? '编辑任务' : '新建任务'" width="min(600px, calc(100vw - 28px))" :before-close="requestClose" :close-on-click-modal="false" @update:model-value="emit('update:modelValue', $event)">
-    <p class="muted task-form-context">任务归属于当前工作项；补充信息可以稍后完善。</p>
+  <el-dialog :model-value="modelValue" :title="isBug ? '编辑Bug' : task ? '编辑任务' : '新建任务'" width="min(600px, calc(100vw - 28px))" :before-close="requestClose" :close-on-click-modal="false" @update:model-value="emit('update:modelValue', $event)">
+    <p class="muted task-form-context">{{ isBug ? '独立跟踪问题修复，关联功能和Bug类型保持不变。' : '保留历史任务信息；补充信息可以稍后完善。' }}</p>
     <el-form label-position="top" :disabled="saving" @submit.prevent="save">
-      <el-form-item label="任务名称" required>
+      <el-form-item :label="isBug ? 'Bug标题' : '任务名称'" required>
         <el-input v-model="form.name" maxlength="200" placeholder="例如：验证库存不足分支" />
       </el-form-item>
       <div class="task-form-grid">
-        <el-form-item label="执行人">
+        <el-form-item :label="isBug ? '负责人' : '执行人'">
           <el-select v-model="form.assigneeId" filterable style="width:100%">
             <el-option v-if="unavailableAssignee" :value="form.assigneeId" :label="`${task?.assigneeName || '原执行人'}（已不可指派）`" disabled />
             <el-option v-for="member in options" :key="member.id" :value="member.id" :label="member.name" />
@@ -110,30 +111,30 @@ async function save() {
         </el-form-item>
       </div>
       <el-collapse v-model="expanded" class="task-more-fields">
-        <el-collapse-item name="details" title="更多信息（描述、类型、关联、计划人天）">
+        <el-collapse-item name="details" :title="isBug ? '更多信息（问题描述、处理方式）' : '更多信息（描述、类型、关联、计划人天）'">
           <el-form-item label="描述"><el-input v-model="form.description" type="textarea" :rows="3" /></el-form-item>
           <div class="task-form-grid">
-            <el-form-item label="类型">
-              <el-select v-model="form.kind" style="width:100%"><el-option v-for="kind in TASK_KINDS" :key="kind" :value="kind" :label="TASK_KIND_LABELS[kind]" /></el-select>
+            <el-form-item v-if="!isBug" label="类型">
+              <el-select v-model="form.kind" style="width:100%"><el-option v-for="kind in TASK_KINDS.filter(value => value !== 'BUG')" :key="kind" :value="kind" :label="TASK_KIND_LABELS[kind]" /></el-select>
             </el-form-item>
-            <el-form-item label="计划人天（可选）">
+            <el-form-item v-if="!isBug" label="计划人天（可选）">
               <el-input-number v-model="form.estimateDays" :min="0" :step="0.5" placeholder="尚未估算" style="width:100%" />
             </el-form-item>
           </div>
-          <el-form-item label="关联工作项（可选）">
+          <el-form-item v-if="!isBug" label="关联工作项（可选）">
             <el-select v-model="form.relatedNodeId" clearable filterable placeholder="不关联" style="width:100%">
               <el-option v-if="originalRelatedMissing && task?.relatedNodeId" :value="task.relatedNodeId" :label="task.relatedNodeName || '原关联工作项'" />
               <el-option v-for="item in workItems" :key="item.id" :value="item.id" :label="`${item.moduleName || '项目级'} / ${item.name}`" />
             </el-select>
           </el-form-item>
-          <el-form-item label="任务情况"><el-input v-model="form.situation" type="textarea" :rows="2" maxlength="2000" show-word-limit placeholder="当前进展、问题或背景" /></el-form-item>
+          <el-form-item :label="isBug ? '问题背景' : '任务情况'"><el-input v-model="form.situation" type="textarea" :rows="2" maxlength="2000" show-word-limit placeholder="当前进展、问题或背景" /></el-form-item>
           <el-form-item label="处理方式"><el-input v-model="form.handling" type="textarea" :rows="2" maxlength="2000" show-word-limit placeholder="准备怎么处理、已采取的措施或结果" /></el-form-item>
         </el-collapse-item>
       </el-collapse>
     </el-form>
     <template #footer>
       <el-button :disabled="saving" @click="requestClose()">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="save">{{ task ? '保存任务' : '创建任务' }}</el-button>
+      <el-button type="primary" :loading="saving" @click="save">{{ isBug ? '保存Bug' : task ? '保存任务' : '创建任务' }}</el-button>
     </template>
   </el-dialog>
 </template>

@@ -33,7 +33,7 @@ public class WorkController {
     ApiResponse<Map<String, Object>> updateNode(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.updateNode(id, body)); }
 
     @PostMapping("/nodes/{id}/status")
-    ApiResponse<Map<String, Object>> nodeStatus(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.changeNodeStatus(id, String.valueOf(body.get("status")))); }
+    ApiResponse<Map<String, Object>> nodeStatus(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.changeNodeStatus(id, String.valueOf(body.get("status")), RequestValues.text(body, "expectedStatus"))); }
 
     /**
      * 已废弃：工作项进度改由任务完成率派生。保留路由只为让旧客户端得到明确提示，不修改任何数据；
@@ -43,7 +43,7 @@ public class WorkController {
     @Hidden
     @PutMapping("/nodes/{id}/progress")
     ApiResponse<Void> progress(@PathVariable long id) {
-        throw BusinessException.conflict("工作项进度由任务完成率自动计算，不再支持手动设置");
+        throw BusinessException.conflict("工作项按交付状态确认完成，不支持手动设置进度");
     }
 
     @PostMapping("/nodes/{id}/block")

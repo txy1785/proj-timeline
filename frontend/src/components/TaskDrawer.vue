@@ -5,8 +5,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api/client'
 import type { NodeItem, Task, TaskNote, TaskStatus, Timeline, User } from '../api/types'
 import { useAuthStore } from '../stores/auth'
-import { canManageNode, canManageTask, isNodeClosed } from '../utils/permissions'
+import { canManageNode, canManageTask, canChangeTaskStatus, canEditTask, taskWorkItemContext, isNodeClosed } from '../utils/permissions'
 import { TASK_KIND_LABELS, TASK_NEXT_ACTION, TASK_STATUS_LABELS, TASK_STATUS_TYPES } from '../utils/task'
+import { BUG_NEXT_ACTION, BUG_STATUS_LABELS } from '../utils/bug'
 import { formatDateTime } from '../utils/format'
 import AttachmentPanel from './AttachmentPanel.vue'
 import TaskFormDialog from './TaskFormDialog.vue'
@@ -32,10 +33,13 @@ const relatedWorkItems = ref<NodeItem[]>([])
 let generation = 0
 const pending = computed(() => savingNote.value || savingStatus.value || deletingNote.value > 0)
 const canAct = computed(() => !!task.value && !loading.value && !error.value && canManageTask(auth.user, members.value, node.value, task.value))
-const canChangeStatus = computed(() => canAct.value && !isNodeClosed(node.value))
-const canEdit = computed(() => !loading.value && !error.value && canManageNode(auth.user, members.value, node.value) && !isNodeClosed(node.value))
+const isBug = computed(() => task.value?.kind === 'BUG')
+const origin = computed(() => task.value ? taskWorkItemContext(node.value, task.value) : node.value)
+const canChangeStatus = computed(() => !!task.value && !loading.value && !error.value && canChangeTaskStatus(auth.user, members.value, node.value, task.value))
+const canEdit = computed(() => !!task.value && !loading.value && !error.value && canEditTask(auth.user, members.value, node.value, task.value))
 const archived = computed(() => node.value?.projectStatus === 'ARCHIVED')
-const nextAction = computed(() => task.value ? TASK_NEXT_ACTION[task.value.status] : undefined)
+const nextAction = computed(() => task.value ? (isBug.value ? BUG_NEXT_ACTION[task.value.status] : TASK_NEXT_ACTION[task.value.status]) : undefined)
+const stateLabel = computed(() => task.value ? (isBug.value ? BUG_STATUS_LABELS[task.value.status] : TASK_STATUS_LABELS[task.value.status]) : '')
 
 async function load() {
   const current = ++generation
@@ -126,7 +130,7 @@ async function changeStatus(status: TaskStatus) {
   try {
     await api<Task>('PUT', `/tasks/${current.id}/status`, { status, expectedStatus: current.status })
     await load(); emit('updated')
-    ElMessage.success(`任务已设为${TASK_STATUS_LABELS[status]}`)
+    ElMessage.success(isBug.value ? `Bug已设为${BUG_STATUS_LABELS[status]}` : `任务已设为${TASK_STATUS_LABELS[status]}`)
   } catch (e) {
     ElMessage.error((e as Error).message)
     await load(); emit('updated')
@@ -136,7 +140,7 @@ async function changeStatus(status: TaskStatus) {
 function canDeleteNote(note: TaskNote) {
   return !loading.value && !error.value && node.value?.projectStatus === 'ACTIVE' && !!auth.user
     && auth.user.active !== false && !auth.isViewer
-    && (canManageNode(auth.user, members.value, node.value) || note.authorId === auth.user.id)
+    && (canManageNode(auth.user, members.value, origin.value) || note.authorId === auth.user.id)
 }
 async function removeNote(note: TaskNote) {
   if (!canDeleteNote(note) || pending.value) return
@@ -161,7 +165,7 @@ async function openWorkItem() {
   if (!node.value || !await allowLeave()) return
   noteText.value = ''
   emit('update:modelValue', false)
-  await router.push(`/nodes/${node.value.id}`)
+  await router.push(`/nodes/${origin.value?.id || node.value.id}`)
 }
 </script>
 
@@ -169,22 +173,22 @@ async function openWorkItem() {
   <el-drawer :model-value="modelValue" size="min(760px, 100vw)" :with-header="false" :before-close="requestClose" :close-on-click-modal="false" class="task-detail-drawer" @update:model-value="emit('update:modelValue', $event)" @closed="emit('closed')">
     <div v-loading="loading" class="task-drawer-content">
       <header class="drawer-heading">
-        <div><p class="muted">{{ node?.projectName || '项目任务' }}<template v-if="node"> / {{ node.name }}</template></p><h2>{{ task?.name || (loading ? '正在加载任务' : '任务详情') }}</h2></div>
-        <el-button text aria-label="关闭任务详情" :disabled="pending" @click="requestClose()">关闭</el-button>
+        <div><p class="muted">{{ node?.projectName || '项目工作' }}<template v-if="node"> / {{ origin?.name || node.name }}</template></p><h2>{{ task?.name || (loading ? '正在加载详情' : '详情') }}</h2><small v-if="task" class="muted">{{ isBug ? 'Bug · 独立跟踪修复' : '历史任务' }}</small></div>
+        <el-button text :aria-label="isBug ? '关闭Bug详情' : '关闭任务详情'" :disabled="pending" @click="requestClose()">关闭</el-button>
       </header>
       <div v-if="error" class="drawer-error" role="alert"><el-alert :title="error" type="error" :closable="false" /><p class="muted">任务可能已删除，或你的读取权限已变化。</p><template v-if="noteText.trim()"><p class="muted">未保存的记录草稿，可复制后保留：</p><el-input :model-value="noteText" type="textarea" :rows="4" readonly aria-label="未保存的记录草稿" /></template><el-button @click="load">重新加载</el-button><el-button @click="requestClose()">返回列表</el-button></div>
       <template v-else-if="task && node">
-        <div class="task-meta"><el-tag :type="TASK_STATUS_TYPES[task.status]">{{ TASK_STATUS_LABELS[task.status] }}</el-tag><span>执行人 {{ task.assigneeName }}</span><span>截止 {{ task.dueDate || '未设置' }}</span></div>
+        <div class="task-meta"><el-tag :type="TASK_STATUS_TYPES[task.status]">{{ stateLabel }}</el-tag><span>{{ isBug ? '负责人' : '执行人' }} {{ task.assigneeName }}</span><span>截止 {{ task.dueDate || '未设置' }}</span></div>
         <el-alert v-if="archived" title="项目已归档，任务、记录与附件只读" type="info" :closable="false" />
-        <el-alert v-else-if="isNodeClosed(node)" title="工作项已关闭，不能再修改任务内容或状态；补充记录和附件仍按原有权限处理" type="info" :closable="false" />
+        <el-alert v-else-if="isBug && origin?.status === 'DONE'" title="关联功能已交付，此Bug仍可继续修复；原交付记录保持不变。" type="info" :closable="false" /><el-alert v-else-if="origin?.status === 'CANCELLED' || (!isBug && isNodeClosed(node))" title="关联工作项已关闭，内容和状态不可修改；记录与附件仍按原有权限处理。" type="info" :closable="false" />
         <div v-if="canChangeStatus || canEdit" class="task-drawer-actions">
-          <el-button v-if="canChangeStatus && nextAction" type="primary" :loading="savingStatus" :disabled="pending && !savingStatus" @click="changeStatus(nextAction.next)">{{ task.status === 'DOING' ? '标记完成' : task.status === 'TODO' ? '开始任务' : '重新开始' }}</el-button>
-          <el-button v-if="canEdit" :disabled="pending" @click="openEdit">编辑任务</el-button>
-          <el-dropdown v-if="canChangeStatus && task.status !== 'TODO'" :disabled="pending" @command="changeStatus('TODO')"><el-button :disabled="pending">更多</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="TODO">设为待完成</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
+          <el-button v-if="canChangeStatus && nextAction" type="primary" :loading="savingStatus" :disabled="pending && !savingStatus" @click="changeStatus(nextAction.next)">{{ isBug ? nextAction.label : task.status === 'DOING' ? '标记完成' : task.status === 'TODO' ? '开始任务' : '重新开始' }}</el-button>
+          <el-button v-if="canEdit" :disabled="pending" @click="openEdit">{{ isBug ? '编辑Bug' : '编辑任务' }}</el-button>
+          <el-dropdown v-if="canChangeStatus && task.status !== 'TODO'" :disabled="pending" @command="changeStatus('TODO')"><el-button :disabled="pending">更多</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="TODO">{{ isBug ? '设为待修复' : '设为待完成' }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
         </div>
         <el-tabs v-model="activeTab" class="task-drawer-tabs">
           <el-tab-pane label="说明" name="description">
-            <dl class="task-description"><dt>类型</dt><dd>{{ TASK_KIND_LABELS[task.kind || 'FEATURE'] }}</dd><template v-if="task.relatedNodeName"><dt>关联工作项</dt><dd>{{ task.relatedNodeName }}</dd></template><dt>描述</dt><dd>{{ task.description || '暂无描述，可在进展记录中补充执行情况。' }}</dd><template v-if="task.situation"><dt>任务情况</dt><dd>{{ task.situation }}</dd></template><template v-if="task.handling"><dt>处理方式</dt><dd>{{ task.handling }}</dd></template><dt>计划人天</dt><dd>{{ task.estimateDays ?? '尚未估算' }}</dd></dl>
+            <dl class="task-description"><dt>类型</dt><dd>{{ isBug ? 'Bug' : TASK_KIND_LABELS[task.kind || 'FEATURE'] }}</dd><template v-if="isBug || task.relatedNodeName"><dt>关联功能</dt><dd>{{ origin?.name || task.relatedNodeName }}</dd></template><dt>描述</dt><dd>{{ task.description || '暂无描述，可在进展记录中补充执行情况。' }}</dd><template v-if="task.situation"><dt>{{ isBug ? '问题背景' : '任务情况' }}</dt><dd>{{ task.situation }}</dd></template><template v-if="task.handling"><dt>处理方式</dt><dd>{{ task.handling }}</dd></template><template v-if="!isBug"><dt>历史计划人天</dt><dd>{{ task.estimateDays ?? '尚未估算' }}</dd></template></dl>
           </el-tab-pane>
           <el-tab-pane :label="`进展记录 ${notes.length}`" name="records">
             <div v-if="canAct" class="note-composer"><el-input v-model="noteText" type="textarea" :rows="4" maxlength="2000" show-word-limit :disabled="savingNote" placeholder="记录本次进展、问题或结果" aria-label="进展记录内容" /><el-button type="primary" :loading="savingNote" :disabled="pending && !savingNote" @click="saveNote">追加记录</el-button></div>
@@ -193,9 +197,9 @@ async function openWorkItem() {
             <div v-else-if="!notes.length" class="empty">暂无记录<template v-if="canAct">，可补充本次进展或处理结果。</template></div>
             <article v-for="note in notes" :key="note.id" class="task-note"><div class="note-meta"><strong>{{ note.authorName }}</strong><time>{{ formatDateTime(note.createdAt) }}</time><el-button v-if="canDeleteNote(note)" link type="danger" :loading="deletingNote === note.id" :disabled="pending && deletingNote !== note.id" @click="removeNote(note)">删除</el-button></div><p>{{ note.content }}</p></article>
           </el-tab-pane>
-          <el-tab-pane label="附件" name="files" lazy><AttachmentPanel :key="task.id" owner-type="TASK" :owner-id="task.id" :can-manage="canAct" :archived="archived" :show-category-nav="false" hint="任务执行人可以上传交付物或参考资料；项目成员可预览、下载。" /></el-tab-pane>
+          <el-tab-pane label="附件" name="files" lazy><AttachmentPanel :key="task.id" owner-type="TASK" :owner-id="task.id" :can-manage="canAct" :archived="archived" :show-category-nav="false" :hint="isBug ? '上传复现截图、修复说明与验证资料。' : '历史任务的交付物与参考资料；项目成员可预览、下载。'" /></el-tab-pane>
         </el-tabs>
-        <div class="drawer-parent"><span class="muted">所属工作项</span><el-button link type="primary" @click="openWorkItem">{{ node.name }} →</el-button></div>
+        <div class="drawer-parent"><span class="muted">{{ isBug ? '关联功能' : '所属工作项' }}</span><el-button link type="primary" @click="openWorkItem">{{ origin?.name || node.name }} →</el-button></div>
         <TaskFormDialog v-model="editing" :node-id="node.id" :task="task" :members="members" :default-owner-id="node.ownerId" :work-items="relatedWorkItems" @saved="afterEdit" />
       </template>
     </div>

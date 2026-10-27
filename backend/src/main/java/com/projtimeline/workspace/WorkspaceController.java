@@ -29,8 +29,26 @@ public class WorkspaceController {
                                         @RequestParam(required = false) String q,
                                         @RequestParam(defaultValue = "1") int page,
                                         @RequestParam(defaultValue = "20") int size,
-                                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueWeek) {
-        return ApiResponse.ok(service.tasks(scope, status, projectId, assigneeId, q, page, size, dueWeek));
+                                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueWeek,
+                                        @RequestParam(defaultValue="false") boolean legacyOnly) {
+        return ApiResponse.ok(service.tasks(scope, status, projectId, assigneeId, q, page, size, dueWeek,legacyOnly));
+    }
+
+    @GetMapping("/workspace/deliveries")
+    ApiResponse<WorkspaceDeliveryPage> deliveries(@RequestParam(defaultValue="OPEN") String scope,
+            @RequestParam(required=false) String status,@RequestParam(required=false) Long projectId,
+            @RequestParam(required=false) Long ownerId,@RequestParam(required=false) String q,
+            @RequestParam(required=false) @DateTimeFormat(iso=DateTimeFormat.ISO.DATE) LocalDate dueWeek,
+            @RequestParam(defaultValue="false") boolean overdue,@RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="20") int size) {
+        return ApiResponse.ok(service.deliveries(scope,status,projectId,ownerId,q,dueWeek,overdue,page,size));
+    }
+
+    @GetMapping("/workspace/bugs")
+    ApiResponse<WorkspaceTaskPage> bugs(@RequestParam(defaultValue="OPEN") String scope,
+            @RequestParam(required=false) String status,@RequestParam(required=false) Long projectId,
+            @RequestParam(required=false) Long assigneeId,@RequestParam(required=false) String q,
+            @RequestParam(defaultValue="false") boolean overdue,@RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="20") int size) {
+        return ApiResponse.ok(service.bugs(scope,status,projectId,assigneeId,q,overdue,page,size));
     }
 
     @GetMapping("/workspace/management")

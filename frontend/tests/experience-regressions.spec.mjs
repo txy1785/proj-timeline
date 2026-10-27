@@ -7,35 +7,44 @@ test('a preserved note remains readable after the project becomes archived', asy
   await page.getByRole('tab', { name: /进展记录/ }).click()
   await page.getByRole('textbox', { name: '进展记录内容' }).fill('需要保留的草稿')
   state.projectStatus = 'ARCHIVED'
-  await page.getByRole('button', { name: '标记完成', exact: true }).click()
+  await page.locator('.el-drawer').getByRole('button', { name: /标记完成|标记已解决/, exact: true }).click()
   await expect(page.getByRole('textbox', { name: '未保存的记录草稿' })).toHaveValue('需要保留的草稿')
   await expect(page.getByRole('button', { name: '追加记录', exact: true })).toHaveCount(0)
-  await page.getByRole('button', { name: '关闭任务详情' }).click()
+  await page.getByRole('button', { name: /关闭.*详情/ }).click()
   await expect(page.getByRole('button', { name: '保存并关闭', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: '返回保留草稿', exact: true }).click()
   await expect(page.getByRole('textbox', { name: '未保存的记录草稿' })).toHaveValue('需要保留的草稿')
 })
 
-test('completing the last task on page two returns to the remaining first page', async ({ page }) => {
-  const state = await prepare(page)
-  const tasks = [...Array.from({ length:20 },(_,i)=>({...state.tasks[1],id:100+i,assigneeId:6,name:'后续任务 '+i})),state.tasks[0]]
+test('confirming the last delivery on page two returns to the remaining first page', async ({ page }) => {
+  await prepare(page)
+  const nodes = Array.from({ length:21 },(_,i)=>({id:100+i,projectId:1,projectName:'商城系统开发',projectStatus:'ACTIVE',name:'交付工作项 '+i,type:'FEATURE',ownerId:6,ownerName:'钱工',status:'IN_PROGRESS',planStart:'2026-10-19',planEnd:'2026-10-27',progress:0,flags:{overdue:false,near:true,blocked:false}}))
   await page.route('**/api/workspace/**', route => {
     const url = new URL(route.request().url())
-    const list = tasks.filter(task=>task.status!=='DONE')
+    const list = nodes.filter(node=>node.status!=='DONE')
     const current = Number(url.searchParams.get('page') || 1)
     const data = url.pathname.endsWith('/management') ? {nodes:[],requests:[],nodeTotal:0,requestTotal:0} : {
-      list:list.slice((current-1)*20,current*20).map(task=>({...task,projectId:1,projectName:'商城系统开发',projectStatus:'ACTIVE',nodeName:'订单接口开发',nodeStatus:'IN_PROGRESS',overdue:false})),
-      total:list.length,page:current,size:20,businessDate:'2026-10-27',timeZone:'Asia/Shanghai',counts:{open:list.length,doing:1,overdue:0,done:0}
+      list:list.slice((current-1)*20,current*20),total:list.length,page:current,size:20,
+      businessDate:'2026-10-27',timeZone:'Asia/Shanghai',counts:{open:list.length,doing:list.length,overdue:0,done:0}
     }
     return route.fulfill({json:{code:0,msg:'ok',data}})
+  })
+  await page.route('**/api/nodes/*/status',route=>{
+    const id=Number(new URL(route.request().url()).pathname.split('/')[3])
+    const node=nodes.find(item=>item.id===id)
+    const body=route.request().postDataJSON()
+    expect(body.expectedStatus).toBe('IN_PROGRESS')
+    node.status=body.status
+    return route.fulfill({json:{code:0,msg:'ok',data:node}})
   })
   await page.route('**/api/projects?**',route=>route.fulfill({json:{code:0,msg:'ok',data:{list:[],total:0,page:1,size:100}}}))
   await page.goto('/work')
   await page.locator('.el-pagination .btn-next').click()
-  await expect(page.locator('.personal-task-row')).toHaveCount(1)
-  await page.locator('.personal-task-row .el-button').click()
-  await expect(page.locator('.personal-task-row')).toHaveCount(20)
-  await expect(page.getByRole('button',{name:'后续任务 0',exact:true})).toBeVisible()
+  await expect(page.locator('.personal-delivery-row')).toHaveCount(1)
+  await page.locator('.personal-delivery-row .el-button').click()
+  await page.getByRole('dialog',{name:'确认交付',exact:true}).getByRole('button',{name:'确认交付',exact:true}).click()
+  await expect(page.locator('.personal-delivery-row')).toHaveCount(20)
+  await expect(page.getByRole('link',{name:'交付工作项 0',exact:true})).toBeVisible()
   await expect(page.locator('.el-pagination')).toHaveCount(0)
 })
 

@@ -4,6 +4,7 @@ import com.projtimeline.common.BusinessCalendar;
 import com.projtimeline.common.BusinessException;
 import com.projtimeline.common.PageResponse;
 import com.projtimeline.data.DataAccess;
+import com.projtimeline.data.TaskSourceSql;
 import com.projtimeline.project.ProjectService;
 import com.projtimeline.security.CurrentUser;
 import com.projtimeline.security.PermissionService;
@@ -58,6 +59,11 @@ public class WorkspaceService {
 
     public WorkspaceTaskPage tasks(String requestedScope, String requestedStatus, Long projectId, Long assigneeId,
                                    String query, int page, int size, LocalDate dueWeek) {
+        return tasks(requestedScope,requestedStatus,projectId,assigneeId,query,page,size,dueWeek,false);
+    }
+
+    public WorkspaceTaskPage tasks(String requestedScope, String requestedStatus, Long projectId, Long assigneeId,
+                                   String query, int page, int size, LocalDate dueWeek,boolean legacyOnly) {
         String scope = option(requestedScope, "OPEN", Set.of("OPEN", "DONE", "HISTORY", "WORKLOAD", "WORKLOAD_PLAN"), "scope");
         String status = requestedStatus == null || requestedStatus.isBlank() ? null
                 : option(requestedStatus, null, Set.of("TODO", "DOING", "DONE"), "status");
@@ -75,6 +81,7 @@ public class WorkspaceService {
         params.put("current", current.id()); params.put("assignee", assigneeId == null ? current.id() : assigneeId);
         params.put("today", today); params.put("size", size); params.put("offset", ((long) page - 1) * size);
         StringBuilder base = new StringBuilder(" WHERE t.assignee_id=:assignee").append(permissions.readableProjectFilter());
+        if (legacyOnly) base.append(" AND t.kind<>'BUG'");
         if (projectId != null) { base.append(" AND p.id=:project"); params.put("project", projectId); }
         if (!search.isEmpty()) {
             params.put("query", "%" + search.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%");
@@ -127,6 +134,76 @@ public class WorkspaceService {
                 """, params);
         rows.forEach(row -> row.put("overdue", truthy(row.get("overdue"))));
         return new WorkspaceTaskPage(rows, total, page, size, today, clock.getZone().getId(), counts);
+    }
+
+
+    public WorkspaceDeliveryPage deliveries(String requestedScope,String requestedStatus,Long projectId,Long ownerId,
+                                            String query,LocalDate dueWeek,boolean overdue,int page,int size) {
+        String scope=option(requestedScope,"OPEN",Set.of("OPEN","DONE","HISTORY"),"scope");
+        String status=requestedStatus==null || requestedStatus.isBlank()?null:option(requestedStatus,null,Set.of("NOT_STARTED","IN_PROGRESS","DONE","CANCELLED"),"status");
+        positiveId(projectId,"projectId"); positiveId(ownerId,"ownerId");
+        CurrentUser current=permissions.current(); if(projectId!=null) permissions.requireProjectRead(projectId);
+        page=Math.max(1,page); size=Math.min(100,Math.max(1,size)); LocalDate today=LocalDate.now(clock);
+        Map<String,Object> params=new HashMap<>(); params.put("current",current.id()); params.put("owner",ownerId==null?current.id():ownerId);
+        params.put("today",today);params.put("offset",((long)page-1)*size);params.put("size",size);
+        String base=" WHERE n.owner_id=:owner"+permissions.readableProjectFilter();
+        if(projectId!=null){base+=" AND p.id=:project";params.put("project",projectId);}
+        base+=search(query,"n.name LIKE :query ESCAPE '!' OR n.description LIKE :query ESCAPE '!' OR p.name LIKE :query ESCAPE '!'",params);
+        if(dueWeek!=null){LocalDate[] week=BusinessCalendar.week(dueWeek);params.put("weekStart",week[0]);params.put("weekEnd",week[1]);base+=" AND n.plan_end BETWEEN :weekStart AND :weekEnd";}
+        String open="p.status='ACTIVE' AND n.status IN('NOT_STARTED','IN_PROGRESS')",done="p.status='ACTIVE' AND n.status='DONE'";
+        String overdueCondition=open+" AND n.plan_end<:today";
+        if(overdue)base+=" AND "+overdueCondition;
+        Map<String,Long> counts=statistics(NODE_FROM,base,open,done,open+" AND n.status='IN_PROGRESS'",overdueCondition,params);
+        String where=base+scopeCondition(scope,open,done);
+        if(status!=null){where+=" AND n.status=:status";params.put("status",status);}
+        long total=db.count("SELECT COUNT(*) "+NODE_FROM+where,params);
+        List<Map<String,Object>> rows=db.list(NODE_COLUMNS+NODE_FROM+where+" ORDER BY CASE WHEN "+overdueCondition+" THEN 0 WHEN n.status='DONE' THEN 2 ELSE 1 END,n.plan_end,n.id LIMIT :offset,:size",params);
+        rows.forEach(projects::decorateNode);
+        return new WorkspaceDeliveryPage(rows,total,page,size,today,clock.getZone().getId(),counts);
+    }
+
+    public WorkspaceTaskPage bugs(String requestedScope,String requestedStatus,Long projectId,Long assigneeId,
+                                 String query,boolean overdue,int page,int size) {
+        String scope=option(requestedScope,"OPEN",Set.of("OPEN","DONE","HISTORY"),"scope");
+        String status=requestedStatus==null || requestedStatus.isBlank()?null:option(requestedStatus,null,Set.of("TODO","DOING","DONE"),"status");
+        positiveId(projectId,"projectId");positiveId(assigneeId,"assigneeId");
+        CurrentUser current=permissions.current();if(projectId!=null)permissions.requireProjectRead(projectId);
+        page=Math.max(1,page);size=Math.min(100,Math.max(1,size));LocalDate today=LocalDate.now(clock);
+        Map<String,Object> params=new HashMap<>();params.put("current",current.id());params.put("assignee",assigneeId==null?current.id():assigneeId);
+        params.put("today",today);params.put("offset",((long)page-1)*size);params.put("size",size);
+        String base=" WHERE t.kind='BUG' AND t.assignee_id=:assignee"+permissions.readableProjectFilter();
+        if(projectId!=null){base+=" AND p.id=:project";params.put("project",projectId);}
+        base+=search(query,"t.name LIKE :query ESCAPE '!' OR ("+TaskSourceSql.NAME+") LIKE :query ESCAPE '!' OR p.name LIKE :query ESCAPE '!'",params);
+        String open=TaskSourceSql.OPEN_BUG,done=TaskSourceSql.DONE_BUG,overdueCondition=open+" AND t.due_date<:today";
+        if(overdue)base+=" AND "+overdueCondition;
+        Map<String,Long> counts=statistics(TaskSourceSql.FROM,base,open,done,open+" AND t.status='DOING'",overdueCondition,params);
+        String where=base+scopeCondition(scope,open,done);
+        if(status!=null){where+=" AND t.status=:status";params.put("status",status);}
+        long total=db.count("SELECT COUNT(*) "+TaskSourceSql.FROM+where,params);
+        String columns="SELECT t.*,p.id project_id,p.name project_name,p.status project_status,u.name assignee_name,related.name related_node_name,"
+                +TaskSourceSql.COLUMNS+",("+TaskSourceSql.NAME+") node_name,("+TaskSourceSql.STATUS+") node_status,"
+                +"(SELECT COUNT(*) FROM task_notes notes WHERE notes.task_id=t.id) note_count,CASE WHEN "+overdueCondition+" THEN TRUE ELSE FALSE END overdue ";
+        List<Map<String,Object>> rows=db.list(columns+TaskSourceSql.FROM+" JOIN users u ON u.id=t.assignee_id "+where
+                +" ORDER BY CASE WHEN "+overdueCondition+" THEN 0 WHEN t.status='DONE' THEN 3 WHEN t.due_date IS NULL THEN 2 ELSE 1 END,t.due_date,t.id LIMIT :offset,:size",params);
+        rows.forEach(row->row.put("overdue",truthy(row.get("overdue"))));
+        return new WorkspaceTaskPage(rows,total,page,size,today,clock.getZone().getId(),counts);
+    }
+
+    private Map<String,Long> statistics(String from,String base,String open,String done,String doing,String overdue,Map<String,Object> params) {
+        Map<String,Object> totals=db.one("SELECT COALESCE(SUM(CASE WHEN "+open+" THEN 1 ELSE 0 END),0) open_count,"
+                +"COALESCE(SUM(CASE WHEN "+doing+" THEN 1 ELSE 0 END),0) doing_count,"
+                +"COALESCE(SUM(CASE WHEN "+overdue+" THEN 1 ELSE 0 END),0) overdue_count,"
+                +"COALESCE(SUM(CASE WHEN "+done+" THEN 1 ELSE 0 END),0) done_count "+from+base,params,"工作统计不可用");
+        return Map.of("open",count(totals,"openCount"),"doing",count(totals,"doingCount"),"overdue",count(totals,"overdueCount"),"done",count(totals,"doneCount"));
+    }
+
+    private static String scopeCondition(String scope,String open,String done) { return "OPEN".equals(scope)?" AND "+open:"DONE".equals(scope)?" AND "+done:""; }
+    private static String search(String raw,String expression,Map<String,Object> params) {
+        String query=raw==null?"":raw.trim();
+        if(query.length()>200)throw BusinessException.badRequest("搜索内容不能超过200字");
+        if(query.isEmpty())return "";
+        params.put("query","%"+query.replace("!","!!").replace("%","!%").replace("_","!_")+"%");
+        return " AND ("+expression+")";
     }
 
     public Map<String, Object> management() {

@@ -307,7 +307,7 @@ public class ProjectService {
             if (!"CANCELLED".equals(status)) { progressSum += nodeProgress(node); active++; }
         }
         project.put("progress", ProgressRules.aggregate(active, progressSum, done));
-        project.put("stats", Map.of("total", total, "done", done, "inProgress", inProgress, "overdue", overdue, "blocked", blocked, "near", near));
+        project.put("stats", Map.of("total", active, "done", done, "inProgress", inProgress, "overdue", overdue, "blocked", blocked, "near", near));
     }
 
     private void decorateModule(Map<String, Object> module) {
@@ -327,6 +327,7 @@ public class ProjectService {
             if (flags(status, (LocalDate) node.get("planEnd"), truthy(node.get("blocked"))).get("overdue")) overdue++;
         }
         module.put("progress", ProgressRules.aggregate(active, sum, doneNodes)); module.put("nodeCount", nodes.size()); module.put("overdueCount", overdue);
+        module.put("totalWorkItems", active); module.put("doneWorkItems", doneNodes);
     }
 
     public void decorateNode(Map<String, Object> node) {
@@ -334,7 +335,7 @@ public class ProjectService {
         node.put("progress", nodeProgress(node));
     }
 
-    /** 工作项进度由任务完成率派生；调用方查询需带 total_tasks / done_tasks 两列。 */
+    /** Compatibility progress field now expresses delivered versus not delivered. */
     private static int nodeProgress(Map<String, Object> node) {
         return ProgressRules.nodeProgress(Objects.toString(node.get("status")), intOf(node.get("totalTasks")), intOf(node.get("doneTasks")));
     }

@@ -98,7 +98,7 @@ async function save() {
       ? await api<NodeItem>('PUT', `/nodes/${form.id}`, payload)
       : await api<NodeItem>('POST', `/projects/${props.projectId}/nodes`, { ...payload, moduleId: location.value > 0 ? location.value : undefined })
     emit('update:modelValue', false)
-    ElMessage.success(form.id ? '工作项已更新' : '工作项已创建，可以继续拆分任务')
+    ElMessage.success(form.id ? '工作项已更新' : '工作项已创建，可补充交付资料并开始工作')
     emit('saved', value)
   } catch (e) { ElMessage.error((e as Error).message) } finally { saving.value = false }
 }
@@ -134,7 +134,7 @@ async function save() {
         </el-collapse-item>
       </el-collapse>
     </el-form>
-    <template #footer><el-button :disabled="saving" @click="emit('update:modelValue', false)">取消</el-button><el-button type="primary" :loading="saving" :disabled="initializing" @click="save">{{ form.id ? '保存修改' : '创建并拆分任务' }}</el-button></template>
+    <template #footer><el-button :disabled="saving" @click="emit('update:modelValue', false)">取消</el-button><el-button type="primary" :loading="saving" :disabled="initializing" @click="save">{{ form.id ? '保存修改' : '创建并查看详情' }}</el-button></template>
   </el-dialog>
 </template>
 

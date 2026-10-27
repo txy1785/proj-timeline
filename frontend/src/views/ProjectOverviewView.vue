@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/auth'
 import { useProjectContext } from '../composables/useProjectContext'
 import { addDays, shortDate, weekStart } from '../utils/date'
 import { canManageNode } from '../utils/permissions'
+import { workItemCounts } from '../utils/workItem'
 import WorkItemFormDialog from '../components/WorkItemFormDialog.vue'
 import ModuleFormDialog from '../components/ModuleFormDialog.vue'
 import BugReportDialog from '../components/BugReportDialog.vue'
@@ -21,7 +22,7 @@ const active = computed(() => project.value?.status === 'ACTIVE')
 const pm = computed(() => members.value.find(member => member.projectRole === 'PM'))
 const allNodes = computed(() => [...(project.value?.modules.flatMap(module => module.nodes || []) || []), ...(project.value?.projectWorkItems || [])])
 const activeNodes = computed(() => allNodes.value.filter(node => node.status !== 'CANCELLED'))
-const done = computed(() => activeNodes.value.filter(node => node.status === 'DONE').length)
+const done = computed(() => workItemCounts(allNodes.value).done)
 const risks = computed(() => activeNodes.value.filter(node => ['NOT_STARTED', 'IN_PROGRESS'].includes(node.status) && (node.flags?.overdue || node.flags?.blocked)).sort((a, b) => a.planEnd.localeCompare(b.planEnd) || a.id - b.id))
 const near = computed(() => activeNodes.value.filter(node => ['NOT_STARTED', 'IN_PROGRESS'].includes(node.status) && node.flags?.near).sort((a, b) => a.planEnd.localeCompare(b.planEnd)))
 const nextTarget = computed(() => businessDate.value ? [...(project.value?.stageTargets || [])].filter(target => target.targetDate >= businessDate.value).sort((a, b) => a.targetDate.localeCompare(b.targetDate) || a.id - b.id)[0] : undefined)
@@ -40,23 +41,23 @@ function created(node: NodeItem) { void refresh(); router.push(`/nodes/${node.id
     <template v-if="project">
       <header class="page-head">
         <div><div class="heading-line"><h1>{{ project.name }}</h1><el-tag :type="active ? 'primary' : 'info'">{{ active ? '进行中' : '已归档' }}</el-tag></div><p class="project-purpose">{{ project.description || '尚未填写项目说明' }} <el-button v-if="isPm && active && !project.description" link type="primary" @click="router.push(`/projects/${id}/settings`)">补充说明</el-button></p></div>
-        <div class="page-actions"><el-button v-if="canCreateWorkItem" type="primary" @click="workItemDialog = true">新建工作项</el-button><el-button v-if="!auth.isViewer && active" @click="bugDialog = true">提缺陷</el-button></div>
+        <div class="page-actions"><el-button v-if="canCreateWorkItem" type="primary" @click="workItemDialog = true">新建工作项</el-button><el-button v-if="!auth.isViewer && active && allNodes.some(node => node.status !== 'CANCELLED')" @click="bugDialog = true">报告 Bug</el-button></div>
       </header>
       <el-alert v-if="!active" title="项目已归档，以下为保留的交付记录。业务内容只读。" type="info" :closable="false" class="section-gap" />
       <section class="surface project-facts section-gap" aria-label="项目交付信息">
         <div><small>项目经理</small><strong>{{ pm?.name || '未读取到负责人' }}</strong></div>
         <div><small>项目计划</small><strong>{{ project.planStart }} — {{ project.planEnd || '完成日期未定' }}</strong></div>
-        <div class="fact-progress"><small>项目进度</small><div class="progress-inline"><strong>{{ project.progress }}%</strong><el-progress :percentage="project.progress" :show-text="false" /></div></div>
-        <div><small>未取消工作项</small><strong>{{ done }}/{{ activeNodes.length }} 已完成</strong></div>
+        <div class="fact-progress"><small>功能交付</small><strong>{{ done }}/{{ activeNodes.length }} 已交付</strong></div>
+        <div><small>当前交付风险</small><strong>{{ risks.length }} 项延期或受阻</strong></div>
       </section>
       <section v-if="!allNodes.length" class="surface first-work section-gap">
-        <template v-if="canCreateWorkItem"><span class="step-label">项目已建立 · 成员和目标可以稍后完善</span><h2>下一步：建立第一项交付</h2><p>先写清楚要交付什么，再拆成执行任务。你可以先把自己设为负责人。</p><div class="page-actions"><el-button type="primary" @click="workItemDialog = true">建立首个工作项</el-button><el-button v-if="isPm" @click="router.push(`/projects/${id}/settings?tab=members`)">添加成员</el-button><el-button v-if="isPm && !project.modules.length" @click="moduleDialog = true">新建功能模块</el-button></div><p class="muted">功能工作选择功能模块；跨模块测试、维护和上线保障选择项目级工作项。</p></template>
+        <template v-if="canCreateWorkItem"><span class="step-label">项目已建立 · 成员和目标可以稍后完善</span><h2>下一步：建立第一项交付</h2><p>每个工作项代表一个可交付的小功能，写清负责人、日期和交付资料即可开始。</p><div class="page-actions"><el-button type="primary" @click="workItemDialog = true">建立首个工作项</el-button><el-button v-if="isPm" @click="router.push(`/projects/${id}/settings?tab=members`)">添加成员</el-button><el-button v-if="isPm && !project.modules.length" @click="moduleDialog = true">新建功能模块</el-button></div><p class="muted">功能工作选择功能模块；跨模块测试、维护和上线保障选择项目级工作项。</p></template>
         <template v-else><h2>项目还没有工作项</h2><p>{{ active ? `项目经理尚未安排交付，可联系${pm?.name || '项目经理'}了解下一步。` : '该项目没有保留的工作项。' }}</p></template>
       </section>
       <div v-else class="overview-grid">
         <section class="surface">
           <div class="section-heading"><h2>{{ active ? '需要处理' : '交付风险记录' }}</h2><el-button v-if="risks.length" link type="primary" @click="router.push(`/projects/${id}/work-items?risk=exception`)">查看 {{ risks.length }} 个工作项</el-button></div>
-          <div v-if="!risks.length" class="empty"><strong>当前没有延期或受阻工作项</strong><p>可继续查看近期计划与执行任务。</p></div>
+          <div v-if="!risks.length" class="empty"><strong>当前没有延期或受阻工作项</strong><p>可继续查看近期交付计划与待处理 Bug。</p></div>
           <article v-for="node in risks" :key="node.id" class="risk-card" :class="{ blocked: node.flags.blocked && !node.flags.overdue }">
             <div class="risk-main"><div class="risk-tags"><el-tag v-if="node.flags.overdue" type="danger" size="small">已延期</el-tag><el-tag v-if="node.flags.blocked" type="warning" size="small">受阻</el-tag></div><button class="work-title" @click="openNode(node)">{{ node.name }}</button><p class="muted">负责人 {{ node.ownerName }} · 计划完成 {{ node.planEnd }}</p><p v-if="node.flags.overdue">延期说明：{{ node.overdueReason || '负责人尚未补充原因' }}</p><p v-if="node.flags.blocked">受阻原因：{{ node.blockedReason || '负责人尚未补充原因' }}</p></div>
             <el-button :type="canManageNode(auth.user, members, node) ? 'primary' : 'default'" @click="openNode(node)">{{ canManageNode(auth.user, members, node) ? '查看并处理' : '查看详情' }}</el-button>
@@ -68,7 +69,7 @@ function created(node: NodeItem) { void refresh(); router.push(`/nodes/${node.id
           <section class="surface"><h2>本周计划交付</h2><div v-if="!weekDue.length" class="empty compact">本周暂无未完成的计划交付。</div><button v-for="node in weekDue" :key="node.id" class="delivery-row" @click="openNode(node)"><span>{{ node.name }}<small>{{ node.ownerName }}</small></span><el-tag v-if="node.flags.overdue" type="danger" size="small">已延期</el-tag><span v-else>{{ shortDate(node.planEnd) }}</span></button></section>
         </aside>
       </div>
-      <div v-if="allNodes.length" class="overview-footer"><el-button link type="primary" @click="router.push(`/projects/${id}/work-items`)">查看全部 {{ allNodes.length }} 个工作项 →</el-button></div>
+      <div v-if="allNodes.length" class="overview-footer"><el-button link type="primary" @click="router.push(`/projects/${id}/work-items`)">查看工作项 →</el-button></div>
       <WorkItemFormDialog v-model="workItemDialog" :project-id="id" :members="members" :modules="project.modules" :can-create-project-level="isPm" :default-plan-start="project.planStart" :business-date="businessDate" @saved="created" />
       <ModuleFormDialog v-model="moduleDialog" :project-id="id" :members="members" :default-owner-id="pm?.id" @saved="refresh" />
       <BugReportDialog v-model="bugDialog" :project-id="id" @saved="refresh" />

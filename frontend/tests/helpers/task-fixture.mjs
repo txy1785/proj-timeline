@@ -1,12 +1,10 @@
-
-
 export async function prepare(page, role = 'USER', userId = 6, options = {}) {
   const state = {
     status: options.closed ? 'DONE' : 'IN_PROGRESS', projectStatus: options.archived ? 'ARCHIVED' : 'ACTIVE',
-    failNextStatus: false, writes: [], notes: [], extraModules: [], tasks: [
-      { id: 11, nodeId: 106, name: '库存扣减接口', assigneeId: 6, assigneeName: '钱工', status: options.closed ? 'DONE' : 'DOING', dueDate: '2026-10-26', description: '已有说明', kind: 'BUG', relatedNodeId: 107, relatedNodeName: '原功能工作项', situation: '已有情况', handling: '已有处理方式', estimateDays: 2 },
-      { id: 12, nodeId: 106, name: '接口联调', assigneeId: 4, assigneeName: '赵工', status: options.closed ? 'DONE' : 'TODO' },
-      { id: 13, nodeId: 106, name: '接口说明', assigneeId: 4, assigneeName: '赵工', status: 'DONE' }
+    failNextStatus: false, writes: [], notes: [], extraModules: [], deliverables: [], files: [], tasks: [
+      { id: 11, nodeId: 106, name: '库存扣减接口', assigneeId: 6, assigneeName: '钱工', status: options.closed ? 'DONE' : 'DOING', dueDate: '2026-10-26', description: '已有说明', kind: 'BUG', relatedNodeId: options.routedBug ? 107 : 106, relatedNodeName: options.routedBug ? '原功能工作项' : '订单接口开发', originNodeId: options.routedBug ? 107 : 106, originNodeName: options.routedBug ? '原功能工作项' : '订单接口开发', originNodeStatus: options.closed ? 'DONE' : 'IN_PROGRESS', originOwnerId: options.routedBug ? 6 : 4, originModuleOwnerId: options.routedBug ? 6 : 4, situation: '已有情况', handling: '已有处理方式', estimateDays: 2 },
+      { id: 12, nodeId: 106, name: '接口联调', assigneeId: 4, assigneeName: '赵工', kind: 'FEATURE', status: options.closed ? 'DONE' : 'TODO' },
+      { id: 13, nodeId: 106, name: '接口说明', assigneeId: 4, assigneeName: '赵工', kind: 'FEATURE', status: 'DONE' }
     ]
   }
   const members = [
@@ -14,14 +12,16 @@ export async function prepare(page, role = 'USER', userId = 6, options = {}) {
     { id: 4, name: '赵工', username: 'owner', globalRole: 'USER', projectRole: 'MEMBER', active: true },
     { id: 6, name: '钱工', username: 'member', globalRole: role, projectRole: 'MEMBER', active: true }
   ]
+  const taskView = task => ({ ...task, originNodeStatus: task.originNodeId === 106 ? state.status : task.originNodeStatus, noteCount: state.notes.length })
   const node = () => ({
     id: 106, projectId: 1, projectStatus: state.projectStatus, moduleId: 2, moduleName: '订单与支付', moduleOwnerId: 4,
     name: '订单接口开发', type: 'FEATURE', ownerId: 4, ownerName: '赵工', status: state.status,
-    planStart: '2026-10-19', planEnd: '2026-10-26', progress: Math.round(state.tasks.filter(task => task.status === 'DONE').length / state.tasks.length * 100),
+    planStart: '2026-10-19', planEnd: '2026-10-26', progress: state.status === 'DONE' ? 100 : 0,
     totalTasks: state.tasks.length, doneTasks: state.tasks.filter(task => task.status === 'DONE').length,
-    deliverableTotal: 0, deliverableProvided: 0, deliverables: [], logs: [],
-    flags: { overdue: !options.closed, near: false, blocked: false }, overdueReason: '联调环境延后',
-    tasks: state.tasks.map(task => ({ ...task, noteCount: state.notes.length }))
+    deliverableTotal: state.deliverables.length, deliverableProvided: state.deliverables.filter(item=>item.status==='PROVIDED').length, deliverables: state.deliverables, logs: [],
+    bugs: state.tasks.filter(task=>task.kind==='BUG' && task.originNodeId===106).map(taskView), bugCount: state.tasks.filter(task=>task.kind==='BUG' && task.originNodeId===106).length, openBugCount: state.tasks.filter(task=>task.kind==='BUG' && task.status!=='DONE' && task.originNodeId===106).length, legacyTaskCount: state.tasks.filter(task=>task.kind!=='BUG').length,
+    flags: { overdue: !options.closed, near: false, blocked: !!options.blocked }, overdueReason: '联调环境延后',
+    tasks: state.tasks.map(taskView)
   })
   const project = () => ({
     id: 1, name: '商城系统开发', code: 'MALL', planStart: '2026-10-05', planEnd: '2026-11-13', status: state.projectStatus, progress: 33,
@@ -42,9 +42,12 @@ export async function prepare(page, role = 'USER', userId = 6, options = {}) {
     if (path === '/auth/me') return reply({ id: userId, username: 'test', name: userId === 2 ? '李经理' : '钱工', globalRole: role, active: true })
     if (path === '/context') return reply({ businessDate: '2026-10-27', timeZone: 'Asia/Shanghai', unreadCount: 0 })
     if (path === '/nodes/106' && method === 'GET') return reply(node())
+    if (path === '/nodes/106/status' && method === 'POST') { state.status=req.postDataJSON().status; return reply(node()) }
+    if (path === '/projects/1/bug-routing') return reply({canSubmit:state.projectStatus==='ACTIVE'&&state.status!=='CANCELLED',nodeId:106,nodeName:'订单接口开发',ownerId:4,ownerName:'赵工',message:'已确认关联功能'})
+    if (path === '/projects/1/bugs' && method === 'POST') { const task={id:14,nodeId:106,kind:'BUG',relatedNodeId:106,originNodeId:106,originNodeName:'订单接口开发',originNodeStatus:state.status,originOwnerId:4,originModuleOwnerId:4,assigneeId:4,assigneeName:'赵工',status:'TODO',...req.postDataJSON()}; state.tasks.push(task); return reply({...task,routedNodeId:106,routedNodeName:'订单接口开发'}) }
     if (path === '/projects/1/timeline') return reply(project())
     if (path === '/projects/1/members') return reply(members)
-    if (path === '/tasks/11/notes' && method === 'GET') return reply(state.notes)
+    if (/^\/tasks\/\d+\/notes$/.test(path) && method === 'GET') return reply(path==='/tasks/11/notes'?state.notes:[])
     if (path === '/tasks/11/notes' && method === 'POST') {
       const record = { id: 200 + state.notes.length, taskId: 11, authorId: userId, authorName: '钱工', content: req.postDataJSON().content, createdAt: '2026-10-27T09:30:00' }
       state.notes.unshift(record); return reply(record)
@@ -58,6 +61,8 @@ export async function prepare(page, role = 'USER', userId = 6, options = {}) {
       const task = { id: 14, nodeId: 106, ...req.postDataJSON(), status: 'TODO', assigneeName: '赵工' }
       state.tasks.push(task); return reply(task)
     }
+    if (path === '/attachments/categories') return reply([{ownerType:'NODE',group:'功能资料',code:'NODE_DESIGN',name:'功能设计说明'},{ownerType:'TASK',group:'问题资料',code:'TASK_REFERENCE',name:'参考资料'}])
+    if (path === '/attachments') return reply(state.files.filter(file=>file.ownerType===url.searchParams.get('ownerType')))
     if (path.startsWith('/attachments')) return reply([])
     return reply(null, 404, 'Unexpected mock endpoint: ' + method + ' ' + path)
   })

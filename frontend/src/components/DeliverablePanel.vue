@@ -87,17 +87,17 @@ async function remove(item:Deliverable){
   <div class="deliverable-panel">
     <div class="deliverable-head">
       <div>
-        <h2>交付物</h2>
-        <p class="muted">本工作项要交出的资料清单：开发文档、接口文档、测试记录等。标为「已提供」表示资料已经存在，可关联本工作项已上传的文件，也可只写在备注里（例如放在外部仓库）。</p>
+        <h2>交付要求</h2>
+        <p class="muted">记录约定需要提供的图纸、文档和测试资料，文件在下方统一上传；要求可关联实际文件，也可在备注填写外部仓库地址。资料数量不换算成功能进度。</p>
       </div>
       <div class="deliverable-actions">
         <el-tag :type="total&&provided===total?'success':'info'">已提供 {{provided}}/{{total}}</el-tag>
-        <el-button v-if="canCreate" type="primary" plain @click="openCreate">新增交付物</el-button>
+        <el-button v-if="canCreate" type="primary" plain @click="openCreate">新增交付要求</el-button>
       </div>
     </div>
     <el-progress v-if="total" :percentage="providedPercent" :stroke-width="8" :show-text="false" style="margin:0 0 12px" />
-    <el-table :data="items" empty-text="尚无交付物">
-      <el-table-column prop="name" label="交付物" min-width="200" />
+    <el-table :data="items" empty-text="尚未约定交付资料，可直接在下方上传文件">
+      <el-table-column prop="name" label="交付要求" min-width="200" />
       <el-table-column label="状态" width="100">
         <template #default="scope">
           <el-tag :type="scope.row.status==='PROVIDED'?'success':'info'" size="small">{{scope.row.status==='PROVIDED'?'已提供':'待提供'}}</el-tag>

@@ -6,6 +6,7 @@ import com.projtimeline.common.BusinessException;
 import com.projtimeline.common.BusinessCalendar;
 import com.projtimeline.common.PageResponse;
 import com.projtimeline.data.DataAccess;
+import com.projtimeline.data.TaskSourceSql;
 import com.projtimeline.notification.NotificationService;
 import com.projtimeline.security.CurrentUser;
 import com.projtimeline.security.PermissionService;
@@ -49,6 +50,23 @@ public class ReportingService {
                   (SELECT COALESCE(SUM(t.estimate_days),0) FROM tasks t JOIN nodes n ON n.id=t.node_id JOIN projects p ON p.id=n.project_id WHERE t.assignee_id=u.id AND t.due_date BETWEEN :start AND :end AND n.status<>'CANCELLED' %s) week_due_estimate_days
                 FROM users u WHERE u.active=1 AND u.global_role<>'VIEWER' %s ORDER BY u.name
                 """.formatted(projectFilter, projectFilter, projectFilter, projectFilter, projectFilter, projectFilter, peopleFilter), params);
+        // Additive delivery/Bug summary: legacy task/day fields above remain for old clients and snapshots.
+        Map<Long,Map<String,Object>> deliveryByOwner=new HashMap<>(),bugByOwner=new HashMap<>();
+        for(Map<String,Object> row:db.list("SELECT n.owner_id id,COUNT(*) delivery_open_count,"
+                +"COALESCE(SUM(CASE WHEN n.status='IN_PROGRESS' THEN 1 ELSE 0 END),0) delivery_doing_count,"
+                +"COALESCE(SUM(CASE WHEN n.plan_end<:today THEN 1 ELSE 0 END),0) delivery_overdue_count,"
+                +"COALESCE(SUM(CASE WHEN n.plan_end BETWEEN :start AND :end THEN 1 ELSE 0 END),0) delivery_week_due_count"
+                +" FROM nodes n JOIN projects p ON p.id=n.project_id WHERE p.status='ACTIVE' AND n.status IN('NOT_STARTED','IN_PROGRESS')"
+                +projectFilter+" GROUP BY n.owner_id",params)) deliveryByOwner.put(number(row.get("id")),row);
+        for(Map<String,Object> row:db.list("SELECT t.assignee_id id,COUNT(*) open_bug_count,"
+                +"COALESCE(SUM(CASE WHEN t.due_date<:today THEN 1 ELSE 0 END),0) overdue_bug_count"
+                +TaskSourceSql.FROM+" WHERE "+TaskSourceSql.OPEN_BUG+projectFilter+" GROUP BY t.assignee_id",params)) bugByOwner.put(number(row.get("id")),row);
+        for(Map<String,Object> row:rows) {
+            Map<String,Object> deliveries=deliveryByOwner.getOrDefault(number(row.get("id")),Map.of());
+            Map<String,Object> bugs=bugByOwner.getOrDefault(number(row.get("id")),Map.of());
+            for(String key:List.of("deliveryOpenCount","deliveryDoingCount","deliveryOverdueCount","deliveryWeekDueCount")) row.put(key,deliveries.getOrDefault(key,0L));
+            for(String key:List.of("openBugCount","overdueBugCount")) row.put(key,bugs.getOrDefault(key,0L));
+        }
         return map("weekStart", week[0], "weekEnd", week[1], "people", rows);
     }
 
@@ -117,7 +135,7 @@ public class ReportingService {
         LocalDateTime startTime = start.atStartOfDay(), endExclusive = end.plusDays(1).atStartOfDay();
         Map<String, Object> params = Map.of("project", projectId, "start", start, "end", end, "startTime", startTime, "endTime", endExclusive, "nextEnd", end.plusDays(7), "today", LocalDate.now(clock));
         List<Map<String, Object>> completed = db.list("SELECT id,name,actual_end FROM nodes WHERE project_id=:project AND actual_end BETWEEN :start AND :end ORDER BY actual_end", params);
-        List<Map<String, Object>> exceptions = db.list("SELECT id,name,status,plan_end,blocked,blocked_reason,overdue_reason FROM nodes WHERE project_id=:project AND (blocked=1 OR (status IN('NOT_STARTED','IN_PROGRESS') AND plan_end<:today)) ORDER BY plan_end", params);
+        List<Map<String, Object>> exceptions = db.list("SELECT id,name,status,plan_end,blocked,blocked_reason,overdue_reason FROM nodes WHERE project_id=:project AND status IN('NOT_STARTED','IN_PROGRESS') AND (blocked=1 OR plan_end<:today) ORDER BY plan_end", params);
         List<Map<String, Object>> nextDue = db.list("SELECT id,name,plan_end,status FROM nodes WHERE project_id=:project AND status IN('NOT_STARTED','IN_PROGRESS') AND plan_end>:end AND plan_end<=:nextEnd ORDER BY plan_end", params);
         List<Map<String, Object>> newNodes = db.list("SELECT id,name,created_at FROM nodes WHERE project_id=:project AND created_at>=:startTime AND created_at<:endTime ORDER BY created_at", params);
         List<Map<String, Object>> newTasks = db.list("SELECT t.id,t.name,t.created_at FROM tasks t JOIN nodes n ON n.id=t.node_id WHERE n.project_id=:project AND t.created_at>=:startTime AND t.created_at<:endTime ORDER BY t.created_at", params);

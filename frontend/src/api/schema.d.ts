@@ -660,6 +660,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspace/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["deliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspace/bugs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["bugs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workload": {
         parameters: {
             query?: never;
@@ -983,6 +1015,29 @@ export interface components {
             data?: components["schemas"]["WorkspaceTaskPage"];
         };
         WorkspaceTaskPage: {
+            list?: {
+                [key: string]: unknown;
+            }[];
+            /** Format: int64 */
+            total?: number;
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+            /** Format: date */
+            businessDate?: string;
+            timeZone?: string;
+            counts?: {
+                [key: string]: number;
+            };
+        };
+        ApiResponseWorkspaceDeliveryPage: {
+            /** Format: int32 */
+            code?: number;
+            msg?: string;
+            data?: components["schemas"]["WorkspaceDeliveryPage"];
+        };
+        WorkspaceDeliveryPage: {
             list?: {
                 [key: string]: unknown;
             }[];
@@ -2446,6 +2501,7 @@ export interface operations {
                 page?: number;
                 size?: number;
                 dueWeek?: string;
+                legacyOnly?: boolean;
             };
             header?: never;
             path?: never;
@@ -2480,6 +2536,65 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseMapStringObject"];
+                };
+            };
+        };
+    };
+    deliveries: {
+        parameters: {
+            query?: {
+                scope?: string;
+                status?: string;
+                projectId?: number;
+                ownerId?: number;
+                q?: string;
+                dueWeek?: string;
+                overdue?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseWorkspaceDeliveryPage"];
+                };
+            };
+        };
+    };
+    bugs: {
+        parameters: {
+            query?: {
+                scope?: string;
+                status?: string;
+                projectId?: number;
+                assigneeId?: number;
+                q?: string;
+                overdue?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseWorkspaceTaskPage"];
                 };
             };
         };

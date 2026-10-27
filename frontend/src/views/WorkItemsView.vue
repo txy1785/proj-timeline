@@ -7,7 +7,7 @@ import type { ModuleItem, NodeItem, NodeStatus } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import { useProjectContext } from '../composables/useProjectContext'
 import { canEditModule, isWorkItemManager } from '../utils/permissions'
-import { NODE_STATUS_LABELS, NODE_STATUS_TYPES, WORK_ITEM_TYPE_LABELS } from '../utils/workItem'
+import { NODE_STATUS_LABELS, NODE_STATUS_TYPES, WORK_ITEM_TYPE_LABELS, workItemCounts, hasWorkItemRisk } from '../utils/workItem'
 import WorkItemFormDialog from '../components/WorkItemFormDialog.vue'
 import ModuleFormDialog from '../components/ModuleFormDialog.vue'
 import BugReportDialog from '../components/BugReportDialog.vue'
@@ -74,8 +74,8 @@ async function removeModule(module: ModuleItem) {
   <div v-loading="loading">
     <el-alert v-if="error" :title="error" type="error" :closable="false"><el-button link type="primary" @click="refresh">重新加载</el-button></el-alert>
     <template v-if="project">
-      <header class="page-head"><div><h1>工作项</h1><p>明确每项交付的负责人、日期与下一步，按功能模块分组。</p></div><div class="page-actions"><el-button @click="moduleManagement = true">{{ hasManagement ? '管理模块' : '查看模块' }}</el-button><el-button v-if="!auth.isViewer && active" @click="bugDialog = true">提缺陷</el-button><el-button v-if="canCreateWorkItem" type="primary" @click="createWork()">新建工作项</el-button></div></header>
-      <div class="work-summary"><span>全部 {{ allNodes.length }}</span><button @click="filters.status = 'IN_PROGRESS'">进行中 {{ counts.inProgress }}</button><button class="danger" @click="filters.risk = 'overdue'">延期 {{ counts.overdue }}</button><button class="purple" @click="filters.risk = 'blocked'">受阻 {{ counts.blocked }}</button></div>
+      <header class="page-head"><div><h1>工作项</h1><p>明确每项交付的负责人、日期与下一步，按功能模块分组。</p></div><div class="page-actions"><el-button @click="moduleManagement = true">{{ hasManagement ? '管理模块' : '查看模块' }}</el-button><el-button v-if="!auth.isViewer && active && allNodes.some(node => node.status !== 'CANCELLED')" @click="bugDialog = true">报告 Bug</el-button><el-button v-if="canCreateWorkItem" type="primary" @click="createWork()">新建工作项</el-button></div></header>
+      <div class="work-summary"><span>未取消功能 {{ workItemCounts(allNodes).total }}</span><button @click="filters.status = 'IN_PROGRESS'">进行中 {{ counts.inProgress }}</button><button class="danger" @click="filters.risk = 'overdue'">延期 {{ counts.overdue }}</button><button class="purple" @click="filters.risk = 'blocked'">受阻 {{ counts.blocked }}</button></div>
       <section class="surface filters-panel">
         <el-input v-model="filters.q" clearable placeholder="搜索工作项" aria-label="搜索工作项" />
         <el-select v-model="filters.module" aria-label="所属位置"><el-option label="全部位置" value="all" /><el-option v-for="module in project.modules" :key="module.id" :label="module.name" :value="String(module.id)" /><el-option label="项目级工作项" value="project" /></el-select>
@@ -84,7 +84,7 @@ async function removeModule(module: ModuleItem) {
         <el-select v-model="filters.risk" clearable placeholder="全部风险" aria-label="风险"><el-option label="延期或受阻" value="exception" /><el-option label="已延期" value="overdue" /><el-option label="受阻" value="blocked" /><el-option label="临近到期" value="near" /></el-select>
         <el-checkbox v-if="hasManagement" v-model="filters.mine">我的管理范围</el-checkbox><el-button v-if="filtering" link type="primary" @click="resetFilters">清除筛选</el-button>
       </section>
-      <section v-if="!groups.length" class="surface empty"><h2>{{ filtering ? '当前筛选下没有工作项' : '项目还没有工作项' }}</h2><p>{{ filtering ? '可以清除筛选查看全部工作项。' : '先建立一次明确交付，再拆分执行任务。' }}</p><el-button v-if="filtering" @click="resetFilters">清除筛选</el-button><el-button v-else-if="canCreateWorkItem" type="primary" @click="createWork()">建立首个工作项</el-button><el-button v-if="!filtering && isPm && active" @click="editModule()">新建功能模块</el-button></section>
+      <section v-if="!groups.length" class="surface empty"><h2>{{ filtering ? '当前筛选下没有工作项' : '项目还没有工作项' }}</h2><p>{{ filtering ? '可以清除筛选查看全部工作项。' : '先建立一个小功能，明确负责人、日期与交付资料。' }}</p><el-button v-if="filtering" @click="resetFilters">清除筛选</el-button><el-button v-else-if="canCreateWorkItem" type="primary" @click="createWork()">建立首个工作项</el-button><el-button v-if="!filtering && isPm && active" @click="editModule()">新建功能模块</el-button></section>
       <section v-for="group in groups" :key="group.id" class="surface work-group">
         <div class="section-heading"><div><h2><RouterLink v-if="group.id" :to="`/projects/${id}/modules/${group.id}`">{{ group.name }}</RouterLink><template v-else>{{ group.name }}</template> <small>{{ group.nodes.length }}</small></h2><p class="muted">{{ group.id ? '模块负责人 · ' + group.ownerName : group.ownerName }}</p></div><el-button v-if="active && !auth.isViewer && (isPm || (group.id > 0 && group.ownerId === auth.user?.id))" link type="primary" @click="createWork(group.id || null)">新建工作项</el-button></div>
         <el-table :data="group.nodes" :empty-text="group.totalNodes ? '暂无未取消的工作项' : '本模块还没有工作项'" @row-click="openNode">
@@ -92,8 +92,8 @@ async function removeModule(module: ModuleItem) {
           <el-table-column prop="ownerName" label="负责人" width="105" />
           <el-table-column prop="planEnd" label="计划完成" width="125" />
           <el-table-column label="状态" width="105"><template #default="scope"><el-tag size="small" :type="NODE_STATUS_TYPES[scope.row.status as NodeStatus]">{{ NODE_STATUS_LABELS[scope.row.status as NodeStatus] }}</el-tag></template></el-table-column>
-          <el-table-column label="进度" width="100"><template #default="scope">{{ scope.row.progress }}%</template></el-table-column>
-          <el-table-column label="风险" min-width="130"><template #default="scope"><div class="flags"><el-tag v-if="scope.row.flags?.overdue" size="small" type="danger">已延期</el-tag><el-tag v-if="scope.row.flags?.blocked" size="small" type="warning">受阻</el-tag><el-tag v-if="scope.row.flags?.near" size="small" type="warning">临近</el-tag><span v-if="!scope.row.flags?.overdue && !scope.row.flags?.blocked && !scope.row.flags?.near" class="muted">—</span></div></template></el-table-column>
+          <el-table-column label="交付资料" width="130"><template #default="scope"><span v-if="scope.row.deliverableTotal">{{ scope.row.deliverableProvided || 0 }}/{{ scope.row.deliverableTotal }} 已提供</span><span v-else class="muted">未设交付要求</span></template></el-table-column>
+          <el-table-column label="风险" min-width="130"><template #default="scope"><div class="flags"><el-tag v-if="hasWorkItemRisk(scope.row, 'overdue')" size="small" type="danger">已延期</el-tag><el-tag v-if="hasWorkItemRisk(scope.row, 'blocked')" size="small" type="warning">受阻</el-tag><el-tag v-if="hasWorkItemRisk(scope.row, 'near')" size="small" type="warning">临近</el-tag><span v-if="!hasWorkItemRisk(scope.row, 'overdue') && !hasWorkItemRisk(scope.row, 'blocked') && !hasWorkItemRisk(scope.row, 'near')" class="muted">—</span></div></template></el-table-column>
         </el-table>
       </section>
       <el-dialog v-model="moduleManagement" :title="hasManagement ? '管理功能模块' : '功能模块'" width="min(820px, calc(100vw - 28px))">

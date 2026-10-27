@@ -2,8 +2,8 @@
 const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   OVERDUE_ALERT: '延期提醒',
   BLOCK_ALERT: '受阻提醒',
-  TASK_ASSIGN: '任务指派',
-  NODE_DONE: '工作项完成',
+  TASK_ASSIGN: '工作分派',
+  NODE_DONE: '功能已交付',
   WEEKLY_PUBLISHED: '周报发布',
   CHANGE_REQUEST_SUBMITTED: '变更待审批',
   CHANGE_REQUEST_DECIDED: '变更审批结果'
