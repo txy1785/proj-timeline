@@ -407,3 +407,5 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 集成验证：Maven package71项全通过；前端lint/typecheck/build通过；Playwright29项全通过。最终运行后端生成schema。独立MySQL/真实HTTP验证交付与历史、Bug来源/权限/状态/快照；Chromium实际上传资料、交付后报告Bug并保存修复记录，4张截图已检查。
 - 独立审核2项P2均修复：旧createTask Bug统一报告来源，普通历史任务不可转Bug；关闭项当前风险展示统一hasWorkItemRisk，底层受阻历史保留。后端及浏览器回归已增加。
 - 无迁移/DDL/种子变更，测试数据仅写明确隔离库。用户原库新版58080健康UP，5173热更新。详细证据与边界见docs/功能交付验收/README.md；当前仍有既有主包500kB警告，Firefox/Safari、Docker与长期用户研究未覆盖。
+
+- 最终提交独立复核通过（6800060功能代码，无剩余P1/P2）；修正记忆中一处旧接口数字。隔离库与58082/5175服务已删除，三个实现工作树及依赖链接安全回收，主目录依赖与用户库保留。

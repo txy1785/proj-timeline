@@ -76,7 +76,7 @@
 - 2026-10-26 的体验走查问题现已按批准方案实施：修正工作项/模块的项目导航、增加我的工作与独立项目概览、按日期独立分行的时间线、按项目职务显示操作。历史问题证据保留在 [走查记录](docs/用户体验走查与简化建议.md)，不代表当前仍存在。
 
 - 本轮验证：Maven 71 项测试通过；前端 lint/typecheck/build 通过；Playwright 29 项角色、功能交付、Bug、历史任务、模块与体验回归通过；另在明确命名的本机隔离 MySQL 库执行真实 HTTP 与浏览器流程。详细命令、截图、边界见 [功能交付验收](docs/功能交付验收/README.md)。
-- `PLAN.md` 中早期接口/页面/表数量是历史快照。当前接口 73 个、表 16 张（含 flyway_schema_history），本轮无数据库结构或迁移变更；不可把早期数字当现状。
+- `PLAN.md` 中早期接口/页面/表数量是历史快照。当前接口 75 个、表 16 张（含 flyway_schema_history），本轮无数据库结构或迁移变更；不可把早期数字当现状。
 - 当前工作站此前未运行 Docker Compose 的真实构建；部署仍需在具备 Docker 的目标环境验证。
 - 文件存储当前用本地磁盘（`app.storage.root` 默认 `./data/files`，容器内 `/app/data/files` 挂 `file-data` 卷）。未接入 MinIO/对象存储：存储层已抽成 `FileStorage` 接口，切换时只加实现并改配置。单文件上限 50MB，Nginx 侧 `client_max_body_size 60m`，后端 `spring.servlet.multipart` 与 `app.storage.max-file-bytes` 同步。
 - Git 远程：`https://github.com/txy1785/proj-timeline.git`。分支模型：`main` 版本上线、`develop` 开发主线、`feature/<描述>` 功能分支从 `develop` 拉出；功能代码必须经独立审核（干净会话/子代理）后合并 `develop`，发布从 `develop` 合并 `main` 并打 tag。GitHub 默认分支为 `main`，远程仅保留 `main` 与 `develop`（旧 `master` 已删除）。提交前先 `git status` 核对未被 .gitignore 遗漏的文件。
