@@ -74,7 +74,7 @@ async function saved(node?:NodeItem){await refresh();if(node?.id)void router.pus
 
 <template>
   <div>
-    <header class="page-head"><div><h1>交付排期</h1><p>按功能模块查看每项交付的日期与负责人；同日使用同一日期刻度。</p></div><div class="page-actions"><el-button v-if="!auth.isViewer&&project?.status==='ACTIVE'" @click="bugDialog=true">提缺陷</el-button><el-button v-if="canCreateWorkItem" type="primary" @click="workDialog=true">新建工作项</el-button></div></header>
+    <header class="page-head"><div><h1>交付排期</h1><p>按功能模块查看每项交付的日期与负责人；同日使用同一日期刻度。</p></div><div class="page-actions"><el-button v-if="!auth.isViewer&&project?.status==='ACTIVE'&&nodes.some(node=>node.status!=='CANCELLED')" @click="bugDialog=true">报告 Bug</el-button><el-button v-if="canCreateWorkItem" type="primary" @click="workDialog=true">新建工作项</el-button></div></header>
     <section class="surface schedule-surface">
       <div class="section-head"><div class="page-actions"><el-select v-model="range" aria-label="排期范围" style="width:130px"><el-option label="全部排期" value="ALL"/><el-option label="本月" value="MONTH"/><el-option label="近四周" value="FOUR"/></el-select><el-select v-model="zoom" aria-label="时间线刻度" style="width:120px"><el-option label="按周" value="WEEK"/><el-option label="按月" value="MONTH"/></el-select><el-button :disabled="!businessDate" @click="locateToday">定位今天</el-button></div><div class="schedule-legend"><span><i class="not-started"/>未开始</span><span><i class="in-progress"/>进行中</span><span><i class="done"/>已交付</span><span class="danger">延期</span><span class="warning">临近</span><span class="purple">受阻</span></div></div>
       <p v-if="dayCount>730" class="muted">排期超过两年，刻度自动按年显示；可切换本月或近四周查看细节。</p>

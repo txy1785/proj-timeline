@@ -41,7 +41,7 @@ function created(node: NodeItem) { void refresh(); router.push(`/nodes/${node.id
     <template v-if="project">
       <header class="page-head">
         <div><div class="heading-line"><h1>{{ project.name }}</h1><el-tag :type="active ? 'primary' : 'info'">{{ active ? '进行中' : '已归档' }}</el-tag></div><p class="project-purpose">{{ project.description || '尚未填写项目说明' }} <el-button v-if="isPm && active && !project.description" link type="primary" @click="router.push(`/projects/${id}/settings`)">补充说明</el-button></p></div>
-        <div class="page-actions"><el-button v-if="canCreateWorkItem" type="primary" @click="workItemDialog = true">新建工作项</el-button><el-button v-if="!auth.isViewer && active" @click="bugDialog = true">提缺陷</el-button></div>
+        <div class="page-actions"><el-button v-if="canCreateWorkItem" type="primary" @click="workItemDialog = true">新建工作项</el-button><el-button v-if="!auth.isViewer && active && allNodes.some(node => node.status !== 'CANCELLED')" @click="bugDialog = true">报告 Bug</el-button></div>
       </header>
       <el-alert v-if="!active" title="项目已归档，以下为保留的交付记录。业务内容只读。" type="info" :closable="false" class="section-gap" />
       <section class="surface project-facts section-gap" aria-label="项目交付信息">

@@ -74,7 +74,7 @@ async function removeModule(module: ModuleItem) {
   <div v-loading="loading">
     <el-alert v-if="error" :title="error" type="error" :closable="false"><el-button link type="primary" @click="refresh">重新加载</el-button></el-alert>
     <template v-if="project">
-      <header class="page-head"><div><h1>工作项</h1><p>明确每项交付的负责人、日期与下一步，按功能模块分组。</p></div><div class="page-actions"><el-button @click="moduleManagement = true">{{ hasManagement ? '管理模块' : '查看模块' }}</el-button><el-button v-if="!auth.isViewer && active" @click="bugDialog = true">提缺陷</el-button><el-button v-if="canCreateWorkItem" type="primary" @click="createWork()">新建工作项</el-button></div></header>
+      <header class="page-head"><div><h1>工作项</h1><p>明确每项交付的负责人、日期与下一步，按功能模块分组。</p></div><div class="page-actions"><el-button @click="moduleManagement = true">{{ hasManagement ? '管理模块' : '查看模块' }}</el-button><el-button v-if="!auth.isViewer && active && allNodes.some(node => node.status !== 'CANCELLED')" @click="bugDialog = true">报告 Bug</el-button><el-button v-if="canCreateWorkItem" type="primary" @click="createWork()">新建工作项</el-button></div></header>
       <div class="work-summary"><span>未取消功能 {{ workItemCounts(allNodes).total }}</span><button @click="filters.status = 'IN_PROGRESS'">进行中 {{ counts.inProgress }}</button><button class="danger" @click="filters.risk = 'overdue'">延期 {{ counts.overdue }}</button><button class="purple" @click="filters.risk = 'blocked'">受阻 {{ counts.blocked }}</button></div>
       <section class="surface filters-panel">
         <el-input v-model="filters.q" clearable placeholder="搜索工作项" aria-label="搜索工作项" />
