@@ -7,7 +7,7 @@ import type { ChangeRequest, NodeItem, NodeStatus, WorkItemType } from '../api/t
 import { useAuthStore } from '../stores/auth'
 import { useProjectContext } from '../composables/useProjectContext'
 import { canEditModule } from '../utils/permissions'
-import { NODE_STATUS_LABELS, NODE_STATUS_TYPES, WORK_ITEM_TYPE_LABELS } from '../utils/workItem'
+import { NODE_STATUS_LABELS, NODE_STATUS_TYPES, WORK_ITEM_TYPE_LABELS, workItemCounts } from '../utils/workItem'
 import AttachmentPanel from '../components/AttachmentPanel.vue'
 import ModuleFormDialog from '../components/ModuleFormDialog.vue'
 import ChangeRequestDialog from '../components/ChangeRequestDialog.vue'
@@ -21,6 +21,7 @@ const auth = useAuthStore()
 const { project, members, loading, error, businessDate, isPm, refresh } = useProjectContext(projectId)
 const module = computed(() => project.value?.modules.find(item => item.id === moduleId))
 const active = computed(() => project.value?.status === 'ACTIVE')
+const deliveryCounts = computed(() => workItemCounts(module.value?.nodes || []))
 const canManage = computed(() => !!module.value && active.value && canEditModule(auth.user, members.value, module.value))
 const canRequest = computed(() => !!module.value && active.value && !auth.isViewer && !canManage.value)
 const moduleDialog = ref(false)
@@ -56,9 +57,9 @@ async function removeModule() {
       <el-alert v-if="!active" title="项目已归档，模块和文件只读。" type="info" :closable="false" class="section-gap" />
       <el-alert v-else-if="auth.isViewer" title="当前为只读观察账号，可查看工作项和下载文件。" type="info" :closable="false" class="section-gap" />
       <div v-else-if="canRequest" class="surface request-entry section-gap"><div><strong>{{ pendingRequest ? '变更申请待审批' : '需要调整这个模块？' }}</strong><p>{{ pendingRequest ? '申请通过前，模块内容保持原样。' : '可申请修改名称、描述或负责人，由项目经理审批。' }}</p></div><el-button v-if="pendingRequest" @click="router.push(`/projects/${projectId}/settings?tab=requests&requestId=${pendingRequest.id}`)">查看我的申请</el-button><el-button v-else @click="requestDialog = true">申请变更模块</el-button></div>
-      <section class="surface section-gap"><div class="section-heading"><div><h2>模块工作项</h2><p class="muted">模块用于功能划分；每个工作项有自己的负责人和计划日期。</p></div><el-button v-if="canManage" type="primary" @click="workItemDialog = true">新建工作项</el-button></div>
-        <el-table :data="module.nodes || []" empty-text="本模块还没有工作项" @row-click="openNode"><el-table-column prop="name" label="工作项" min-width="180"><template #default="scope"><el-button link type="primary" @click.stop="openNode(scope.row)">{{ scope.row.name }}</el-button><small class="row-type">{{ WORK_ITEM_TYPE_LABELS[scope.row.type as WorkItemType] }}</small></template></el-table-column><el-table-column prop="ownerName" label="负责人" width="110" /><el-table-column prop="planStart" label="计划开始" width="125" /><el-table-column prop="planEnd" label="计划结束" width="125" /><el-table-column label="状态" width="105"><template #default="scope"><el-tag size="small" :type="NODE_STATUS_TYPES[scope.row.status as NodeStatus]">{{ NODE_STATUS_LABELS[scope.row.status as NodeStatus] }}</el-tag></template></el-table-column><el-table-column label="进度" width="80"><template #default="scope">{{ scope.row.progress }}%</template></el-table-column></el-table>
-        <div v-if="!module.nodes?.length && canManage" class="empty module-empty"><p>建立本模块的第一项交付，再继续拆分执行任务。</p><el-button type="primary" @click="workItemDialog = true">建立首个工作项</el-button></div>
+      <section class="surface section-gap"><div class="section-heading"><div><h2>模块工作项</h2><p class="muted">已交付 {{ deliveryCounts.done }}/{{ deliveryCounts.total }} 项功能；每项有自己的负责人和计划日期。</p></div><el-button v-if="canManage" type="primary" @click="workItemDialog = true">新建工作项</el-button></div>
+        <el-table :data="module.nodes || []" empty-text="本模块还没有工作项" @row-click="openNode"><el-table-column prop="name" label="工作项" min-width="180"><template #default="scope"><el-button link type="primary" @click.stop="openNode(scope.row)">{{ scope.row.name }}</el-button><small class="row-type">{{ WORK_ITEM_TYPE_LABELS[scope.row.type as WorkItemType] }}</small></template></el-table-column><el-table-column prop="ownerName" label="负责人" width="110" /><el-table-column prop="planStart" label="计划开始" width="125" /><el-table-column prop="planEnd" label="计划结束" width="125" /><el-table-column label="状态" width="105"><template #default="scope"><el-tag size="small" :type="NODE_STATUS_TYPES[scope.row.status as NodeStatus]">{{ NODE_STATUS_LABELS[scope.row.status as NodeStatus] }}</el-tag></template></el-table-column><el-table-column label="交付资料" width="130"><template #default="scope"><span v-if="scope.row.deliverableTotal">{{ scope.row.deliverableProvided || 0 }}/{{ scope.row.deliverableTotal }} 已提供</span><span v-else class="muted">未设交付要求</span></template></el-table-column></el-table>
+        <div v-if="!module.nodes?.length && canManage" class="empty module-empty"><p>建立本模块的第一个小功能，明确交付内容与负责人。</p><el-button type="primary" @click="workItemDialog = true">建立首个工作项</el-button></div>
       </section>
       <section class="surface"><AttachmentPanel owner-type="MODULE" :owner-id="moduleId" :can-manage="canManage" :archived="!active" :show-category-nav="false" hint="本模块的设计、流程与开发过程文件。" /></section>
       <ModuleFormDialog v-model="moduleDialog" :project-id="projectId" :module="module" :members="members" @saved="refresh" />
