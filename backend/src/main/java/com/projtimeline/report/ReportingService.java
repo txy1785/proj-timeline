@@ -33,7 +33,11 @@ public class ReportingService {
     public Map<String, Object> workload(LocalDate anyDate) {
         LocalDate[] week = week(anyDate == null ? LocalDate.now(clock) : anyDate);
         CurrentUser current = permissions.current();
-        String projectFilter = current.isAdmin() || current.isViewer() ? "" : " AND p.id IN(SELECT project_id FROM project_members WHERE user_id=:current)";
+        String projectFilter = permissions.readableProjectFilter();
+        String peopleFilter = current.isAdmin() || current.isViewer() ? "" : """
+                 AND (u.id=:current OR EXISTS(SELECT 1 FROM project_members person_member
+                     JOIN projects p ON p.id=person_member.project_id WHERE person_member.user_id=u.id
+                """ + projectFilter + "))";
         Map<String, Object> params = new HashMap<>(); params.put("current", current.id()); params.put("start", week[0]); params.put("end", week[1]); params.put("today", LocalDate.now(clock));
         List<Map<String, Object>> rows = db.list("""
                 SELECT u.id,u.name,u.username,
@@ -43,8 +47,8 @@ public class ReportingService {
                   (SELECT COUNT(*) FROM tasks t JOIN nodes n ON n.id=t.node_id JOIN projects p ON p.id=n.project_id WHERE t.assignee_id=u.id AND t.status<>'DONE' AND t.due_date BETWEEN :start AND :end AND n.status<>'CANCELLED' %s) week_due_count,
                   (SELECT COALESCE(SUM(t.estimate_days),0) FROM tasks t JOIN nodes n ON n.id=t.node_id JOIN projects p ON p.id=n.project_id WHERE t.assignee_id=u.id AND t.status<>'DONE' AND n.status<>'CANCELLED' %s) active_estimate_days,
                   (SELECT COALESCE(SUM(t.estimate_days),0) FROM tasks t JOIN nodes n ON n.id=t.node_id JOIN projects p ON p.id=n.project_id WHERE t.assignee_id=u.id AND t.due_date BETWEEN :start AND :end AND n.status<>'CANCELLED' %s) week_due_estimate_days
-                FROM users u WHERE u.active=1 AND u.global_role<>'VIEWER' ORDER BY u.name
-                """.formatted(projectFilter, projectFilter, projectFilter, projectFilter, projectFilter, projectFilter), params);
+                FROM users u WHERE u.active=1 AND u.global_role<>'VIEWER' %s ORDER BY u.name
+                """.formatted(projectFilter, projectFilter, projectFilter, projectFilter, projectFilter, projectFilter, peopleFilter), params);
         return map("weekStart", week[0], "weekEnd", week[1], "people", rows);
     }
 
@@ -104,7 +108,7 @@ public class ReportingService {
         LocalDate start = (LocalDate) row.get("weekStart"), end = (LocalDate) row.get("weekEnd"); String content = toJson(aggregate(projectId, start, end));
         db.update("UPDATE weekly_reports SET content=:content,status='PUBLISHED',published_at=NOW() WHERE id=:id AND status='DRAFT'", Map.of("content", content, "id", reportId));
         List<Map<String, Object>> members = db.list("SELECT DISTINCT user_id FROM project_members WHERE project_id=:project", Map.of("project", projectId));
-        String link = "/projects/" + projectId + "/reports";
+        String link = "/projects/" + projectId + "/reports?week=" + start;
         for (Map<String, Object> member : members) notifications.notify(number(member.get("userId")), "WEEKLY_PUBLISHED", "项目周报已发布", link);
         return report(projectId, start);
     }

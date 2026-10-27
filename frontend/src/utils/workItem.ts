@@ -1,4 +1,4 @@
-import type { WorkItemType } from '../api/types'
+import type { NodeStatus, WorkItemType } from '../api/types'
 
 /** 工作项类型的中文标签，全站唯一来源。 */
 export const WORK_ITEM_TYPE_LABELS: Record<WorkItemType, string> = {
@@ -18,3 +18,10 @@ export const WORK_ITEM_TYPE_TYPES: Record<WorkItemType, 'primary' | 'success' | 
 }
 
 export const WORK_ITEM_TYPES: WorkItemType[] = ['FEATURE', 'TEST', 'MAINTENANCE', 'BUGFIX', 'OTHER']
+
+export const NODE_STATUS_LABELS: Record<NodeStatus, string> = {
+  NOT_STARTED: '未开始', IN_PROGRESS: '进行中', DONE: '已完成', CANCELLED: '已取消'
+}
+export const NODE_STATUS_TYPES: Record<NodeStatus, 'primary' | 'success' | 'info'> = {
+  NOT_STARTED: 'info', IN_PROGRESS: 'primary', DONE: 'success', CANCELLED: 'info'
+}

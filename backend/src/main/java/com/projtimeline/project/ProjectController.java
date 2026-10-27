@@ -14,7 +14,12 @@ public class ProjectController {
     public ProjectController(ProjectService service) { this.service = service; }
 
     @GetMapping("/projects")
-    ApiResponse<PageResponse<Map<String, Object>>> projects(@RequestParam(defaultValue="1") int page, @RequestParam(defaultValue="20") int size) { return ApiResponse.ok(service.projects(page, size)); }
+    ApiResponse<PageResponse<Map<String, Object>>> projects(@RequestParam(defaultValue="1") int page,
+                                                           @RequestParam(defaultValue="20") int size,
+                                                           @RequestParam(required=false) String status,
+                                                           @RequestParam(required=false) String q) {
+        return ApiResponse.ok(service.projects(page, size, status, q));
+    }
 
     @PostMapping("/projects")
     ApiResponse<Map<String, Object>> create(@RequestBody Map<String, Object> body) { return ApiResponse.ok(service.createProject(body)); }

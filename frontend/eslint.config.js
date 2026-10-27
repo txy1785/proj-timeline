@@ -9,6 +9,7 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...pluginVue.configs['flat/recommended'],
+  { files: ['tests/**/*.mjs'], languageOptions: { globals: globals.browser } },
   { files: ['**/*.ts'], languageOptions: { parser: tseslint.parser, globals: globals.browser } },
   { files: ['**/*.vue'], languageOptions: { parser: vueParser, parserOptions: { parser: tseslint.parser, extraFileExtensions: ['.vue'], sourceType: 'module' }, globals: globals.browser }, rules: {
     '@typescript-eslint/no-explicit-any': 'off', 'vue/multi-word-component-names': 'off',
