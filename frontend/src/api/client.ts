@@ -1,6 +1,13 @@
 import axios from 'axios'
 import type { ApiResponse } from './types'
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status?: number, public readonly code?: number) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
 export const http = axios.create({ baseURL: '/api', timeout: 15000 })
 
 http.interceptors.request.use((config) => {
@@ -17,7 +24,7 @@ http.interceptors.response.use(
       sessionStorage.removeItem('timeline-user')
       if (location.pathname !== '/login') location.assign('/login')
     }
-    return Promise.reject(new Error(await messageOf(error)))
+    return Promise.reject(new ApiError(await messageOf(error), error.response?.status, error.response?.data?.code))
   }
 )
 
