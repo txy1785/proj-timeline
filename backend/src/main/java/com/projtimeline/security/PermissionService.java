@@ -2,6 +2,7 @@ package com.projtimeline.security;
 
 import com.projtimeline.common.BusinessException;
 import com.projtimeline.data.DataAccess;
+import com.projtimeline.data.TaskSourceSql;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -62,11 +63,15 @@ public class PermissionService {
         throw BusinessException.forbidden("无权管理工作项");
     }
 
-    public void requireTaskManager(long taskId, boolean allowAssignee) {
-        Map<String, Object> task = db.one("SELECT t.id,t.assignee_id,n.id node_id,n.project_id,n.owner_id node_owner_id,m.owner_id module_owner_id FROM tasks t JOIN nodes n ON n.id=t.node_id LEFT JOIN modules m ON m.id=n.module_id WHERE t.id=:id",
+    public void requireTaskManager(long taskId, boolean allowAssignee) { requireTaskManager(taskId,allowAssignee,false); }
+
+    /** Current read after callers lock source/storage nodes, so owner/assignment changes cannot authorize stale writes. */
+    public void requireTaskManager(long taskId, boolean allowAssignee, boolean currentRead) {
+        Map<String, Object> task = db.one("SELECT t.id,t.assignee_id,n.project_id,p.status project_status,(" + TaskSourceSql.ID + ") node_id,(" + TaskSourceSql.OWNER + ") node_owner_id,source_module.owner_id module_owner_id " + TaskSourceSql.FROM + " WHERE t.id=:id"+(currentRead?" FOR UPDATE":""),
                 Map.of("id", taskId), "任务不存在");
         long projectId = number(task.get("projectId"));
         requireProjectActive(projectId);
+        if("ARCHIVED".equals(task.get("projectStatus"))) throw BusinessException.conflict("项目已归档");
         long userId = current().id();
         if (current().isAdmin() || isPm(projectId) || number(task.get("nodeOwnerId")) == userId
                 || (allowAssignee && number(task.get("assigneeId")) == userId)) return;

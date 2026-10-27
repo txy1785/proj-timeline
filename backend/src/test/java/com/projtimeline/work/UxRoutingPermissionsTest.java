@@ -30,22 +30,22 @@ class UxRoutingPermissionsTest {
         verifyNoInteractions(f.notifications);
     }
 
-    @Test void submissionReresolvesAfterPreflightAndKeepsRelationToClosedOriginal() {
+    @Test void submissionKeepsDeliveredOriginalInsteadOfRoutingToBugfixPool() {
         assertThat(f.work.bugRouting(10,101L)).containsEntry("nodeId",101L);
         f.jdbc.update("UPDATE nodes SET status='DONE' WHERE id=101");
         Map<String,Object> created=f.work.reportBug(10,Map.of("name","预判后状态变化","relatedNodeId",101L));
-        assertThat(created).containsEntry("nodeId",102L).containsEntry("relatedNodeId",101L).containsEntry("kind","BUG").containsEntry("assigneeId",1L);
-        verify(f.notifications).notify(eq(1L),eq("TASK_ASSIGN"),anyString(),eq("/nodes/102?task="+created.get("id")));
+        assertThat(created).containsEntry("nodeId",101L).containsEntry("relatedNodeId",101L).containsEntry("kind","BUG").containsEntry("assigneeId",3L);
+        verify(f.notifications).notify(eq(3L),eq("TASK_ASSIGN"),anyString(),eq("/nodes/101?task="+created.get("id")));
     }
 
     @Test void absentReceiverAndInvalidOrInaccessibleAssociationsHaveExplicitErrors() {
-        assertThat(f.work.bugRouting(10,103L)).containsEntry("nodeId",102L);
+        assertThat(f.work.bugRouting(10,103L)).containsEntry("nodeId",103L);
         assertThatThrownBy(()->f.work.bugRouting(10,201L)).isInstanceOfSatisfying(BusinessException.class,e->assertThat(e.code()).isEqualTo(4000));
         assertThatThrownBy(()->f.work.bugRouting(20,null)).isInstanceOfSatisfying(BusinessException.class,e->assertThat(e.code()).isEqualTo(4003));
         f.jdbc.update("UPDATE nodes SET status='DONE' WHERE id=102");
-        assertThat(f.work.bugRouting(10,103L)).containsEntry("canSubmit",false);
+        assertThat(f.work.bugRouting(10,103L)).containsEntry("canSubmit",true);
         assertThatThrownBy(()->f.work.reportBug(10,Map.of("name","没有接收位置")))
-                .isInstanceOfSatisfying(BusinessException.class,e->assertThat(e.code()).isEqualTo(4090));
+                .isInstanceOfSatisfying(BusinessException.class,e->assertThat(e.code()).isEqualTo(4000));
     }
 
     @Test void viewerArchivedProjectAndInactiveReceiverCannotSubmit() {

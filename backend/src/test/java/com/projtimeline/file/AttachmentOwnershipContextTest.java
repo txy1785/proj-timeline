@@ -20,7 +20,6 @@ class AttachmentOwnershipContextTest {
     private AttachmentService service;
     @BeforeEach void setup() {
         f=new UxDatabaseFixture();
-        f.jdbc.execute("CREATE TABLE attachments(id BIGINT PRIMARY KEY,project_id BIGINT,owner_type VARCHAR(20),owner_id BIGINT,category VARCHAR(40),title VARCHAR(200),original_name VARCHAR(200),content_type VARCHAR(100),size_bytes BIGINT,sha256 VARCHAR(64),version INT,remark VARCHAR(1000),uploader_id BIGINT,created_at TIMESTAMP,deleted BOOLEAN DEFAULT FALSE)");
         service=new AttachmentService(f.db,f.permissions,mock(FileStorage.class),new StorageProperties(null,0,null));
         f.jdbc.execute("INSERT INTO attachments(id,project_id,owner_type,owner_id,category,title,uploader_id) VALUES(1,10,'PROJECT',10,'PROJECT_OTHER','项目文件',1),(2,10,'MODULE',100,'MODULE_OTHER','模块文件',3),(3,10,'NODE',101,'NODE_OTHER','工作项文件',3),(4,10,'TASK',1001,'TASK_OTHER','任务文件',2),(5,20,'TASK',2001,'TASK_OTHER','私有文件',4),(6,10,'TASK',2001,'TASK_OTHER','失配历史元数据',1)");
     }
