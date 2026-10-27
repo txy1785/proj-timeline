@@ -386,3 +386,5 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 已知边界：现有 Element Plus 主包 >500kB 警告保留；只验证 Chromium，Firefox/Safari、真实团队长期可用性研究未覆盖。早期设计中的“暂不写代码”记录属于前一阶段，不覆盖本次明确实施授权。
 
 - 交付运行检查：临时测试库和 58082/5175 测试服务已清理；新版后端 58080 健康 UP，前端 5173 HTTP 200，使用原本机数据库。
+
+- 独立最终审核通过后，功能分支以合并提交 `31d38bc` 集成并推送 develop；main 未变。已删除远端/本地 feature/experience-improvements 及本轮三个工作分支，移除隔离工作树，工作区干净。
