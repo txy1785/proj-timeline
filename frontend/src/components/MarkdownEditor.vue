@@ -84,8 +84,14 @@ function showImage(container: HTMLElement, attachment: Attachment, url: string) 
   image.src = url
   image.alt = attachment.title || attachment.originalName
   image.title = attachment.originalName
+  image.referrerPolicy = 'no-referrer'
   image.onerror = () => { container.textContent = '图片加载失败' }
   container.replaceChildren(image)
+}
+
+/** 编辑区里的外链图片也不向第三方发送 Referer，和记录展示视图保持同一口径。 */
+function hardenImages() {
+  surfaceRef.value?.querySelectorAll('img').forEach(image => image.setAttribute('referrerpolicy', 'no-referrer'))
 }
 
 async function hydrateImages() {
@@ -108,7 +114,8 @@ async function hydrateImages() {
       link.textContent = previewKind(attachment.originalName) === 'image'
         ? `图片较大，点击查看：${attachment.originalName}`
         : `附件：${attachment.originalName}`
-      container.replaceWith(link)
+      // 保留 .md-image 容器和 data-name，序列化仍写回 ![name](attachment:id)，不把降级文案写进正文
+      container.replaceChildren(link)
       continue
     }
     const cached = blobCache.get(id)
@@ -133,12 +140,13 @@ function setSurfaceContent(value: string) {
   host.innerHTML = value.trim() ? renderMarkdown(value) : ''
   host.querySelectorAll<HTMLElement>('.md-file[data-attachment-id]').forEach(element => element.setAttribute('contenteditable', 'false'))
   void hydrateImages()
+  hardenImages()
 }
 
 function serialize() {
   const host = surfaceRef.value
   if (!host) return
-  const markdown = turndown.turndown(host.innerHTML).replace(/\u00a0/g, ' ').trim()
+  const markdown = turndown.turndown(host).replace(/\u00a0/g, ' ').replace(/\u200b/g, '').trim()
   if (markdown === lastMarkdown) return
   lastMarkdown = markdown
   emit('update:modelValue', markdown)
@@ -147,8 +155,60 @@ function serialize() {
 function onInput() {
   if (composing.value) return
   const host = surfaceRef.value
-  if (host && (host.innerHTML === '<br>' || host.innerHTML === '<div><br></div>')) host.innerHTML = ''
+  if (host && !host.textContent?.trim() && !host.querySelector('img,.md-image,.md-file,table,pre,hr')) host.innerHTML = ''
   serialize()
+}
+
+/** 支持在行首输入 `# `、`- `、`1. `、`> ` 后直接转成对应 Markdown 块，减少工具栏切换。 */
+function onKeydown(event: KeyboardEvent) {
+  if (event.key !== ' ' || props.disabled || sourceMode.value || composing.value) return
+  const host = surfaceRef.value
+  const selection = window.getSelection()
+  if (!host || !selection?.rangeCount || !host.contains(selection.anchorNode)) return
+  const markers = ['#', '##', '###', '-', '*', '1.', '>']
+  const rootText = selection.anchorNode?.nodeType === Node.TEXT_NODE && selection.anchorNode.parentNode === host
+    ? selection.anchorNode as Text
+    : null
+  let block: HTMLElement | null = null
+  let text = ''
+  if (rootText && host.childNodes.length === 1) {
+    text = rootText.data.replace(/\u00a0/g, '').trim()
+  } else {
+    block = currentBlock()
+    if (!block || !['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'BLOCKQUOTE'].includes(block.tagName) || block.childNodes.length !== 1 || block.firstChild?.nodeType !== Node.TEXT_NODE) return
+    text = (block.textContent || '').replace(/\u00a0/g, '').trim()
+  }
+  if (!markers.includes(text)) return
+  event.preventDefault()
+  let node: HTMLElement
+  let caret: HTMLElement
+  if (text.startsWith('#')) {
+    node = document.createElement(`h${text.length}`)
+    caret = node
+  } else if (text === '>') {
+    node = document.createElement('blockquote')
+    caret = node
+  } else {
+    const list = document.createElement(text === '1.' ? 'ol' : 'ul')
+    caret = document.createElement('li')
+    list.append(caret)
+    node = list
+  }
+  if (block) block.replaceWith(node)
+  else host.replaceChildren(node)
+  const placeholder = document.createTextNode('\u200b')
+  caret.appendChild(placeholder)
+  placeCaret(placeholder)
+  serialize()
+}
+
+function placeCaret(node: Node, offset = 0) {
+  const selection = window.getSelection()
+  const range = document.createRange()
+  range.setStart(node, offset)
+  range.collapse(true)
+  selection?.removeAllRanges()
+  selection?.addRange(range)
 }
 
 function onCompositionEnd() {
@@ -211,6 +271,7 @@ function insertHtml(html: string) {
     selection.addRange(after)
   }
   savedRange = null
+  hardenImages()
   serialize()
 }
 
@@ -309,6 +370,7 @@ function insertTable() {
 }
 
 async function insertLink() {
+  const selectedText = window.getSelection()?.toString() || ''
   let url = ''
   try {
     const result = await ElMessageBox.prompt('链接地址（http/https/mailto）', '插入链接', {
@@ -317,9 +379,7 @@ async function insertLink() {
     })
     url = result.value.trim()
   } catch { return }
-  const selection = window.getSelection()
-  const text = selection?.toString() || url
-  insertHtml(`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`)
+  insertHtml(`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(selectedText || url)}</a>`)
 }
 
 function attachmentHtml(attachment: Attachment, image: boolean, url?: string) {
@@ -525,6 +585,7 @@ onBeforeUnmount(() => {
       :data-placeholder="placeholder"
       spellcheck="false"
       @input="onInput"
+      @keydown="onKeydown"
       @focus="onFocus"
       @compositionstart="composing = true"
       @compositionend="onCompositionEnd"

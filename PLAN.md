@@ -488,6 +488,7 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 工具栏支持二级标题、加粗、斜体、删除线、引用、无序/有序列表、行内代码、代码块、链接、表格、附件；选中文本加粗/斜体用 Range 包裹，跨块选择失败时退回原生命令，避免整段被替换。
 - 新增 `turndown`、`turndown-plugin-gfm`、`dompurify` 依赖；粘贴 HTML 先经 DOMPurify 白名单清洗，初始渲染仍固定 `markdown-it` 的 `html:false`。附件图片按 id 缓存 Blob（切换源码/编辑不重复请求）；非图片或超 20MB 降级为文件名链接，点击走 `AttachmentPreview`；文件链接、上传中移除、源码态粘贴等沿用原逻辑。
 - 编辑区高度 `min(360px, 52vh)`/最大 52vh；任务抽屉 960px；移动端 390px 无横向溢出。
-- 验证：`lint`/`typecheck`/`build`、Playwright **42 项**通过（含单栏编辑、图片内联、PDF 文件名链接与点击预览、加粗/标题工具栏、源码模式、既有复杂 Markdown 结构保持、移除附件、上传暂停、移动端）；无后端/接口/迁移变更，58080/5173 运行。
-- 已知：打开旧记录后保存会由 turndown 规范化列表缩进/表格排版等（语义保持），复杂语法可切「源码」避免；本轮不新增后端解析。
-- 待独立审核后合并 develop。
+- 验证：`lint`/`typecheck`/`build`、Playwright **44 项**通过（含单栏编辑、图片内联、PDF 文件名链接与点击预览、加粗/标题工具栏、源码模式、行首 `# ` 快捷标题、既有复杂 Markdown 结构在真实键入后仍保持、超 20MB 图片占位不被改写成 UI 文案、粘贴 HTML 剥离 `onerror`/`javascript:`/iframe、移除附件、上传暂停、移动端）；无后端/接口/迁移变更，58080/5173 运行。
+- 已知：打开旧记录保存会由 turndown 规范化列表缩进、表格分隔符（**列对齐不保留**）、裸链接转 `[url](url)`、任务列表方括号转义等（语义保持）；要求逐字不变时切「源码」；不新增后端解析。
+- 独立审核（fc6d8a3）无 P1、2 项 P2；已修：超 20MB/非图片图片语法保留 `![name](attachment:id)` 占位、保真 e2e 真实键入触发序列化；另修软键盘占位、粘贴图片 Referer、`turndown(host)` 减少一次解析，并补 HTML 消毒用例。
+- 待复核/合并 develop。
