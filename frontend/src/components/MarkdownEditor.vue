@@ -161,7 +161,7 @@ function onInput() {
 
 /** 支持在行首输入 `# `、`- `、`1. `、`> ` 后直接转成对应 Markdown 块，减少工具栏切换。 */
 function onKeydown(event: KeyboardEvent) {
-  if (event.key !== ' ' || props.disabled || sourceMode.value || composing.value) return
+  if (event.key !== ' ' || event.ctrlKey || event.metaKey || event.altKey || props.disabled || sourceMode.value || composing.value) return
   const host = surfaceRef.value
   const selection = window.getSelection()
   if (!host || !selection?.rangeCount || !host.contains(selection.anchorNode)) return

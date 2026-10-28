@@ -47,7 +47,7 @@ export function createMarkdownTurndown(): TurndownService {
   })
 
   service.addRule('strikethrough', {
-    filter: ['del', 's'],
+    filter: (node) => ['DEL', 'S', 'STRIKE'].includes(node.nodeName),
     replacement: (content) => `~~${content}~~`
   })
 

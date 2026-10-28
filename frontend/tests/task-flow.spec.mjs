@@ -259,7 +259,6 @@ test('toolbar heading writes markdown', async ({ page }) => {
 
 test('markdown shortcuts create blocks while typing', async ({ page }) => {
   test.setTimeout(30_000)
-  page.on('console', message => { if (message.text().startsWith('KEYDOWN')||message.text().startsWith('SET SURFACE')) console.log(message.text()) })
   const state=await prepare(page)
   await page.goto('/nodes/106?task=11')
   await page.getByRole('tab',{name:/进展记录/}).click()
