@@ -240,6 +240,8 @@ test('mobile Bug rows retain a full-width detail entry', async ({ page }) => {
   await page.getByRole('textbox',{name:'进展记录内容'}).fill('移动端的实时预览')
   await expect(page.getByRole('region',{name:'实时预览'})).toBeVisible()
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
+  const columns=await page.locator('.md-editor-pane').evaluate(element=>getComputedStyle(element).gridTemplateColumns)
+  expect(columns.split(' ')).toHaveLength(1)
 })
 
 test('PM confirms delivery despite unfinished legacy tasks and sends expected work-item state', async ({ page }) => {

@@ -300,9 +300,10 @@ onBeforeUnmount(() => {
 .md-modes { display:flex; gap:2px; }
 .md-mode { border:0; background:transparent; padding:4px 10px; border-radius:5px; font-size:12px; color:var(--muted); cursor:pointer; }
 .md-mode.active { background:#e8eef9; color:var(--blue); font-weight:600; }
-.md-editor-pane { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); align-items:stretch; min-height:360px; }
+/* 编辑区窄于 780px 时改为上下堆叠，不依赖视口/抽屉宽度 */
+.md-editor-pane { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); align-items:stretch; min-height:min(360px, 52vh); }
 .md-source { min-width:0; display:flex; flex-direction:column; }
-.md-textarea { display:block; width:100%; min-height:360px; max-height:52vh; padding:14px 16px; border:0; outline:none; resize:vertical; font-family:inherit; font-size:14px; line-height:1.7; color:var(--navy); background:transparent; }
+.md-textarea { display:block; width:100%; min-height:min(360px, 52vh); max-height:52vh; padding:14px 16px; border:0; outline:none; resize:vertical; font-family:inherit; font-size:14px; line-height:1.7; color:var(--navy); background:transparent; }
 .md-textarea:disabled { color:var(--muted); cursor:not-allowed; }
 .md-editor-hint { margin:auto 0 0; padding:0 16px 10px; font-size:12px; color:var(--muted); line-height:1.6; }
 .md-editor-uploading { margin:0; padding:0 16px 10px; font-size:12px; color:var(--blue); }
@@ -326,6 +327,6 @@ onBeforeUnmount(() => {
 @media(max-width:640px) {
   .md-editor-pane { grid-template-columns:minmax(0,1fr); min-height:0; }
   .md-live { border-left:0; border-top:1px solid var(--line); max-height:32vh; }
-  .md-textarea { min-height:260px; max-height:36vh; }
+  .md-textarea { min-height:min(260px, 36vh); max-height:36vh; }
 }
 </style>
