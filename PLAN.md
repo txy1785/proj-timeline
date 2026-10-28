@@ -459,5 +459,5 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 后端新增 `PUT /task-notes/{id}`（OpenAPI 75 → 76）：作者本人或任务管理者可原地更新标题与正文，校验口径与新建一致；归档、VIEWER、非成员拒绝；更新不新增记录、不写 `node_logs`；与删任务同样先锁工作项串行。
 - 前端记录列表增加「编辑」：把标题/正文带回编辑区，按钮变为「保存修改」并出现「取消编辑」，脏检查对比原值；保存后刷新记录并显示「编辑于 时间 · 人」；`MarkdownEditor` 增加 `attachments` 属性，编辑旧记录时预览能解析已有附件。
 - 验证：Maven 73 项、前端 lint/typecheck/build、Playwright 37 项（新增再编辑、编辑中关闭草稿提示、上传在途暂停编辑）通过；隔离库执行 V1–V14 迁移并真实 HTTP 验证创建/编辑/读取、`updatedBy/updatedAt` 与长度/文件名校验，另验证 assignee 非作者编辑 403、工作项负责人成功、VIEWER 403；用户库已应用 V14，OpenAPI 76 并重新生成 `schema.d.ts`，58080 健康 UP、5173 页面 200。
-- 待独立审核后合并 develop。
+- 已完成：独立审核两轮（首轮 `bb3b91d`、增量复审 `f3296e4`，均只读新上下文）均“可合并”、无 P1/P2；最终提交 `89fbd59` 以合并提交 `bfde145` 集成 develop 并推送 `origin/develop`，功能分支已删除，工作树干净。58080 后端已重启到最终代码，V14 已应用（Flyway 报告 up to date），OpenAPI 76、5173 页面 200。
 - 兼容与回滚：V14 只加两个可空列与一个外键，旧记录保持 NULL、不丢数据；回滚按 `ALTER TABLE task_notes DROP FOREIGN KEY fk_task_notes_updated_by;` 再 `DROP COLUMN updated_at, DROP COLUMN updated_by;`。MySQL DDL 自动提交，两条 ALTER 不具原子性；生产执行前先备份，若第二条加 FK 失败需按上述语句清理中间态后重试。
