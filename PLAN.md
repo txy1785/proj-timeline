@@ -419,3 +419,10 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 验证：`npm --prefix frontend run lint` 与 `build` 通过（仅既有 500kB 分包警告）；重启后 5173 监听 `::`（等价 0.0.0.0），`http://192.168.0.18:5173/` 返回 200、`/actuator` 代理 200、`/api` 代理 401（未登录，符合预期）。本机网络配置文件为「专用」，防火墙已有 node.exe（v24.9.0）入站放行；未从真实第二台机器联调，若仍被拒按文档核对防火墙。
 - 独立审核（新会话）确认无 P1，并独立复现：5173 监听 `::`，LAN 页面/模块/HMR（`ws://192.168.0.18:5173/?token=…`）/`/api`/`/actuator` 全通；Vite 7 `allowedHosts` 默认放行 IP 字面量、拦主机名（403）；`playwright.config.ts` 用 `--host 127.0.0.1 --port 41731` 覆盖，e2e 仍隔离在回环。按审核建议补齐文档：代理默认端口 58080 与后端默认 8080 的口径差异（需 `API_PROXY_TARGET`）、多网卡选 IP、主机名需登记 `allowedHosts`、`strictPort` 报错处理、防火墙按 `Get-NetConnectionProfile` 确认类别，并明确 dev server 仅限可信内网。
 - 服务以独立进程方式启动（`Start-Process` 脱离会话，日志 `.tmp/vite-dev.log`，`.tmp` 已在 `.gitignore`），避免会话结束带走开发服务。
+
+## 2026-10-28 · 恢复独立模块入口
+
+- 用户发现“模块消失”。只读检查原数据库仍有 12 条模块记录；实际原因是此前 `/projects/:id/modules` 直接复用工作项页，顶部只显示“工作项”，模块管理藏在弹窗，项目概览也不列模块。
+- 从最新 develop 建立 `feature/restore-modules-navigation`。恢复顶部“模块”标签和独立模块卡片页；项目概览直接展示模块、负责人及交付数；模块详情的面包屑和返回动作指向模块列表；工作项页保留按模块分组与空模块可见，并提供返回模块列表的入口。
+- 新建模块复用原 `ModuleFormDialog`，默认负责人为 PM；未新增 API、数据表或迁移，现有项目/模块/工作项关系保持不变。
+- 验证：前端 lint/typecheck/build 通过；完整 Playwright 30 项通过（含新建空模块、刷新、概览入口、模块导航、VIEWER/归档与工作项筛选）；`git diff --check` 通过。5173 前端页面与新版模块源码均返回 200，58080 健康接口返回 200。后端未改动，不重跑 Maven。

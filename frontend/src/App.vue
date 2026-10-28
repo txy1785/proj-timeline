@@ -24,12 +24,13 @@ const projectError = computed(() => navigationError.value || (hasProject.value &
 const isPm = computed(() => isProjectManager(auth.user, context.members))
 const roleLabel = computed(() => auth.isAdmin ? '管理员' : auth.isViewer ? '只读观察者' : '项目成员')
 const tabs = [
-  { key: 'overview', label: '概览' }, { key: 'work-items', label: '工作项' },
+  { key: 'overview', label: '概览' }, { key: 'modules', label: '模块' }, { key: 'work-items', label: '工作项' },
   { key: 'timeline', label: '时间线' }, { key: 'docs', label: '文档' },
   { key: 'reports', label: '周报' }, { key: 'settings', label: '设置' }
 ]
 function activeTab(key: string) {
-  if (key === 'work-items') return !!route.meta.nodeParam || route.path.includes('/modules') || route.path.endsWith('/work-items')
+  if (key === 'modules') return route.path.includes('/modules')
+  if (key === 'work-items') return !!route.meta.nodeParam || route.path.endsWith('/work-items')
   return route.path.endsWith('/' + key)
 }
 async function resolveProject() {

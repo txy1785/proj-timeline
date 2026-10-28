@@ -43,7 +43,7 @@ function created(node: NodeItem) { void refresh(); router.push(`/nodes/${node.id
 async function removeModule() {
   if (!module.value || !isPm.value || !active.value) return
   try { await ElMessageBox.confirm(`确认删除模块「${module.value.name}」？含工作项或待审批申请时不能删除。`, '删除模块', { type: 'warning' }) } catch { return }
-  try { await api('DELETE', `/modules/${moduleId}`); await refresh(); ElMessage.success('模块已删除'); router.push(`/projects/${projectId}/work-items`) }
+  try { await api('DELETE', `/modules/${moduleId}`); await refresh(); ElMessage.success('模块已删除'); router.push(`/projects/${projectId}/modules`) }
   catch (e) { ElMessage.error((e as Error).message); await refresh() }
 }
 </script>
@@ -51,9 +51,9 @@ async function removeModule() {
 <template>
   <div v-loading="loading">
     <el-alert v-if="error" :title="error" type="error" :closable="false"><el-button link type="primary" @click="refresh">重新加载</el-button></el-alert>
-    <div v-else-if="!loading && project && !module" class="surface empty"><h2>模块已不可用</h2><p>模块可能已被删除，或不属于当前项目。</p><el-button @click="router.push(`/projects/${projectId}/work-items`)">返回工作项</el-button></div>
+    <div v-else-if="!loading && project && !module" class="surface empty"><h2>模块已不可用</h2><p>模块可能已被删除，或不属于当前项目。</p><el-button @click="router.push(`/projects/${projectId}/modules`)">返回模块列表</el-button></div>
     <template v-if="module">
-      <header class="page-head"><div><el-breadcrumb separator="/"><el-breadcrumb-item :to="`/projects/${projectId}/work-items`">工作项</el-breadcrumb-item><el-breadcrumb-item>{{ module.name }}</el-breadcrumb-item></el-breadcrumb><h1 class="module-title">{{ module.name }}</h1><p>{{ module.description || '暂无模块说明' }} · 负责人 {{ module.ownerName }}</p></div><div class="page-actions"><el-button @click="router.push(`/projects/${projectId}/work-items`)">返回工作项</el-button><el-button v-if="canManage" @click="moduleDialog = true">编辑模块</el-button><el-button v-if="isPm && active" type="danger" plain :disabled="!!module.nodes?.length" @click="removeModule">删除模块</el-button></div></header>
+      <header class="page-head"><div><el-breadcrumb separator="/"><el-breadcrumb-item :to="`/projects/${projectId}/modules`">功能模块</el-breadcrumb-item><el-breadcrumb-item>{{ module.name }}</el-breadcrumb-item></el-breadcrumb><h1 class="module-title">{{ module.name }}</h1><p>{{ module.description || '暂无模块说明' }} · 负责人 {{ module.ownerName }}</p></div><div class="page-actions"><el-button @click="router.push(`/projects/${projectId}/modules`)">返回模块列表</el-button><el-button v-if="canManage" @click="moduleDialog = true">编辑模块</el-button><el-button v-if="isPm && active" type="danger" plain :disabled="!!module.nodes?.length" @click="removeModule">删除模块</el-button></div></header>
       <el-alert v-if="!active" title="项目已归档，模块和文件只读。" type="info" :closable="false" class="section-gap" />
       <el-alert v-else-if="auth.isViewer" title="当前为只读观察账号，可查看工作项和下载文件。" type="info" :closable="false" class="section-gap" />
       <div v-else-if="canRequest" class="surface request-entry section-gap"><div><strong>{{ pendingRequest ? '变更申请待审批' : '需要调整这个模块？' }}</strong><p>{{ pendingRequest ? '申请通过前，模块内容保持原样。' : '可申请修改名称、描述或负责人，由项目经理审批。' }}</p></div><el-button v-if="pendingRequest" @click="router.push(`/projects/${projectId}/settings?tab=requests&requestId=${pendingRequest.id}`)">查看我的申请</el-button><el-button v-else @click="requestDialog = true">申请变更模块</el-button></div>

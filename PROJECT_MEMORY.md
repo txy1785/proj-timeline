@@ -24,7 +24,7 @@
 10. **模块变更申请**（成员改别人模块的唯一通道）：只覆盖模块的**名称 / 描述 / 负责人**，没有模块编辑权限的项目成员（非 VIEWER）提交并可填申请说明，PM/ADMIN 审批。同一模块同时只允许一个待审批申请（`pending_module_id` 生成列 + 唯一键兜底）；通过时在**同一事务**内改模块并记录审批人/时间，驳回必须填原因；申请人可撤回自己待审批的申请。已有直接编辑权限的人（PM、该模块负责人）调用提交接口返回 409。审批结果与待审批各发一条站内通知（通知枚举扩到 7 类）。
 11. **独立 Bug**：成员报告必须关联同项目工作项，未开始/进行中/已交付均可，已取消不可新报；默认执行人为功能负责人。不再自动寻找进行中的项目级 BUGFIX。已交付功能的 Bug 可继续修复、改派、记录和附件，保留功能交付状态与日期。Bug 复用 TODO/DOING/DONE（待修复/修复中/已解决），接口/storage 保留 tasks.kind=BUG；旧分流 Bug 的有效同项目 related_node_id 作为业务来源，否则回退 node_id。来源职务及执行人决定能力，不得跨项目追溯；归档与 VIEWER 只读。
 
-12. **体验主线**：USER 登录默认“我的工作”，展示本人负责的功能工作项和本人待处理 Bug；ADMIN/VIEWER 默认项目总览。工作项详情默认功能说明、交付资料、Bug、活动记录，有旧任务时才显示历史任务入口。旧任务/看板/通知深链仍可读，默认不再新建通用子任务。阶段目标在项目设置、模块只作功能分组；新建空模块默认可见。
+12. **体验主线**：USER 登录默认“我的工作”，展示本人负责的功能工作项和本人待处理 Bug；ADMIN/VIEWER 默认项目总览。工作项详情默认功能说明、交付资料、Bug、活动记录，有旧任务时才显示历史任务入口。旧任务/看板/通知深链仍可读，默认不再新建通用子任务。阶段目标在项目设置、模块只作功能分组；新建空模块默认可见。2026-10-28 恢复独立“模块”导航和列表页，项目概览直接显示模块卡片，明确项目 → 模块 → 工作项。
 13. **当前风险与负载**：当前延期/受阻仅计未关闭功能；人员负载主要展示有效项目的未交付/进行中/延期/本周到期工作项和未解决/逾期 Bug，数字与展开同范围。旧任务人天字段/API和已发布周报快照保留历史兼容，不用 Bug 或资料数换算功能进度。
 
 ## 当前实现定位
@@ -39,7 +39,7 @@
 | 进度派生与聚合口径 | `backend/src/main/java/com/projtimeline/common/ProgressRules.java`（工作项、模块/项目聚合、阶段性目标量化进度）、`project/ProjectService.java`（模块/项目聚合） |
 | 项目权限 | `backend/src/main/java/com/projtimeline/security/PermissionService.java` |
 | 项目设置与阶段目标编辑 | `frontend/src/views/ProjectSettingsView.vue` |
-| 工作项/模块工作页 | `frontend/src/views/WorkItemsView.vue`、`ModuleDetailView.vue`；`ModulesView.vue` 为旧路由兼容 |
+| 工作项/模块工作页 | `frontend/src/views/WorkItemsView.vue`、`ModulesView.vue`（独立模块列表）、`ModuleDetailView.vue` |
 | 项目时间线、工作项详情 | `frontend/src/views/TimelineView.vue`、`NodeDetailView.vue` |
 | 路由、会话、HTTP 客户端 | `frontend/src/router.ts`、`stores/auth.ts`、`api/client.ts` |
 | 项目、模块、工作项与任务的文档附件 | `backend/src/main/java/com/projtimeline/file/`、`frontend/src/components/AttachmentPanel.vue`、`AttachmentPreview.vue`、`ProjectDocsView.vue`、`utils/attachment.ts` |
@@ -75,7 +75,7 @@
 
 - 2026-10-26 的体验走查问题现已按批准方案实施：修正工作项/模块的项目导航、增加我的工作与独立项目概览、按日期独立分行的时间线、按项目职务显示操作。历史问题证据保留在 [走查记录](docs/用户体验走查与简化建议.md)，不代表当前仍存在。
 
-- 本轮验证：Maven 71 项测试通过；前端 lint/typecheck/build 通过；Playwright 29 项角色、功能交付、Bug、历史任务、模块与体验回归通过；另在明确命名的本机隔离 MySQL 库执行真实 HTTP 与浏览器流程。详细命令、截图、边界见 [功能交付验收](docs/功能交付验收/README.md)。
+- 功能交付轮次验证：Maven 71 项测试通过；前端 lint/typecheck/build 通过；Playwright 当时 29 项通过；另在明确命名的本机隔离 MySQL 库执行真实 HTTP 与浏览器流程。详细命令、截图、边界见 [功能交付验收](docs/功能交付验收/README.md)。2026-10-28 模块入口恢复后前端 lint/typecheck/build、完整 Playwright 30 项通过，用户原库只读确认仍有 12 条模块记录，5173 页面与 58080 健康接口均返回 200。
 - `PLAN.md` 中早期接口/页面/表数量是历史快照。当前接口 75 个、表 16 张（含 flyway_schema_history），本轮无数据库结构或迁移变更；不可把早期数字当现状。
 - 当前工作站此前未运行 Docker Compose 的真实构建；部署仍需在具备 Docker 的目标环境验证。
 - 文件存储当前用本地磁盘（`app.storage.root` 默认 `./data/files`，容器内 `/app/data/files` 挂 `file-data` 卷）。未接入 MinIO/对象存储：存储层已抽成 `FileStorage` 接口，切换时只加实现并改配置。单文件上限 50MB，Nginx 侧 `client_max_body_size 60m`，后端 `spring.servlet.multipart` 与 `app.storage.max-file-bytes` 同步。
