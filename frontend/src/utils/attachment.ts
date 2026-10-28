@@ -1,6 +1,9 @@
 import { download, http } from '../api/client'
 import type { Attachment } from '../api/types'
 
+/** 单个附件上限，与后端 `app.storage.max-file-bytes`（默认 50MB）和 Nginx `client_max_body_size` 同口径。 */
+export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
+
 /** 文件大小展示：B / KB / MB，保留一位小数。 */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
