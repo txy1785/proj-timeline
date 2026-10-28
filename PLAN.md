@@ -448,6 +448,16 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
   - 外链图片增加 `referrerpolicy="no-referrer"`，减少向第三方泄露来源页面地址；未开放原始 HTML、未新增服务端接口。
 - 新增两条 e2e：粘贴附件保存前移除（断言 `DELETE /attachments/{id}`、占位消失、保存正文为移除后剩余内容且不含占位；覆盖文件名含 `[ ]` 的转义与非图片链接）、预览态粘贴切回编辑并插入占位。
 - 复审发现移除正则对含 `[`/`]` 的文件名失配（附件已删但占位残留），已改为转义感知正则并去掉全局换行折叠；同时补充保存中粘贴提示、移除按钮跟随 `canUpload` 灰化，并把预览态粘贴的文档口径限定为“焦点在编辑区内时”。
+- 再编辑轮复审指出：上传在途时切换编辑/记录会因重建编辑器丢失“本次上传”占位，已让 `MarkdownEditor` 向上暴露在途上传数并计入抽屉 `pending`，期间禁止切换记录、保存和关闭；新增 e2e 覆盖。
 - 验证：Maven 72 项通过；前端 lint/typecheck/build 通过；Playwright 34 项通过（31.6s）；`git diff --check` 通过。本轮无后端、接口、迁移或数据库变更，58080/5173 服务保持运行。
 - 最终复审确认 P2 已消除、无剩余 P1/P2，可合并；按复审建议把“移除后保存”的断言改为不覆盖正文，直接断言保存内容为移除后的剩余文本。
 - 已完成：功能提交 `ef30f2b`、`13d84b7`、`0d032ae` 以合并提交 `6b869cb` 集成 develop 并推送 `origin/develop`；功能分支已删除，工作树干净。
+
+## 2026-10-28 · 进展记录支持再编辑
+
+- 用户要求“保存的文档要有再编辑的功能”。从最新 develop 建立 `feature/editable-progress-records`；Flyway V14 给 `task_notes` 增加 `updated_by`/`updated_at`（最后编辑人/时间，FK users），未编辑过的旧记录保持 NULL。
+- 后端新增 `PUT /task-notes/{id}`（OpenAPI 75 → 76）：作者本人或任务管理者可原地更新标题与正文，校验口径与新建一致；归档、VIEWER、非成员拒绝；更新不新增记录、不写 `node_logs`；与删任务同样先锁工作项串行。
+- 前端记录列表增加「编辑」：把标题/正文带回编辑区，按钮变为「保存修改」并出现「取消编辑」，脏检查对比原值；保存后刷新记录并显示「编辑于 时间 · 人」；`MarkdownEditor` 增加 `attachments` 属性，编辑旧记录时预览能解析已有附件。
+- 验证：Maven 73 项、前端 lint/typecheck/build、Playwright 37 项（新增再编辑、编辑中关闭草稿提示、上传在途暂停编辑）通过；隔离库执行 V1–V14 迁移并真实 HTTP 验证创建/编辑/读取、`updatedBy/updatedAt` 与长度/文件名校验，另验证 assignee 非作者编辑 403、工作项负责人成功、VIEWER 403；用户库已应用 V14，OpenAPI 76 并重新生成 `schema.d.ts`，58080 健康 UP、5173 页面 200。
+- 待独立审核后合并 develop。
+- 兼容与回滚：V14 只加两个可空列与一个外键，旧记录保持 NULL、不丢数据；回滚按 `ALTER TABLE task_notes DROP FOREIGN KEY fk_task_notes_updated_by;` 再 `DROP COLUMN updated_at, DROP COLUMN updated_by;`。MySQL DDL 自动提交，两条 ALTER 不具原子性；生产执行前先备份，若第二条加 FK 失败需按上述语句清理中间态后重试。

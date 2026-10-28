@@ -56,6 +56,18 @@ export async function prepare(page, role = 'USER', userId = 6, options = {}) {
       const record = { id: 200 + state.notes.length, taskId: 11, title: body.title || '进展记录.md', authorId: userId, authorName: '钱工', content: body.content, createdAt: '2026-10-27T09:30:00' }
       state.notes.unshift(record); return reply(record)
     }
+    if (/^\/task-notes\/\d+$/.test(path) && method === 'PUT') {
+      const id = Number(path.split('/').pop())
+      const record = state.notes.find(item => item.id === id)
+      if (!record) return reply(null, 404, '记录不存在')
+      const body = req.postDataJSON()
+      record.title = body.title
+      record.content = body.content
+      record.updatedBy = userId
+      record.updatedByName = '钱工'
+      record.updatedAt = '2026-10-27T10:30:00'
+      return reply(record)
+    }
     if (path === '/tasks/11/status' && method === 'PUT') {
       if (state.failNextStatus) { state.failNextStatus = false; state.tasks[0].status = 'TODO'; return reply(null, 409, '任务状态已变化，请刷新后重试') }
       state.tasks[0].status = req.postDataJSON().status; return reply(state.tasks[0])
@@ -77,6 +89,7 @@ export async function prepare(page, role = 'USER', userId = 6, options = {}) {
       const match = raw.match(/filename="([^"]*)"/)
       const originalName = match ? match[1] : 'attachment.png'
       const category = (raw.match(/name="category"\r\n\r\n([^\r\n]+)/) || [])[1] || 'TASK_OTHER'
+      if (state.uploadDelayMs) await new Promise(resolve => setTimeout(resolve, state.uploadDelayMs))
       const file = { id: 900 + state.files.length, projectId: 1, ownerType: 'TASK', ownerId: 11, category, categoryName: '进展记录附件', title: originalName, originalName, contentType: 'image/png', sizeBytes: 4, version: 1, uploaderId: userId, uploaderName: '钱工', createdAt: '2026-10-27T09:30:00' }
       state.files.push(file); return reply(file)
     }

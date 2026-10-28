@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, upload } from '../api/client'
 import type { Attachment, AttachmentOwnerType } from '../api/types'
@@ -24,6 +24,8 @@ const props = withDefaults(defineProps<{
   placeholder?: string
   ariaLabel?: string
   rows?: number
+  /** 已保存记录引用的任务附件；编辑旧记录时预览用，不影响「本次上传」chips。 */
+  attachments?: Attachment[]
 }>(), {
   ownerType: 'TASK',
   ownerId: 0,
@@ -32,13 +34,15 @@ const props = withDefaults(defineProps<{
   disabled: false,
   placeholder: '记录本次进展、问题或结果，支持 Markdown',
   ariaLabel: 'Markdown 内容',
-  rows: 9
+  rows: 9,
+  attachments: () => []
 })
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
   (e: 'uploaded', attachment: Attachment): void
   (e: 'removed', attachmentId: number): void
+  (e: 'uploading', count: number): void
 }>()
 
 const textareaRef = ref<HTMLTextAreaElement>()
@@ -47,6 +51,14 @@ const mode = ref<'edit' | 'preview'>('edit')
 const uploading = ref(0)
 const uploaded = ref<Attachment[]>([])
 const removing = ref<number[]>([])
+let disposed = false
+/** 预览解析范围：父组件传入的既有任务附件 + 本次上传，后者覆盖同 id（标题/版本）。 */
+const previewAttachments = computed(() => {
+  const merged = new Map<number, Attachment>()
+  for (const item of props.attachments) merged.set(item.id, item)
+  for (const item of uploaded.value) merged.set(item.id, item)
+  return Array.from(merged.values())
+})
 
 const tools = [
   { label: 'H', title: '二级标题', run: () => linePrefix('## ', '标题') },
@@ -191,6 +203,7 @@ async function acceptFiles(files: File[]) {
   })
   if (!accepted.length) return
   uploading.value += accepted.length
+  if (!disposed) emit('uploading', uploading.value)
   for (const file of accepted) {
     try {
       const body = new FormData()
@@ -206,6 +219,7 @@ async function acceptFiles(files: File[]) {
       ElMessage.error(`${file.name} 上传失败：${(error as Error).message}`)
     } finally {
       uploading.value -= 1
+      if (!disposed) emit('uploading', uploading.value)
     }
   }
 }
@@ -214,6 +228,8 @@ async function acceptFiles(files: File[]) {
 watch(() => props.modelValue, value => {
   if (!value.trim()) uploaded.value = []
 })
+
+onBeforeUnmount(() => { disposed = true; if (uploading.value) emit('uploading', 0) })
 </script>
 
 <template>
@@ -246,7 +262,7 @@ watch(() => props.modelValue, value => {
     </div>
 
     <div v-if="mode === 'preview'" class="md-editor-preview">
-      <MarkdownView v-if="modelValue.trim()" :content="modelValue" :attachments="uploaded" />
+      <MarkdownView v-if="modelValue.trim()" :content="modelValue" :attachments="previewAttachments" />
       <p v-else class="muted">还没有内容，切回「编辑」开始写 Markdown。</p>
     </div>
 
