@@ -1,26 +1,31 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { onBeforeRouteLeave, onBeforeRouteUpdate, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api/client'
 import type { Attachment, NodeItem, Task, TaskNote, TaskStatus, Timeline, User } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import { useAppStore } from '../stores/app'
+import { useProjectStore } from '../stores/project'
 import { canManageNode, canManageTask, canChangeTaskStatus, canEditTask, taskWorkItemContext, isNodeClosed } from '../utils/permissions'
 import { TASK_KIND_LABELS, TASK_NEXT_ACTION, TASK_STATUS_LABELS, TASK_STATUS_TYPES } from '../utils/task'
 import { BUG_NEXT_ACTION, BUG_STATUS_LABELS } from '../utils/bug'
 import { formatDateTime } from '../utils/format'
 import { downloadMarkdown, markdownFileName } from '../utils/markdown'
-import AttachmentPanel from './AttachmentPanel.vue'
-import MarkdownEditor from './MarkdownEditor.vue'
-import MarkdownView from './MarkdownView.vue'
-import TaskFormDialog from './TaskFormDialog.vue'
+import AttachmentPanel from '../components/AttachmentPanel.vue'
+import MarkdownEditor from '../components/MarkdownEditor.vue'
+import MarkdownView from '../components/MarkdownView.vue'
+import TaskFormDialog from '../components/TaskFormDialog.vue'
 
-const props = defineProps<{ modelValue: boolean; nodeId: number; taskId: number }>()
-const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void; (e: 'updated'): void; (e: 'closed'): void }>()
+const route = useRoute()
 const auth = useAuthStore()
 const app = useAppStore()
+const context = useProjectStore()
 const router = useRouter()
+const nodeId = computed(() => Number(route.params.nodeId))
+const taskId = computed(() => Number(route.params.taskId))
+const projectName = computed(() => context.project?.name || node.value?.projectName || '项目')
+
 const node = ref<NodeItem>()
 const task = ref<Task>()
 const members = ref<User[]>([])
@@ -62,20 +67,20 @@ const stateLabel = computed(() => task.value ? (isBug.value ? BUG_STATUS_LABELS[
 
 async function load() {
   const current = ++generation
-  const nodeId = props.nodeId
-  const taskId = props.taskId
+  const currentNodeId = nodeId.value
+  const currentTaskId = taskId.value
   loading.value = true; error.value = ''; notesError.value = ''
   try {
-    if (!Number.isSafeInteger(nodeId) || nodeId <= 0 || !Number.isSafeInteger(taskId) || taskId <= 0) throw new Error('任务链接无效')
-    const value = await api<NodeItem>('GET', `/nodes/${nodeId}`)
-    const found = value.tasks?.find(item => item.id === taskId && item.nodeId === nodeId)
+    if (!Number.isSafeInteger(currentNodeId) || currentNodeId <= 0 || !Number.isSafeInteger(currentTaskId) || currentTaskId <= 0) throw new Error('任务链接无效')
+    const value = await api<NodeItem>('GET', `/nodes/${currentNodeId}`)
+    const found = value.tasks?.find(item => item.id === currentTaskId && item.nodeId === currentNodeId)
     if (!found) throw new Error('任务已删除或不属于这个工作项')
     const [people, records, files] = await Promise.allSettled([
       api<User[]>('GET', `/projects/${value.projectId}/members`),
-      api<TaskNote[]>('GET', `/tasks/${taskId}/notes`),
-      api<Attachment[]>('GET', '/attachments', undefined, { ownerType: 'TASK', ownerId: taskId })
+      api<TaskNote[]>('GET', `/tasks/${currentTaskId}/notes`),
+      api<Attachment[]>('GET', '/attachments', undefined, { ownerType: 'TASK', ownerId: currentTaskId })
     ])
-    if (current !== generation || !props.modelValue) return
+    if (current !== generation) return
     if (people.status === 'rejected') throw people.reason
     node.value = value; task.value = found; members.value = people.value
     if (records.status === 'fulfilled') notes.value = records.value
@@ -98,16 +103,14 @@ function nextNoteTitle() {
   return `${base}-${sequence}.md`
 }
 
-watch([() => props.modelValue, () => props.nodeId, () => props.taskId], ([open, nodeId, taskId], old) => {
-  if (!open) { generation++; loading.value = false; return }
-  if (!old?.[0] || nodeId !== old[1] || taskId !== old[2]) {
-    noteTitle.value = ''; noteText.value = ''; notes.value = []; node.value = undefined; task.value = undefined
-    editingNoteId.value = null; originalNoteTitle.value = ''; originalNoteText.value = ''
-    noteUploading.value = 0
-    attachments.value = []; filesError.value = ''; filesVersion.value = 0
-    activeTab.value = 'description'; relatedWorkItems.value = []
-    void load()
-  }
+watch([nodeId, taskId], ([currentNodeId, currentTaskId], old) => {
+  if (old && currentNodeId === old[0] && currentTaskId === old[1]) return
+  noteTitle.value = ''; noteText.value = ''; notes.value = []; node.value = undefined; task.value = undefined
+  editingNoteId.value = null; originalNoteTitle.value = ''; originalNoteText.value = ''
+  noteUploading.value = 0
+  attachments.value = []; filesError.value = ''; filesVersion.value = 0
+  activeTab.value = 'description'; relatedWorkItems.value = []
+  void load()
 }, { immediate: true })
 
 async function saveNote(): Promise<boolean> {
@@ -131,7 +134,6 @@ async function saveNote(): Promise<boolean> {
     }
     resetComposer()
     await load()
-    emit('updated')
     return true
   } catch (e) { ElMessage.error((e as Error).message); return false }
   finally { savingNote.value = false }
@@ -216,15 +218,22 @@ async function allowLeave(): Promise<boolean> {
 
 async function requestClose(done?: () => void) {
   if (!await allowLeave()) return
-  noteText.value = ''
+  resetComposer()
+  noteTitle.value = ''
   if (done) done()
-  else emit('update:modelValue', false)
+  else await returnToWorkItem()
 }
 
-onBeforeRouteLeave(async () => !props.modelValue || await allowLeave())
-onBeforeRouteUpdate(async (to, from) => !props.modelValue || (to.path === from.path && to.query.task === from.query.task) || await allowLeave())
+async function returnToWorkItem() {
+  const target = origin.value?.id || node.value?.id || nodeId.value
+  if (target) await router.push({ path: `/nodes/${target}`, query: { tab: isBug.value ? 'bugs' : 'history' } })
+  else await router.push('/projects')
+}
+
+onBeforeRouteLeave(async () => await allowLeave())
+onBeforeRouteUpdate(async (to, from) => to.params.taskId === from.params.taskId || await allowLeave())
 function beforeUnload(event: BeforeUnloadEvent) {
-  if (props.modelValue && hasDraft.value) { event.preventDefault(); event.returnValue = '' }
+  if (hasDraft.value) { event.preventDefault(); event.returnValue = '' }
 }
 onMounted(() => window.addEventListener('beforeunload', beforeUnload))
 onBeforeUnmount(() => { generation++; window.removeEventListener('beforeunload', beforeUnload) })
@@ -235,11 +244,11 @@ async function changeStatus(status: TaskStatus) {
   savingStatus.value = true
   try {
     await api<Task>('PUT', `/tasks/${current.id}/status`, { status, expectedStatus: current.status })
-    await load(); emit('updated')
+    await load()
     ElMessage.success(isBug.value ? `Bug已设为${BUG_STATUS_LABELS[status]}` : `任务已设为${TASK_STATUS_LABELS[status]}`)
   } catch (e) {
     ElMessage.error((e as Error).message)
-    await load(); emit('updated')
+    await load()
   } finally { savingStatus.value = false }
 }
 
@@ -258,7 +267,7 @@ async function removeNote(note: TaskNote) {
   try {
     await api('DELETE', `/task-notes/${note.id}`)
     if (editingNoteId.value === note.id) resetComposer()
-    await load(); emit('updated'); ElMessage.success('记录已删除')
+    await load(); ElMessage.success('记录已删除')
   }
   catch (e) { ElMessage.error((e as Error).message) }
   finally { deletingNote.value = 0 }
@@ -272,33 +281,43 @@ async function openEdit() {
     editing.value = true
   } catch (e) { ElMessage.error((e as Error).message) }
 }
-async function afterEdit() { await load(); emit('updated') }
+async function afterEdit() { await load() }
 async function openWorkItem() {
   if (!node.value || !await allowLeave()) return
-  noteText.value = ''
-  emit('update:modelValue', false)
-  await router.push(`/nodes/${origin.value?.id || node.value.id}`)
+  resetComposer()
+  noteTitle.value = ''
+  await router.push({ path: `/nodes/${origin.value?.id || node.value.id}`, query: { tab: isBug.value ? 'bugs' : 'history' } })
 }
 </script>
 
 <template>
-  <el-drawer :model-value="modelValue" size="min(960px, 100vw)" :with-header="false" :before-close="requestClose" :close-on-click-modal="false" class="task-detail-drawer" @update:model-value="emit('update:modelValue', $event)" @closed="emit('closed')">
-    <div v-loading="loading" class="task-drawer-content">
-      <header class="drawer-heading">
-        <div><p class="muted">{{ node?.projectName || '项目工作' }}<template v-if="node"> / {{ origin?.name || node.name }}</template></p><h2>{{ task?.name || (loading ? '正在加载详情' : '详情') }}</h2><small v-if="task" class="muted">{{ isBug ? 'Bug · 独立跟踪修复' : '历史任务' }}</small></div>
-        <el-button text :aria-label="isBug ? '关闭Bug详情' : '关闭任务详情'" :disabled="pending" @click="requestClose()">关闭</el-button>
+  <section v-loading="loading" class="surface task-detail-page">
+    <div class="task-detail-content">
+      <el-breadcrumb v-if="node" separator="/" class="task-detail-crumb">
+        <el-breadcrumb-item :to="`/projects/${node.projectId}/overview`">{{ projectName }}</el-breadcrumb-item>
+        <el-breadcrumb-item :to="`/nodes/${origin?.id || node.id}`">{{ origin?.name || node.name }}</el-breadcrumb-item>
+        <el-breadcrumb-item>{{ task?.name || '任务详情' }}</el-breadcrumb-item>
+      </el-breadcrumb>
+      <header class="page-head task-detail-heading">
+        <div>
+          <p class="muted">{{ isBug ? 'Bug · 独立跟踪修复' : '历史任务' }}</p>
+          <h1>{{ task?.name || (loading ? '正在加载详情' : '详情') }}</h1>
+        </div>
+        <div class="page-actions">
+          <el-button :disabled="pending" @click="requestClose()">返回工作项</el-button>
+        </div>
       </header>
-      <div v-if="error" class="drawer-error" role="alert"><el-alert :title="error" type="error" :closable="false" /><p class="muted">任务可能已删除，或你的读取权限已变化。</p><template v-if="noteText.trim()"><p class="muted">未保存的记录草稿，可复制后保留：</p><el-input :model-value="noteText" type="textarea" :rows="4" readonly aria-label="未保存的记录草稿" /></template><el-button @click="load">重新加载</el-button><el-button @click="requestClose()">返回列表</el-button></div>
+      <div v-if="error" class="task-detail-error" role="alert"><el-alert :title="error" type="error" :closable="false" /><p class="muted">任务可能已删除，或你的读取权限已变化。</p><template v-if="noteText.trim()"><p class="muted">未保存的记录草稿，可复制后保留：</p><el-input :model-value="noteText" type="textarea" :rows="4" readonly aria-label="未保存的记录草稿" /></template><el-button @click="load">重新加载</el-button><el-button @click="requestClose()">返回工作项</el-button></div>
       <template v-else-if="task && node">
         <div class="task-meta"><el-tag :type="TASK_STATUS_TYPES[task.status]">{{ stateLabel }}</el-tag><span>{{ isBug ? '负责人' : '执行人' }} {{ task.assigneeName }}</span><span>截止 {{ task.dueDate || '未设置' }}</span></div>
         <el-alert v-if="archived" title="项目已归档，任务、记录与附件只读" type="info" :closable="false" />
         <el-alert v-else-if="isBug && origin?.status === 'DONE'" title="关联功能已交付，此Bug仍可继续修复；原交付记录保持不变。" type="info" :closable="false" /><el-alert v-else-if="origin?.status === 'CANCELLED' || (!isBug && isNodeClosed(node))" title="关联工作项已关闭，内容和状态不可修改；记录与附件仍按原有权限处理。" type="info" :closable="false" />
-        <div v-if="canChangeStatus || canEdit" class="task-drawer-actions">
+        <div v-if="canChangeStatus || canEdit" class="task-detail-actions">
           <el-button v-if="canChangeStatus && nextAction" type="primary" :loading="savingStatus" :disabled="pending && !savingStatus" @click="changeStatus(nextAction.next)">{{ isBug ? nextAction.label : task.status === 'DOING' ? '标记完成' : task.status === 'TODO' ? '开始任务' : '重新开始' }}</el-button>
           <el-button v-if="canEdit" :disabled="pending" @click="openEdit">{{ isBug ? '编辑Bug' : '编辑任务' }}</el-button>
           <el-dropdown v-if="canChangeStatus && task.status !== 'TODO'" :disabled="pending" @command="changeStatus('TODO')"><el-button :disabled="pending">更多</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="TODO">{{ isBug ? '设为待修复' : '设为待完成' }}</el-dropdown-item></el-dropdown-menu></template></el-dropdown>
         </div>
-        <el-tabs v-model="activeTab" class="task-drawer-tabs">
+        <el-tabs v-model="activeTab" class="task-detail-tabs">
           <el-tab-pane label="说明" name="description">
             <dl class="task-description"><dt>类型</dt><dd>{{ isBug ? 'Bug' : TASK_KIND_LABELS[task.kind || 'FEATURE'] }}</dd><template v-if="isBug || task.relatedNodeName"><dt>关联功能</dt><dd>{{ origin?.name || task.relatedNodeName }}</dd></template><dt>描述</dt><dd>{{ task.description || '暂无描述，可在进展记录中补充执行情况。' }}</dd><template v-if="task.situation"><dt>{{ isBug ? '问题背景' : '任务情况' }}</dt><dd>{{ task.situation }}</dd></template><template v-if="task.handling"><dt>处理方式</dt><dd>{{ task.handling }}</dd></template><template v-if="!isBug"><dt>历史计划人天</dt><dd>{{ task.estimateDays ?? '尚未估算' }}</dd></template></dl>
           </el-tab-pane>
@@ -338,20 +357,22 @@ async function openWorkItem() {
           </el-tab-pane>
           <el-tab-pane label="附件" name="files" lazy><AttachmentPanel :key="`${task.id}-${filesVersion}`" owner-type="TASK" :owner-id="task.id" :can-manage="canAct" :archived="archived" :show-category-nav="false" :hint="isBug ? '上传复现截图、修复说明与验证资料；进展记录里粘贴的文件也会出现在这里。' : '历史任务的交付物与参考资料；进展记录里粘贴的文件也会出现在这里。'" /></el-tab-pane>
         </el-tabs>
-        <div class="drawer-parent"><span class="muted">{{ isBug ? '关联功能' : '所属工作项' }}</span><el-button link type="primary" @click="openWorkItem">{{ origin?.name || node.name }} →</el-button></div>
+        <div class="task-detail-parent"><span class="muted">{{ isBug ? '关联功能' : '所属工作项' }}</span><el-button link type="primary" @click="openWorkItem">{{ origin?.name || node.name }} →</el-button></div>
         <TaskFormDialog v-model="editing" :node-id="node.id" :task="task" :members="members" :default-owner-id="node.ownerId" :work-items="relatedWorkItems" @saved="afterEdit" />
       </template>
     </div>
-  </el-drawer>
+  </section>
 </template>
 
 <style scoped>
-.task-drawer-content{min-height:200px;padding:8px 6px 28px}
-.drawer-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:22px}
-.drawer-heading p{margin:0 0 9px;font-size:14px}.drawer-heading h2{margin:0;font-size:26px;overflow-wrap:anywhere}
-.task-meta{display:flex;gap:18px;align-items:center;flex-wrap:wrap;font-size:14px;color:var(--muted);margin-bottom:20px}
-.task-drawer-actions{display:flex;gap:10px;flex-wrap:wrap;margin:22px 0}
-.task-drawer-tabs{margin-top:22px}.task-description{margin:8px 0 24px}.task-description dt{color:var(--muted);font-size:14px;margin:19px 0 6px}.task-description dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.task-detail-page{max-width:1100px;margin:0 auto}
+.task-detail-content{min-height:260px;padding:2px 2px 12px}
+.task-detail-crumb{margin-bottom:14px}
+.task-detail-heading{align-items:flex-start;margin-bottom:8px}
+.task-detail-heading p{margin:0 0 6px;font-size:14px}.task-detail-heading h1{margin:0 0 4px;font-size:28px;overflow-wrap:anywhere}
+.task-meta{display:flex;gap:18px;align-items:center;flex-wrap:wrap;font-size:14px;color:var(--muted);margin:18px 0 20px}
+.task-detail-actions{display:flex;gap:10px;flex-wrap:wrap;margin:22px 0}
+.task-detail-tabs{margin-top:22px}.task-description{margin:8px 0 24px}.task-description dt{color:var(--muted);font-size:14px;margin:19px 0 6px}.task-description dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .note-composer{margin:8px 0 22px}.note-file-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
 .note-file-label{font-size:14px;color:var(--muted);flex:none}.note-file-row .el-input{flex:1 1 240px;max-width:380px}
 .note-editing-flag{font-size:12px;color:var(--blue);background:#eef3fe;padding:1px 8px;border-radius:10px}
@@ -360,6 +381,6 @@ async function openWorkItem() {
 .task-note{padding:18px 0;border-bottom:1px solid var(--line)}.note-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:14px}.note-meta time{color:var(--muted)}
 .note-edited{font-size:13px;color:var(--blue)}
 .note-file{color:var(--navy);font-weight:600;overflow-wrap:anywhere}.task-note .markdown-body{margin-top:10px}
-.drawer-parent{border-top:1px solid var(--line);padding-top:20px;margin-top:24px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}.drawer-error p{line-height:1.7}
-@media(max-width:600px){.drawer-heading h2{font-size:22px}.task-meta{gap:10px}.task-drawer-content{padding:0}}
+.task-detail-parent{border-top:1px solid var(--line);padding-top:20px;margin-top:24px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}.task-detail-error p{line-height:1.7}
+@media(max-width:600px){.task-detail-heading h1{font-size:22px}.task-meta{gap:10px}.task-detail-content{padding:0}.task-detail-heading{flex-direction:column}.task-detail-heading .page-actions{width:100%}}
 </style>

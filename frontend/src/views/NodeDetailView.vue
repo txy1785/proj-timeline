@@ -15,7 +15,6 @@ import AttachmentPanel from '../components/AttachmentPanel.vue'
 import DeliverablePanel from '../components/DeliverablePanel.vue'
 import WorkItemFormDialog from '../components/WorkItemFormDialog.vue'
 import BugReportDialog from '../components/BugReportDialog.vue'
-import TaskDrawer from '../components/TaskDrawer.vue'
 
 const props = withDefaults(defineProps<{ initialView?: 'list' | 'kanban' }>(), { initialView: 'list' })
 const route = useRoute()
@@ -31,9 +30,6 @@ const bugDialog = ref(false)
 const bugStatus = ref<TaskStatus | 'ALL'>('ALL')
 const statusFilter = ref<TaskStatus | 'ALL' | 'OPEN'>('ALL')
 const workItemDialog = ref(false)
-const drawerOpen = ref(false)
-const drawerTaskId = ref(0)
-const drawerNodeId = ref(0)
 const busyTaskId = ref(0)
 const busyNode = ref(false)
 const riskDialog = ref(false)
@@ -59,14 +55,6 @@ const columns = computed(() => TASK_STATUSES.map(status => ({ status, label: TAS
 const canReportBug = computed(() => !loading.value && !error.value && !auth.isViewer && node.value?.projectStatus === 'ACTIVE' && node.value.status !== 'CANCELLED')
 const logs = computed(() => (node.value?.logs || []) as (NodeLog & { detail?: string })[])
 
-function syncDrawer() {
-  const taskId = Number(route.query.task)
-  drawerTaskId.value = Number.isSafeInteger(taskId) && taskId > 0 ? taskId : 0
-  const selected = [...(node.value?.tasks || []), ...bugs.value].find(task => task.id === drawerTaskId.value)
-  drawerNodeId.value = selected?.nodeId || id.value
-  drawerOpen.value = drawerTaskId.value > 0
-  if (selected) activeTab.value = selected.kind === 'BUG' ? 'bugs' : 'history'
-}
 async function load(refreshContext = false) {
   const current = ++generation
   loading.value = true; error.value = ''
@@ -77,26 +65,25 @@ async function load(refreshContext = false) {
     if (current !== generation) return
     if (context.error || context.project?.id !== value.projectId) throw new Error(context.error || '项目上下文暂时不可用')
     node.value = value
+    const legacyTaskId = Number(route.query.task)
+    if (Number.isSafeInteger(legacyTaskId) && legacyTaskId > 0) {
+      const selected = [...(value.tasks || []), ...(value.bugs || [])].find(task => task.id === legacyTaskId)
+      const query = { ...route.query }; delete query.task
+      await router.replace({ path: `/nodes/${selected?.nodeId || value.id}/tasks/${legacyTaskId}`, query })
+      return
+    }
     if (mode.value === 'kanban' && activeTab.value === 'description') activeTab.value = legacyTasks.value.length ? 'history' : 'bugs'
-    syncDrawer()
   } catch (e) {
     if (current === generation) { error.value = (e as Error).message; node.value = undefined }
   } finally { if (current === generation) loading.value = false }
 }
 watch(id, () => { node.value = undefined; activeTab.value = 'description'; void load() }, { immediate: true })
-watch(() => route.query.task, syncDrawer)
 watch(() => [route.query.tab, route.query.kind, route.query.status], () => {
   if (['description', 'materials', 'bugs', 'activity', 'history'].includes(String(route.query.tab))) activeTab.value = String(route.query.tab)
   else if (route.query.kind === 'BUG') activeTab.value = 'bugs'
   const status = String(route.query.status || 'ALL') as TaskStatus | 'ALL' | 'OPEN'
   statusFilter.value = status === 'OPEN' || TASK_STATUSES.includes(status as TaskStatus) ? status : 'ALL'
 }, { immediate: true })
-watch(drawerOpen, open => {
-  if (!open && route.query.task) {
-    const query = { ...route.query }; delete query.task
-    void router.replace({ query })
-  }
-})
 onBeforeUnmount(() => { generation++ })
 
 function updateFilters() {
@@ -104,7 +91,7 @@ function updateFilters() {
   if (statusFilter.value === 'ALL') delete query.status; else query.status = statusFilter.value
   void router.replace({ query })
 }
-function openTask(task: Task) { void router.replace({ query: { ...route.query, task: String(task.id) } }) }
+function openTask(task: Task) { void router.push(`/nodes/${task.nodeId || id.value}/tasks/${task.id}`) }
 function goView(view: 'list' | 'kanban') { void router.push({ path: '/nodes/' + id.value + (view === 'kanban' ? '/kanban' : ''), query: { ...route.query, tab: 'history' } }) }
 function canChangeTask(task: Task) { return !loading.value && !error.value && canChangeTaskStatus(auth.user, members.value, node.value, task) }
 async function quickStatus(task: Task) {
@@ -212,7 +199,6 @@ function logDetail(log: NodeLog & { detail?: string }) {
       <el-dialog :model-value="riskDialog" :title="riskMode === 'block' ? '标记工作项受阻' : '更新延期说明'" width="min(560px, calc(100vw - 28px))" :close-on-click-modal="false" :before-close="closeRisk" @update:model-value="riskDialog = $event"><el-form label-position="top" :disabled="savingRisk"><el-form-item :label="riskMode === 'block' ? '受阻原因' : '延期说明'" required><el-input v-model="riskReason" type="textarea" :rows="5" /></el-form-item><p v-if="riskMode === 'overdue'" class="muted">更新说明不会自动调整计划日期。</p></el-form><template #footer><el-button :disabled="savingRisk" @click="closeRisk()">取消</el-button><el-button type="primary" :loading="savingRisk" :disabled="!canMutateNode || (riskMode === 'overdue' && !node.flags.overdue)" @click="saveRisk">{{ riskMode === 'block' ? '保存并标记受阻' : '保存说明' }}</el-button></template></el-dialog>
     </template>
     <div v-else-if="loading" class="surface empty">正在加载工作项…</div>
-    <TaskDrawer v-model="drawerOpen" :node-id="drawerNodeId" :task-id="drawerTaskId" @updated="load(true)" />
   </div>
 </template>
 

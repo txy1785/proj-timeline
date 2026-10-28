@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api/client'
 import type { NodeItem, PageResponse, Project, WorkspaceDeliveryPage, WorkspaceManagement, WorkspaceTask, WorkspaceTaskPage } from '../api/types'
@@ -10,13 +11,11 @@ import { TASK_STATUS_LABELS, TASK_STATUS_TYPES } from '../utils/task'
 import { NODE_STATUS_LABELS, NODE_STATUS_TYPES, hasWorkItemRisk } from '../utils/workItem'
 import { daysBetween } from '../utils/date'
 import { boundedPage } from '../utils/pagination'
-import TaskDrawer from '../components/TaskDrawer.vue'
-const auth=useAuthStore(), app=useAppStore()
+const auth=useAuthStore(), app=useAppStore(), router=useRouter()
 const tab=ref('deliveries'), scope=ref<'OPEN'|'DONE'|'HISTORY'>('OPEN'), projectId=ref<number>(), status=ref(''), search=ref(''), page=ref(1)
 const deliveries=ref<WorkspaceDeliveryPage>(), bugs=ref<WorkspaceTaskPage>(), history=ref<WorkspaceTaskPage>()
 const management=ref<WorkspaceManagement>(), projects=ref<Project[]>([])
 const loading=ref(true), error=ref(''), managementError=ref(''), projectsError=ref(''), busyId=ref(0)
-const drawer=ref(false), activeTask=ref(0), activeNode=ref(0)
 let requestVersion=0
 const managementCount=computed(()=>(management.value?.nodeTotal||0)+(management.value?.requestTotal||0))
 const hasManagement=computed(()=>managementCount.value>0||auth.isAdmin||!!managementError.value)
@@ -45,7 +44,7 @@ function filtersChanged(){page.value=1;void loadList()}
 function scopeChanged(){status.value='';filtersChanged()}
 function clearFilters(){projectId.value=undefined;status.value='';search.value='';filtersChanged()}
 watch(tab,()=>{scope.value='OPEN';status.value='';page.value=1;void loadList()})
-function openTask(task:WorkspaceTask){activeNode.value=task.nodeId;activeTask.value=task.id;drawer.value=true}
+function openTask(task:WorkspaceTask){void router.push(`/nodes/${task.nodeId}/tasks/${task.id}`)}
 function canDeliver(node:NodeItem){return !loading.value&&!auth.isViewer&&auth.user?.active!==false&&node.ownerId===auth.user?.id&&node.projectStatus==='ACTIVE'&&(node.status==='NOT_STARTED'||node.status==='IN_PROGRESS')}
 async function deliveryStatus(node:NodeItem){
  if(busyId.value||!canDeliver(node))return
@@ -89,7 +88,6 @@ onMounted(()=>{void Promise.all([loadList(),loadManagement(),loadProjects()])})
         <section v-if="management" class="surface"><h2>需要处理的交付风险 <span class="muted">{{management.nodeTotal}}</span></h2><article v-for="node in management.nodes" :key="node.id" class="risk-panel" :class="{blocked:node.flags.blocked&&!node.flags.overdue}"><div class="section-head"><div><RouterLink class="task-name-link" :to="`/nodes/${node.id}`">{{node.name}}</RouterLink><p class="muted">{{node.projectName}} · 负责人 {{node.ownerName}} · 计划结束 {{node.planEnd}}</p></div><div class="page-actions"><el-tag v-if="node.flags.overdue" type="danger">已延期</el-tag><el-tag v-if="hasWorkItemRisk(node, 'blocked')" type="warning">受阻</el-tag><RouterLink :to="`/nodes/${node.id}`"><el-button type="primary" plain>查看并处理</el-button></RouterLink></div></div><p v-if="node.flags.overdue">延期说明：{{node.overdueReason||'尚未补充原因'}}</p><p v-if="hasWorkItemRisk(node, 'blocked')">受阻原因：{{node.blockedReason||'尚未补充原因'}}</p></article><p v-if="!management.nodeTotal" class="muted">当前没有需要你处理的延期或受阻工作项。</p><p v-if="management.nodeTotal>management.nodes.length" class="muted">显示前 {{management.nodes.length}} 项，共 {{management.nodeTotal}} 项。可在项目的工作项页查看完整清单。</p><h2 style="margin-top:26px">待我审批的模块申请 <span class="muted">{{management.requestTotal}}</span></h2><div v-for="item in management.requests" :key="item.id" class="management-request"><div><strong>{{item.moduleName}}</strong><p class="muted">申请人 {{item.requesterName}} · {{item.reason||'未填写申请说明'}}</p></div><RouterLink :to="`/projects/${item.projectId}/settings?tab=requests&requestId=${item.id}`"><el-button type="primary" plain>查看变更</el-button></RouterLink></div><p v-if="!management.requestTotal" class="muted">暂无待审批申请。</p><p v-if="management.requestTotal>management.requests.length" class="muted">显示前 {{management.requests.length}} 条，共 {{management.requestTotal}} 条。请在项目设置查看完整申请。</p></section>
 
   </template>
-  <TaskDrawer v-model="drawer" :node-id="activeNode" :task-id="activeTask" @updated="updated"/>
  </div>
 </template>
 <style scoped>

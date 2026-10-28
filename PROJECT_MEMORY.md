@@ -28,6 +28,7 @@
 13. **当前风险与负载**：当前延期/受阻仅计未关闭功能；人员负载主要展示有效项目的未交付/进行中/延期/本周到期工作项和未解决/逾期 Bug，数字与展开同范围。旧任务人天字段/API和已发布周报快照保留历史兼容，不用 Bug 或资料数换算功能进度。
 
 14. **进展记录是命名的 Markdown 文件**（2026-10-28 用户指定）：Bug/历史任务修复区的记录编辑区支持 Markdown，保存时命名并生成一份 `.md` 记录（缺后缀自动补），一个任务可保存多份，按时间倒序展示。粘贴/拖入的图片与文件立即上传为**本任务附件**（分类 `TASK_RECORD`「进展记录附件」），正文只保存 `attachment:{id}`：图片用 Blob 内联预览，其他文件显示为可点击超链接（预览或下载），并同步出现在「附件」页签。**编辑区为单栏所见即所得**：直接显示渲染后的标题、列表、图片与文件名链接，输入时由 turndown 序列化回 Markdown，需要手写语法时可切「源码」；不再保留编辑/预览分栏。编辑区列出本次上传并可移除（同时软删除任务附件、去掉正文占位）；非文件拖放不拦截。**已保存记录可由作者本人或任务管理者再编辑标题与正文**（原地更新，记录最后编辑人/时间，不新增记录）；删除限作者本人或管理者。初始 Markdown 渲染固定 `html:false`，不允许原始 HTML；粘贴 HTML 经 DOMPurify 白名单清洗。正文上限 20000 字，记录名 ≤120 字且禁止路径字符。附件仍按任务权限校验，不改四层文件体系。
+15. **最小单位任务详情使用独立页面**（2026-10-28 用户指定）：Bug 与历史任务不再用右侧抽屉，点击任务名称/查看详情直接进入 `/nodes/:nodeId/tasks/:taskId` 页面；工作项列表、看板、我的工作、人员负载统一用 `router.push` 进入。页面保留说明、进展记录、附件、状态操作、编辑 Bug、草稿与未保存离开提示；旧 `/nodes/:id?task=...` 深链自动重定向到新页面。
 
 ## 当前实现定位
 
@@ -45,14 +46,15 @@
 | 项目时间线、工作项详情 | `frontend/src/views/TimelineView.vue`、`NodeDetailView.vue` |
 | 路由、会话、HTTP 客户端 | `frontend/src/router.ts`、`stores/auth.ts`、`api/client.ts` |
 | 项目、模块、工作项与任务的文档附件 | `backend/src/main/java/com/projtimeline/file/`、`frontend/src/components/AttachmentPanel.vue`、`AttachmentPreview.vue`、`ProjectDocsView.vue`、`utils/attachment.ts` |
-| 进展记录（命名 Markdown 文件，可再编辑） | 后端 `work/WorkService.java`（`taskNotes/addTaskNote/updateTaskNote`、`noteTitle`）、Flyway V13–V14；前端 `components/MarkdownEditor.vue`（单栏所见即所得）、`MarkdownView.vue`、`utils/markdown.ts`、`utils/editableMarkdown.ts`、`TaskDrawer.vue`、全局 `.markdown-body` 样式 |
+| 进展记录（命名 Markdown 文件，可再编辑） | 后端 `work/WorkService.java`（`taskNotes/addTaskNote/updateTaskNote`、`noteTitle`）、Flyway V13–V14；前端 `components/MarkdownEditor.vue`（单栏所见即所得）、`MarkdownView.vue`、`utils/markdown.ts`、`utils/editableMarkdown.ts`、`views/TaskDetailView.vue`、全局 `.markdown-body` 样式 |
+| 任务详情页（Bug/历史任务） | `frontend/src/views/TaskDetailView.vue`、路由 `frontend/src/router.ts`、入口 `NodeDetailView.vue`/`MyWorkView.vue`/`WorkloadView.vue`；旧深链重定向在 `NodeDetailView.vue` |
 | 模块变更申请 | 后端 `project/ChangeRequestService.java`（提交/列表/审批/撤回）与 `project/ChangeRequestController.java`；前端 `components/ChangeRequestDialog.vue`（模块页提交）、`views/ProjectSettingsView.vue`（审批列表） |
 | 站内通知写入口 | `backend/src/main/java/com/projtimeline/notification/NotificationService.java`（读取与已读仍在 `report/ReportingService.java`） |
 | 工作项交付物清单 | 口径 `backend/src/main/java/com/projtimeline/common/DeliverableRules.java`，读写 `work/WorkService.java`；前端 `frontend/src/components/DeliverablePanel.vue`（接入 `NodeDetailView.vue`，时间线计数在 `TimelineView.vue`） |
 | 工作项类型、项目级工作项与缺陷提交 | 后端 `work/WorkService.java`（`createNode` 的 `moduleId` 可空、`reportBug` 路由）；前端 `components/WorkItemFormDialog.vue`、`BugReportDialog.vue`、`utils/workItem.ts`；时间线项目级泳道在 `TimelineView.vue`，模块视图项目级区块在 `ModulesView.vue` |
 
 - 后端：Java 17、Spring Boot 3.5.16、MyBatis-Plus 3.5.17、Spring Security、Flyway、MySQL 8。
-- 前端：Vue 3、TypeScript、Vite、Vue Router、Pinia、Element Plus、Axios；使用 npm 和 `package-lock.json`。文件预览额外依赖 `docx-preview` 与 `read-excel-file`（按需动态加载，不进入主包）；Markdown 渲染依赖 `markdown-it`（`html:false`，随工作项详情抽屉加载），单栏编辑区额外依赖 `turndown`/`turndown-plugin-gfm`（DOM→Markdown）与 `dompurify`（粘贴 HTML 清洗）。
+- 前端：Vue 3、TypeScript、Vite、Vue Router、Pinia、Element Plus、Axios；使用 npm 和 `package-lock.json`。文件预览额外依赖 `docx-preview` 与 `read-excel-file`（按需动态加载，不进入主包）；Markdown 渲染依赖 `markdown-it`（`html:false`，随任务详情页加载），单栏编辑区额外依赖 `turndown`/`turndown-plugin-gfm`（DOM→Markdown）与 `dompurify`（粘贴 HTML 清洗）。
 - 当前 Flyway 版本为 V14。V1 建表，V2 将项目开始日期设为必填并过渡性增加模块日期，V3 建立 `project_stage_targets` 并移除模块日期，V4 建立 `attachments` 文档附件表，V5 只修正 `owner_type` 注释（V4 已应用到环境，不得再改写），V6 建立 `task_notes` 并让 `attachments.owner_type` 支持 TASK，V7 只把 `nodes.progress` 列注释改为「已弃用」（进度改为任务完成率派生，保留列与历史值，不删列），V8 给 `tasks` 增加 `situation`/`handling` 并为 `node_logs.action` 增加 `TASK_UPDATE`/`TASK_DELETE`，V9 建立 `node_deliverables` 并为 `node_logs.action` 增加 `DELIVERABLE_ADD`/`DELIVERABLE_UPDATE`/`DELIVERABLE_DELETE`，V10 给 `project_stage_targets` 增加四个可空指标列（`metric_name/metric_unit/metric_target/metric_current`），V11 建立 `module_change_requests` 并把 `notifications.type` 扩到 7 类，V12 让 `nodes.module_id` 可空、增加 `nodes.type`，给 `tasks` 增加 `kind` 和 `related_node_id`，V13 给 `task_notes` 增加 `title`（默认「进展记录.md」）并把 `content` 扩为 `MEDIUMTEXT` 存 Markdown，V14 给 `task_notes` 增加 `updated_by`/`updated_at` 支持再编辑。已有迁移文件不能改写；新变更追加 V15 及以后版本。
 - 当前 OpenAPI 有 76 个 `/api` 操作：本轮在进展记录上新增 `PUT /task-notes/{id}` 再编辑接口，其余路径沿用。前端 `frontend/src/api/schema.d.ts` 已由运行中的新版后端生成；默认脚本端口 8080，本机服务其他端口需显式指定。
 - 认证为 8 小时 JWT，仅保存用户 ID；每次请求重新检查账号启用状态与角色。浏览器会话存于 `sessionStorage`。
