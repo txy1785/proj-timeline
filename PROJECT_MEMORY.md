@@ -45,7 +45,7 @@
 | 项目时间线、工作项详情 | `frontend/src/views/TimelineView.vue`、`NodeDetailView.vue` |
 | 路由、会话、HTTP 客户端 | `frontend/src/router.ts`、`stores/auth.ts`、`api/client.ts` |
 | 项目、模块、工作项与任务的文档附件 | `backend/src/main/java/com/projtimeline/file/`、`frontend/src/components/AttachmentPanel.vue`、`AttachmentPreview.vue`、`ProjectDocsView.vue`、`utils/attachment.ts` |
-| 进展记录（命名 Markdown 文件，可再编辑） | 后端 `work/WorkService.java`（`taskNotes/addTaskNote/updateTaskNote`、`noteTitle`）、Flyway V13–V14；前端 `components/MarkdownEditor.vue`、`MarkdownView.vue`、`utils/markdown.ts`、`TaskDrawer.vue`、全局 `.markdown-body` 样式 |
+| 进展记录（命名 Markdown 文件，可再编辑） | 后端 `work/WorkService.java`（`taskNotes/addTaskNote/updateTaskNote`、`noteTitle`）、Flyway V13–V14；前端 `components/MarkdownEditor.vue`（单栏所见即所得）、`MarkdownView.vue`、`utils/markdown.ts`、`utils/editableMarkdown.ts`、`TaskDrawer.vue`、全局 `.markdown-body` 样式 |
 | 模块变更申请 | 后端 `project/ChangeRequestService.java`（提交/列表/审批/撤回）与 `project/ChangeRequestController.java`；前端 `components/ChangeRequestDialog.vue`（模块页提交）、`views/ProjectSettingsView.vue`（审批列表） |
 | 站内通知写入口 | `backend/src/main/java/com/projtimeline/notification/NotificationService.java`（读取与已读仍在 `report/ReportingService.java`） |
 | 工作项交付物清单 | 口径 `backend/src/main/java/com/projtimeline/common/DeliverableRules.java`，读写 `work/WorkService.java`；前端 `frontend/src/components/DeliverablePanel.vue`（接入 `NodeDetailView.vue`，时间线计数在 `TimelineView.vue`） |
@@ -81,6 +81,7 @@
 
 - 功能交付轮次验证：Maven 71 项测试通过；前端 lint/typecheck/build 通过；Playwright 当时 29 项通过；另在明确命名的本机隔离 MySQL 库执行真实 HTTP 与浏览器流程。详细命令、截图、边界见 [功能交付验收](docs/功能交付验收/README.md)。2026-10-28 模块入口恢复后前端 lint/typecheck/build、完整 Playwright 31 项通过（含 320px 窄屏）；用户原库只读确认仍有 12 条模块记录，5173 页面与 58080 健康接口均返回 200。
 - 2026-10-28 Markdown 进展记录轮次验证：Maven 73 项测试通过；前端 lint/typecheck/build 通过；Playwright 37 项通过（含命名 .md、粘贴截图进正文与附件、编辑区实时预览图片与文件名链接、图片真实内联、粘贴附件可移除、预览态粘贴、已保存记录再编辑与编辑中关闭草稿提示、上传在途暂停编辑）；在本机隔离 MySQL 库执行 V1–V14 迁移并跑真实 HTTP（创建/编辑/读取进展记录、`updatedBy/updatedAt`、文件名与长度校验；assignee 非作者编辑 403、工作项负责人成功、VIEWER 403），验证后删除测试库并停止临时服务。随后重启 58080 后端（IntelliJ 进程已停止，改由 `mvn spring-boot:run` 后台运行），V14 已应用到本机 `proj_timeline`，健康接口 UP、OpenAPI 76 个操作并已重新生成 `schema.d.ts`；5173 页面 HTTP 200。再编辑功能经独立审核两轮（`bb3b91d`、`f3296e4`）均“可合并”、无 P1/P2，最终提交 `89fbd59` 以合并提交 `bfde145` 集成 develop 并推送，功能分支已删除。随后按用户反馈把编辑区改为左右分栏实时预览（图片内联、文件只显示文件名），以合并提交 `dbcc361` 集成 develop；前端 Vite 热更新，后端无改动。用户再反馈编辑区太小，任务抽屉加宽到 960px、编辑区源码:预览改为 3:2、最小高度 `min(360px,52vh)`、容器窄于 780px 自动堆叠，以合并提交 `b533c46` 集成 develop（前端热更新，无后端/迁移变更）。
+- 2026-10-28 单栏编辑区轮次验证：按用户“不分编辑/预览”要求，把进展记录编辑器改为 contenteditable + turndown/DOMPurify 的单栏所见即所得，保留源码开关；前端 `lint`/`typecheck`/`build` 通过，Playwright **44 项**通过（含既有复杂 Markdown 在真实键入后的保真、超 20MB 图片占位保留、粘贴 HTML 消毒、工具栏加粗/标题、源码模式、行首快捷标题、上传暂停、移动端）；本轮无后端/接口/迁移变更，58080 后端与 5173 前端保持运行。独立审核 `86eea9d`“可合并”（无 P1/P2），清理尾项后提交 `0786df3` 以合并提交 `162a09f` 集成 develop 并推送，功能分支已删除。已知 turndown 会规范化列表缩进/表格列对齐/裸链接/任务列表转义等排版，要求逐字保留时用「源码」。
 - `PLAN.md` 中早期接口/页面/表数量是历史快照。当前接口 76 个、表 16 张（含 flyway_schema_history）；V13–V14 只扩列不建表。
 - 当前工作站此前未运行 Docker Compose 的真实构建；部署仍需在具备 Docker 的目标环境验证。
 - 文件存储当前用本地磁盘（`app.storage.root` 默认 `./data/files`，容器内 `/app/data/files` 挂 `file-data` 卷）。未接入 MinIO/对象存储：存储层已抽成 `FileStorage` 接口，切换时只加实现并改配置。单文件上限 50MB，Nginx 侧 `client_max_body_size 60m`，后端 `spring.servlet.multipart` 与 `app.storage.max-file-bytes` 同步。

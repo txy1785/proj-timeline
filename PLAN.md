@@ -491,4 +491,4 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 验证：`lint`/`typecheck`/`build`、Playwright **44 项**通过（含单栏编辑、图片内联、PDF 文件名链接与点击预览、加粗/标题工具栏、源码模式、行首 `# ` 快捷标题、既有复杂 Markdown 结构在真实键入后仍保持、超 20MB 图片占位不被改写成 UI 文案、粘贴 HTML 剥离 `onerror`/`javascript:`/iframe、移除附件、上传暂停、移动端）；无后端/接口/迁移变更，58080/5173 运行。
 - 已知：打开旧记录保存会由 turndown 规范化列表缩进、表格分隔符（**列对齐不保留**）、裸链接转 `[url](url)`、任务列表方括号转义等（语义保持）；要求逐字不变时切「源码」；不新增后端解析。
 - 独立审核（fc6d8a3）无 P1、2 项 P2；已修：超 20MB/非图片图片语法保留 `![name](attachment:id)` 占位、保真 e2e 真实键入触发序列化；另修软键盘占位、粘贴图片 Referer、`turndown(host)` 减少一次解析，并补 HTML 消毒用例。
-- 待复核/合并 develop。
+- 复核 `86eea9d`“可合并”，清理审核尾项（删除调试监听、删除线过滤兼容 `<strike>`、快捷输入忽略修饰键）后以 `0786df3` 收尾；合并提交 `162a09f` 集成 develop 并推送 `origin/develop`，功能分支已删除，工作树干净。前端 Vite 热更新，后端无改动。
