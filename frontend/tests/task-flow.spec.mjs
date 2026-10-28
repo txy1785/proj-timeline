@@ -91,10 +91,11 @@ test('pasted attachment can be removed before the record is saved', async ({ pag
   expect(state.writes.some(write=>write.method==='DELETE'&&write.path==='/attachments/900')).toBe(true)
   expect(state.writes.some(write=>write.method==='DELETE'&&write.path==='/attachments/901')).toBe(true)
 
-  await draft.fill('清理完成')
+  // 不再覆盖正文：保存的必须是移除占位后剩下的内容
   await page.getByRole('button',{name:'保存记录',exact:true}).click()
   const saved=state.writes.filter(item=>item.method==='POST'&&item.path==='/tasks/11/notes').pop()
-  expect(saved.body.content).toBe('清理完成')
+  expect(saved.body.content).toBe('先粘贴一张截图')
+  expect(saved.body.content).not.toContain('attachment:')
 })
 
 test('pasting a file while previewing switches back to edit and inserts the placeholder', async ({ page }) => {
