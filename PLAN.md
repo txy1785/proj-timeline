@@ -461,3 +461,13 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 验证：Maven 73 项、前端 lint/typecheck/build、Playwright 37 项（新增再编辑、编辑中关闭草稿提示、上传在途暂停编辑）通过；隔离库执行 V1–V14 迁移并真实 HTTP 验证创建/编辑/读取、`updatedBy/updatedAt` 与长度/文件名校验，另验证 assignee 非作者编辑 403、工作项负责人成功、VIEWER 403；用户库已应用 V14，OpenAPI 76 并重新生成 `schema.d.ts`，58080 健康 UP、5173 页面 200。
 - 已完成：独立审核两轮（首轮 `bb3b91d`、增量复审 `f3296e4`，均只读新上下文）均“可合并”、无 P1/P2；最终提交 `89fbd59` 以合并提交 `bfde145` 集成 develop 并推送 `origin/develop`，功能分支已删除，工作树干净。58080 后端已重启到最终代码，V14 已应用（Flyway 报告 up to date），OpenAPI 76、5173 页面 200。
 - 兼容与回滚：V14 只加两个可空列与一个外键，旧记录保持 NULL、不丢数据；回滚按 `ALTER TABLE task_notes DROP FOREIGN KEY fk_task_notes_updated_by;` 再 `DROP COLUMN updated_at, DROP COLUMN updated_by;`。MySQL DDL 自动提交，两条 ALTER 不具原子性；生产执行前先备份，若第二条加 FK 失败需按上述语句清理中间态后重试。
+
+## 2026-10-28 · 编辑区实时预览
+
+- 用户反馈：编辑区只显示 `![功能流程图.png](attachment:5)` 这样的源码，希望图片在编辑区直接预览；文件不需要一直预览，默认显示文件名，点击才查看全文。
+- 从最新 develop 建立 `feature/live-markdown-preview`。`MarkdownEditor` 的「编辑」态改为左右分栏：左侧 Markdown 源码，右侧实时预览；预览中图片内联显示，文件只呈现文件名链接、点击查看/下载；640px 以下自动上下堆叠。输入做 200ms 防抖，避免逐键重渲染。
+- `MarkdownView` 的图片 Blob URL 改为按附件 id 缓存到组件卸载，实时预览输入时不再重复请求和闪烁；图片超 20MB 或非图片附件仍降级为文件名链接。
+- e2e 夹具改为 240×120 PNG（可见图形），新增断言：编辑区实时预览出现图片、PDF 只显示文件名链接、保存后记录图片 `naturalWidth=240`。
+- 验证：前端 lint/typecheck/build、Playwright 37 项通过；本轮无后端、接口、迁移或数据库变更，58080/5173 服务保持运行。
+- 审核通过；按复核建议补：同实例并发取图时复用已写入缓存并释放竞态 URL、首屏实时预览同步初始化、390px 下实时预览可见且无横向溢出、PDF 只显示文件名不内联。
+- 待合并 develop。

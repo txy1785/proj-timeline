@@ -53,6 +53,7 @@ test('progress record saves as a named Markdown file and pasted files join attac
   await draft.fill('## 复现\n\n- 上传图片后建档失败')
   await pasteFile(page,'screenshot.png','image/png')
   await expect(draft).toHaveValue(/!\[screenshot\.png\]\(attachment:900\)/)
+  await expect(page.locator('.md-live .md-image img')).toBeVisible()
   expect(state.files[0].category).toBe('TASK_RECORD')
   await page.getByRole('button',{name:'保存记录',exact:true}).click()
   const write=state.writes.filter(item=>item.path==='/tasks/11/notes').pop()
@@ -61,7 +62,7 @@ test('progress record saves as a named Markdown file and pasted files join attac
   await expect(page.getByText('📄 修复步骤.md',{exact:true})).toBeVisible()
   const inlineImage=page.locator('.task-note .md-image img')
   await expect(inlineImage).toBeVisible()
-  expect(await inlineImage.evaluate(image=>image.naturalWidth)).toBe(1)
+  expect(await inlineImage.evaluate(image=>image.naturalWidth)).toBe(240)
   await page.getByRole('tab',{name:'附件',exact:true}).click()
   await expect(page.locator('.attachment-panel').getByText('screenshot.png').first()).toBeVisible()
 })
@@ -84,6 +85,8 @@ test('pasted attachment can be removed before the record is saved', async ({ pag
 
   await pasteFile(page,'notes.pdf','application/pdf')
   await expect(draft).toHaveValue(/\[notes\.pdf\]\(attachment:901\)/)
+  await expect(page.locator('.md-live .md-file').filter({hasText:'notes.pdf'})).toBeVisible()
+  await expect(page.locator('.md-live img')).toHaveCount(0)
   await page.getByRole('button',{name:'移除 notes.pdf',exact:true}).click()
   await page.getByRole('button',{name:'移除',exact:true}).click()
   await expect(draft).not.toHaveValue(/attachment:901/)
@@ -233,6 +236,10 @@ test('mobile Bug rows retain a full-width detail entry', async ({ page }) => {
   await page.goto('/nodes/106')
   await openBug(page)
   await expect.poll(async()=>Math.round((await page.locator('.el-drawer').boundingBox()).x)).toBe(0)
+  await page.getByRole('tab',{name:/进展记录/}).click()
+  await page.getByRole('textbox',{name:'进展记录内容'}).fill('移动端的实时预览')
+  await expect(page.getByRole('region',{name:'实时预览'})).toBeVisible()
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
 })
 
 test('PM confirms delivery despite unfinished legacy tasks and sends expected work-item state', async ({ page }) => {
