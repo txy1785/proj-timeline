@@ -99,6 +99,7 @@ a:focus-visible,button:focus-visible { outline:3px solid #92b5ff; outline-offset
 .risk-panel p { margin:8px 0; }
 .empty { padding:46px 20px; }.empty p { margin:10px 0 20px; }
 .empty .el-button { margin:4px; }
+.el-drawer { max-width:100vw; }
 .el-dialog { max-width:calc(100vw - 28px); }
 .el-dialog__body { overflow-wrap:anywhere; }
 .el-dialog__footer { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }

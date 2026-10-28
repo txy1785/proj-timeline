@@ -282,7 +282,7 @@ async function openWorkItem() {
 </script>
 
 <template>
-  <el-drawer :model-value="modelValue" size="min(760px, 100vw)" :with-header="false" :before-close="requestClose" :close-on-click-modal="false" class="task-detail-drawer" @update:model-value="emit('update:modelValue', $event)" @closed="emit('closed')">
+  <el-drawer :model-value="modelValue" size="min(960px, 100vw)" :with-header="false" :before-close="requestClose" :close-on-click-modal="false" class="task-detail-drawer" @update:model-value="emit('update:modelValue', $event)" @closed="emit('closed')">
     <div v-loading="loading" class="task-drawer-content">
       <header class="drawer-heading">
         <div><p class="muted">{{ node?.projectName || '项目工作' }}<template v-if="node"> / {{ origin?.name || node.name }}</template></p><h2>{{ task?.name || (loading ? '正在加载详情' : '详情') }}</h2><small v-if="task" class="muted">{{ isBug ? 'Bug · 独立跟踪修复' : '历史任务' }}</small></div>

@@ -471,3 +471,11 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 验证：前端 lint/typecheck/build、Playwright 37 项通过；本轮无后端、接口、迁移或数据库变更，58080/5173 服务保持运行。
 - 审核通过；按复核建议补：同实例并发取图时复用已写入缓存并释放竞态 URL、首屏实时预览同步初始化、390px 下实时预览可见且无横向溢出、PDF 只显示文件名不内联。
 - 已完成：独立审核“可合并”、无 P1/P2；提交 `e54564e`、`bb4b708`、`425e164` 以合并提交 `dbcc361` 集成 develop 并推送 `origin/develop`，功能分支已删除，工作树干净。前端由 Vite 热更新，后端无改动、无需重启。
+
+## 2026-10-28 · 放大编辑区
+
+- 用户反馈编辑区域太小。从 develop 建立 `feature/editor-sizing`：任务抽屉宽度由 760 提升到 960（`min(960px,100vw)`，并用全局 `.el-drawer` 的 `max-width:100vw` 防止缩窗溢出）。
+- `MarkdownEditor` 分栏比例改为源码 3 : 预览 2；编辑区最小高度 360px、最大 52vh，textarea 可手动纵向拖拽放大；实时预览同高。
+- 用容器查询按**编辑区自身宽度**切换：<780px 上下堆叠（不依赖视口，侧栏/抽屉宽度变化都能正确响应）；≤640px 进一步压缩高度。精简提示文案，减少纵向占用。
+- 验证：lint/typecheck/build、Playwright 37 项通过；无后端/接口/迁移变更，58080/5173 运行。
+- 待独立审核后合并 develop。
