@@ -105,4 +105,19 @@ class FeatureDeliveryTest {
         f.login(4,"USER");
         assertThatThrownBy(()->f.work.reportBug(10,Map.of("name","外部提交","relatedNodeId",103L))).isInstanceOf(BusinessException.class);
     }
+
+    @Test void progressRecordIsNamedMarkdownFileAndKeepsAttachmentPlaceholders(){
+        f.login(2,"USER");
+        Map<String,Object> note=f.work.addTaskNote(1001,Map.of("title","修复步骤","content","## 复现\n\n![截图](attachment:1)\n\n[日志](attachment:2)"));
+        assertThat(note).containsEntry("title","修复步骤.md");
+        assertThat(note.get("content").toString()).contains("attachment:1").contains("attachment:2");
+        assertThat(f.work.taskNotes(1001)).extracting(row->row.get("title")).containsExactly("修复步骤.md");
+        assertThat(f.work.addTaskNote(1001,Map.of("content","未命名记录"))).containsEntry("title","进展记录.md");
+        assertThat(f.work.taskNotes(1001)).extracting(row->row.get("title")).contains("进展记录.md","修复步骤.md");
+        assertThatThrownBy(()->f.work.addTaskNote(1001,Map.of("title","截图/复现","content","x"))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(()->f.work.addTaskNote(1001,Map.of("title","长".repeat(118),"content","x"))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(()->f.work.addTaskNote(1001,Map.of("title","超长正文","content","x".repeat(20001)))).isInstanceOf(BusinessException.class);
+        f.login(5,"VIEWER");
+        assertThatThrownBy(()->f.work.addTaskNote(1001,Map.of("title","只读","content","x"))).isInstanceOf(BusinessException.class);
+    }
 }

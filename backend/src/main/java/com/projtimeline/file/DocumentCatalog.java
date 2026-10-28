@@ -74,6 +74,7 @@ public final class DocumentCatalog {
             // 任务级 · 任务附件
             new Category(OWNER_TASK, "任务附件", "TASK_DELIVERABLE", "任务交付物"),
             new Category(OWNER_TASK, "任务附件", "TASK_REFERENCE", "参考资料"),
+            new Category(OWNER_TASK, "任务附件", "TASK_RECORD", "进展记录附件"),
             new Category(OWNER_TASK, "任务附件", "TASK_OTHER", "其他任务文件")
     );
 

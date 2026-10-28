@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadFile } from 'element-plus'
 import { api, upload } from '../api/client'
-import { downloadAttachment, formatBytes, previewKind } from '../utils/attachment'
+import { downloadAttachment, formatBytes, MAX_ATTACHMENT_BYTES, previewKind } from '../utils/attachment'
 import type { Attachment, AttachmentCategory, AttachmentOwnerType } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import AttachmentPreview from './AttachmentPreview.vue'
@@ -35,7 +35,6 @@ const visibleFiles = computed(() => activeCode.value ? files.value.filter(item =
 const canUpload = computed(() => props.canManage && !props.archived)
 const activeName = computed(() => ownCategories.value.find(item => item.code === activeCode.value)?.name || '全部文件')
 const canDeleteRow = (row: Attachment) => !auth.isViewer && !props.archived && (props.canManage || row.uploaderId === auth.user?.id)
-const MAX_BYTES = 50 * 1024 * 1024
 
 async function load() {
   loading.value = true
@@ -74,7 +73,7 @@ function onPick(file: UploadFile) {
 async function submit() {
   if (!form.code) { ElMessage.warning('请选择文档分类'); return }
   if (!form.raw) { ElMessage.warning('请选择要上传的文件'); return }
-  if (form.raw.size > MAX_BYTES) { ElMessage.warning('单个文件不能超过 50MB'); return }
+  if (form.raw.size > MAX_ATTACHMENT_BYTES) { ElMessage.warning('单个文件不能超过 50MB'); return }
   const body = new FormData()
   body.append('ownerType', props.ownerType)
   body.append('ownerId', String(props.ownerId))

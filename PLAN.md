@@ -429,3 +429,13 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 独立审核发现 320px 视口模块卡片最小宽度会导致横向溢出，已改为随可用宽度收缩并针对窄屏加回归。审核还指出需求文档遗留的旧任务完成率公式，与现行契约矛盾，已同步修正。
 - 最终独立复核 `d410618` 相对 develop 无剩余可操作问题，可合并；审核环境缺少 Chromium 可执行文件，浏览器 31 项结果由主工作区执行，审核者核对了结果和源码。
 - 已审核功能以 `859577a` 保留合并提交集成 develop；合并后的 frontend 与受审功能分支内容一致，main 不变。
+
+## 2026-10-28 · 进展记录改为命名的 Markdown 文件
+
+- 用户要求：修复区的编辑区兼容 Markdown；附件可直接粘贴到对应位置，图片内联预览、文件以超链接占位点击查看；粘贴的文件同时出现在附件区；编辑内容保存为可命名的 `.md` 文件并在“进展记录”展示，一个任务可有多份。
+- 从最新 develop 建立 `feature/markdown-progress-records`。数据层扩展现有 `task_notes`（Flyway V13）：新增 `title`（默认「进展记录.md」，记录名即文件名），`content` 扩为 `MEDIUMTEXT` 保存 Markdown；不新建表、不改附件表，粘贴文件仍是普通 `TASK` 附件，新增分类 `TASK_RECORD`「进展记录附件」。
+- 后端 `taskNotes/addTaskNote` 返回并保存 `title`：≤120 字，自动补 `.md`，拒绝 `\ / : * ? " < > |` 与控制字符；正文 ≤20000 字、不能为空，默认名「进展记录.md」。权限、归档、删除与草稿保护沿用原记录规则。
+- 前端新增 `utils/markdown.ts`（`markdown-it`，`html:false`，`attachment:{id}` 占位渲染）、`MarkdownView.vue`（Blob 内联图片、`.md-file` 点击预览/下载）、`MarkdownEditor.vue`（工具条、编辑/预览、粘贴/拖入即上传并插入占位），`TaskDrawer.vue` 改为“记录名称 + Markdown 编辑区 + 保存记录”，记录列表按文件名展示并可下载 `.md`；粘贴后刷新附件页签，全局 `.markdown-body` 承载排版。
+- 验证：Maven 72 项通过；前端 lint/typecheck/build 通过；Playwright 32 项通过，新增「保存为命名 .md + 粘贴截图进正文与附件区」；在隔离库 `proj_timeline_mdnote_verify` 执行 V1–V13 迁移并真实 HTTP 验证上传、保存/读取、默认文件名与长度/字符校验，之后删除测试库、停止临时服务。用户正在运行的 58080 后端（IntelliJ 启动）已停止，改用 `mvn spring-boot:run` 后台运行；V13 已应用到本机 `proj_timeline`（迁移前 0 条记录），健康 UP、OpenAPI 75 个操作，5173 页面 200、`/api` 代理 401。
+- 兼容与回滚：V13 只加列/扩列，旧记录标题取默认值、正文原样保留；回滚需删除 `title` 列并把 `content` 收回 `VARCHAR(2000)`，仅在无超长 Markdown 记录时可执行（旧纯文本记录均 ≤2000 字）。MySQL 8 把 `VARCHAR(2000)` 扩为 `MEDIUMTEXT` 会 COPY 重建表并短暂写锁；本机表 0 行瞬时完成，生产大表执行前需备份并选择低峰或在线变更工具。
+- 待办：独立审核、合并 develop；用户库在重启时由 Flyway 自动应用 V13（已兼容旧记录，标题取默认值）。

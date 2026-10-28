@@ -3,24 +3,33 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api/client'
-import type { NodeItem, Task, TaskNote, TaskStatus, Timeline, User } from '../api/types'
+import type { Attachment, NodeItem, Task, TaskNote, TaskStatus, Timeline, User } from '../api/types'
 import { useAuthStore } from '../stores/auth'
+import { useAppStore } from '../stores/app'
 import { canManageNode, canManageTask, canChangeTaskStatus, canEditTask, taskWorkItemContext, isNodeClosed } from '../utils/permissions'
 import { TASK_KIND_LABELS, TASK_NEXT_ACTION, TASK_STATUS_LABELS, TASK_STATUS_TYPES } from '../utils/task'
 import { BUG_NEXT_ACTION, BUG_STATUS_LABELS } from '../utils/bug'
 import { formatDateTime } from '../utils/format'
+import { downloadMarkdown, markdownFileName } from '../utils/markdown'
 import AttachmentPanel from './AttachmentPanel.vue'
+import MarkdownEditor from './MarkdownEditor.vue'
+import MarkdownView from './MarkdownView.vue'
 import TaskFormDialog from './TaskFormDialog.vue'
 
 const props = defineProps<{ modelValue: boolean; nodeId: number; taskId: number }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void; (e: 'updated'): void; (e: 'closed'): void }>()
 const auth = useAuthStore()
+const app = useAppStore()
 const router = useRouter()
 const node = ref<NodeItem>()
 const task = ref<Task>()
 const members = ref<User[]>([])
 const notes = ref<TaskNote[]>([])
+const noteTitle = ref('')
 const noteText = ref('')
+const attachments = ref<Attachment[]>([])
+const filesError = ref('')
+const filesVersion = ref(0)
 const loading = ref(false)
 const error = ref('')
 const notesError = ref('')
@@ -32,6 +41,7 @@ const editing = ref(false)
 const relatedWorkItems = ref<NodeItem[]>([])
 let generation = 0
 const pending = computed(() => savingNote.value || savingStatus.value || deletingNote.value > 0)
+const hasDraft = computed(() => noteText.value.trim().length > 0)
 const canAct = computed(() => !!task.value && !loading.value && !error.value && canManageTask(auth.user, members.value, node.value, task.value))
 const isBug = computed(() => task.value?.kind === 'BUG')
 const origin = computed(() => task.value ? taskWorkItemContext(node.value, task.value) : node.value)
@@ -51,24 +61,39 @@ async function load() {
     const value = await api<NodeItem>('GET', `/nodes/${nodeId}`)
     const found = value.tasks?.find(item => item.id === taskId && item.nodeId === nodeId)
     if (!found) throw new Error('任务已删除或不属于这个工作项')
-    const [people, records] = await Promise.allSettled([
+    const [people, records, files] = await Promise.allSettled([
       api<User[]>('GET', `/projects/${value.projectId}/members`),
-      api<TaskNote[]>('GET', `/tasks/${taskId}/notes`)
+      api<TaskNote[]>('GET', `/tasks/${taskId}/notes`),
+      api<Attachment[]>('GET', '/attachments', undefined, { ownerType: 'TASK', ownerId: taskId })
     ])
     if (current !== generation || !props.modelValue) return
     if (people.status === 'rejected') throw people.reason
     node.value = value; task.value = found; members.value = people.value
     if (records.status === 'fulfilled') notes.value = records.value
     else { notes.value = []; notesError.value = (records.reason as Error).message }
+    if (files.status === 'fulfilled') { attachments.value = files.value; filesError.value = '' }
+    else { attachments.value = []; filesError.value = (files.reason as Error).message }
+    if (!noteTitle.value.trim()) noteTitle.value = nextNoteTitle()
   } catch (e) {
     if (current === generation) { error.value = (e as Error).message; task.value = undefined; node.value = undefined; members.value = [] }
   } finally { if (current === generation) loading.value = false }
 }
 
+/** 记录名默认按「修复记录/进展记录-业务日期-序号.md」生成；跳过已存在的文件名，删除记录后也不会重名。 */
+function nextNoteTitle() {
+  const prefix = isBug.value ? '修复记录' : '进展记录'
+  const base = app.businessDate ? `${prefix}-${app.businessDate}` : prefix
+  const used = new Set(notes.value.map(note => (note.title || '').toLowerCase()))
+  let sequence = 1
+  while (used.has(`${base}-${sequence}.md`.toLowerCase())) sequence++
+  return `${base}-${sequence}.md`
+}
+
 watch([() => props.modelValue, () => props.nodeId, () => props.taskId], ([open, nodeId, taskId], old) => {
   if (!open) { generation++; loading.value = false; return }
   if (!old?.[0] || nodeId !== old[1] || taskId !== old[2]) {
-    noteText.value = ''; notes.value = []; node.value = undefined; task.value = undefined
+    noteTitle.value = ''; noteText.value = ''; notes.value = []; node.value = undefined; task.value = undefined
+    attachments.value = []; filesError.value = ''; filesVersion.value = 0
     activeTab.value = 'description'; relatedWorkItems.value = []
     void load()
   }
@@ -77,21 +102,34 @@ watch([() => props.modelValue, () => props.nodeId, () => props.taskId], ([open, 
 async function saveNote(): Promise<boolean> {
   if (!canAct.value || !task.value || savingNote.value) return false
   const content = noteText.value.trim()
-  if (!content) { ElMessage.warning('请先填写本次进展、问题或结果'); return false }
+  if (!content) { ElMessage.warning('请先填写记录内容'); return false }
+  if (content.length > 20000) { ElMessage.warning('记录不能超过 20000 字'); return false }
+  const title = markdownFileName(noteTitle.value)
+  if (title.length > 120) { ElMessage.warning('记录名称不能超过 120 字（含 .md）'); return false }
+  if (/[\\/:*?"<>|]/.test(title)) { ElMessage.warning('记录名称不能包含 \\ / : * ? " < > | 等文件名字符'); return false }
   savingNote.value = true
   try {
-    await api('POST', `/tasks/${task.value.id}/notes`, { content })
-    noteText.value = ''
+    await api('POST', `/tasks/${task.value.id}/notes`, { title, content })
+    noteText.value = ''; noteTitle.value = ''
     await load()
-    emit('updated'); ElMessage.success('进展记录已保存')
+    emit('updated'); ElMessage.success('进展记录已保存为 Markdown 文件')
     return true
   } catch (e) { ElMessage.error((e as Error).message); return false }
   finally { savingNote.value = false }
 }
 
+function onUploaded(file: Attachment) {
+  attachments.value = [file, ...attachments.value]
+  filesVersion.value++
+}
+
+function downloadNote(note: TaskNote) {
+  downloadMarkdown(note.title || '进展记录.md', note.content)
+}
+
 async function allowLeave(): Promise<boolean> {
   if (pending.value || editing.value) { ElMessage.info('请先完成当前操作'); return false }
-  if (!noteText.value.trim()) return true
+  if (!hasDraft.value) return true
   if (!canAct.value) {
     try {
       await ElMessageBox.confirm('当前任务已不可写入。请先复制草稿保留；关闭后将放弃本次输入。', '未保存的进展记录', {
@@ -118,7 +156,7 @@ async function requestClose(done?: () => void) {
 onBeforeRouteLeave(async () => !props.modelValue || await allowLeave())
 onBeforeRouteUpdate(async (to, from) => !props.modelValue || (to.path === from.path && to.query.task === from.query.task) || await allowLeave())
 function beforeUnload(event: BeforeUnloadEvent) {
-  if (props.modelValue && noteText.value.trim()) { event.preventDefault(); event.returnValue = '' }
+  if (props.modelValue && hasDraft.value) { event.preventDefault(); event.returnValue = '' }
 }
 onMounted(() => window.addEventListener('beforeunload', beforeUnload))
 onBeforeUnmount(() => { generation++; window.removeEventListener('beforeunload', beforeUnload) })
@@ -191,13 +229,34 @@ async function openWorkItem() {
             <dl class="task-description"><dt>类型</dt><dd>{{ isBug ? 'Bug' : TASK_KIND_LABELS[task.kind || 'FEATURE'] }}</dd><template v-if="isBug || task.relatedNodeName"><dt>关联功能</dt><dd>{{ origin?.name || task.relatedNodeName }}</dd></template><dt>描述</dt><dd>{{ task.description || '暂无描述，可在进展记录中补充执行情况。' }}</dd><template v-if="task.situation"><dt>{{ isBug ? '问题背景' : '任务情况' }}</dt><dd>{{ task.situation }}</dd></template><template v-if="task.handling"><dt>处理方式</dt><dd>{{ task.handling }}</dd></template><template v-if="!isBug"><dt>历史计划人天</dt><dd>{{ task.estimateDays ?? '尚未估算' }}</dd></template></dl>
           </el-tab-pane>
           <el-tab-pane :label="`进展记录 ${notes.length}`" name="records">
-            <div v-if="canAct" class="note-composer"><el-input v-model="noteText" type="textarea" :rows="4" maxlength="2000" show-word-limit :disabled="savingNote" placeholder="记录本次进展、问题或结果" aria-label="进展记录内容" /><el-button type="primary" :loading="savingNote" :disabled="pending && !savingNote" @click="saveNote">追加记录</el-button></div>
+            <div v-if="canAct" class="note-composer">
+              <div class="note-file-row">
+                <label class="note-file-label" for="note-title">记录名称</label>
+                <el-input id="note-title" v-model="noteTitle" maxlength="117" placeholder="例如：修复步骤.md" aria-label="进展记录名称" />
+                <span class="muted">保存为 .md</span>
+              </div>
+              <MarkdownEditor v-model="noteText" owner-type="TASK" :owner-id="task.id" :can-upload="canAct && !archived" :disabled="savingNote" aria-label="进展记录内容" placeholder="记录本次进展、问题或结果，支持 Markdown；直接粘贴截图或文件会自动上传" @uploaded="onUploaded" />
+              <div class="note-composer-actions">
+                <span class="muted">每保存一次生成一份命名的 Markdown 记录；粘贴的文件同时出现在「附件」。</span>
+                <el-button type="primary" :loading="savingNote" :disabled="pending && !savingNote" @click="saveNote">保存记录</el-button>
+              </div>
+            </div>
             <div v-else-if="noteText.trim()" class="note-composer"><p class="muted">当前任务不可写入。未保存的草稿仍保留在这里，可复制后保存到其他位置。</p><el-input :model-value="noteText" type="textarea" :rows="4" readonly aria-label="未保存的记录草稿" /></div>
             <el-alert v-if="notesError" :title="`记录暂时无法加载：${notesError}`" type="error" :closable="false" />
-            <div v-else-if="!notes.length" class="empty">暂无记录<template v-if="canAct">，可补充本次进展或处理结果。</template></div>
-            <article v-for="note in notes" :key="note.id" class="task-note"><div class="note-meta"><strong>{{ note.authorName }}</strong><time>{{ formatDateTime(note.createdAt) }}</time><el-button v-if="canDeleteNote(note)" link type="danger" :loading="deletingNote === note.id" :disabled="pending && deletingNote !== note.id" @click="removeNote(note)">删除</el-button></div><p>{{ note.content }}</p></article>
+            <el-alert v-else-if="filesError" title="附件列表暂时无法加载，记录中的图片和文件链接可能显示为已删除；请稍后重新打开。" type="warning" :closable="false" />
+            <div v-else-if="!notes.length" class="empty">暂无记录<template v-if="canAct">，可写一份 Markdown 记录补充进展或处理结果。</template></div>
+            <article v-for="note in notes" :key="note.id" class="task-note">
+              <div class="note-meta">
+                <span class="note-file">📄 {{ note.title || '进展记录.md' }}</span>
+                <strong>{{ note.authorName }}</strong>
+                <time>{{ formatDateTime(note.createdAt) }}</time>
+                <el-button link type="primary" title="正文里的附件以系统内引用保存，下载的 .md 需回到系统查看附件" @click="downloadNote(note)">下载 .md</el-button>
+                <el-button v-if="canDeleteNote(note)" link type="danger" :loading="deletingNote === note.id" :disabled="pending && deletingNote !== note.id" @click="removeNote(note)">删除</el-button>
+              </div>
+              <MarkdownView :content="note.content" :attachments="attachments" />
+            </article>
           </el-tab-pane>
-          <el-tab-pane label="附件" name="files" lazy><AttachmentPanel :key="task.id" owner-type="TASK" :owner-id="task.id" :can-manage="canAct" :archived="archived" :show-category-nav="false" :hint="isBug ? '上传复现截图、修复说明与验证资料。' : '历史任务的交付物与参考资料；项目成员可预览、下载。'" /></el-tab-pane>
+          <el-tab-pane label="附件" name="files" lazy><AttachmentPanel :key="`${task.id}-${filesVersion}`" owner-type="TASK" :owner-id="task.id" :can-manage="canAct" :archived="archived" :show-category-nav="false" :hint="isBug ? '上传复现截图、修复说明与验证资料；进展记录里粘贴的文件也会出现在这里。' : '历史任务的交付物与参考资料；进展记录里粘贴的文件也会出现在这里。'" /></el-tab-pane>
         </el-tabs>
         <div class="drawer-parent"><span class="muted">{{ isBug ? '关联功能' : '所属工作项' }}</span><el-button link type="primary" @click="openWorkItem">{{ origin?.name || node.name }} →</el-button></div>
         <TaskFormDialog v-model="editing" :node-id="node.id" :task="task" :members="members" :default-owner-id="node.ownerId" :work-items="relatedWorkItems" @saved="afterEdit" />
@@ -213,8 +272,11 @@ async function openWorkItem() {
 .task-meta{display:flex;gap:18px;align-items:center;flex-wrap:wrap;font-size:14px;color:var(--muted);margin-bottom:20px}
 .task-drawer-actions{display:flex;gap:10px;flex-wrap:wrap;margin:22px 0}
 .task-drawer-tabs{margin-top:22px}.task-description{margin:8px 0 24px}.task-description dt{color:var(--muted);font-size:14px;margin:19px 0 6px}.task-description dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
-.note-composer{margin:8px 0 22px}.note-composer .el-button{margin-top:12px}
-.task-note{padding:18px 0;border-bottom:1px solid var(--line)}.note-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:14px}.note-meta time{color:var(--muted)}.task-note p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;margin:12px 0 0}
+.note-composer{margin:8px 0 22px}.note-file-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.note-file-label{font-size:14px;color:var(--muted);flex:none}.note-file-row .el-input{flex:1 1 240px;max-width:380px}
+.note-composer-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px}.note-composer-actions .muted{font-size:12px}
+.task-note{padding:18px 0;border-bottom:1px solid var(--line)}.note-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:14px}.note-meta time{color:var(--muted)}
+.note-file{color:var(--navy);font-weight:600;overflow-wrap:anywhere}.task-note .markdown-body{margin-top:10px}
 .drawer-parent{border-top:1px solid var(--line);padding-top:20px;margin-top:24px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}.drawer-error p{line-height:1.7}
 @media(max-width:600px){.drawer-heading h2{font-size:22px}.task-meta{gap:10px}.task-drawer-content{padding:0}}
 </style>

@@ -419,11 +419,11 @@ public class WorkService {
         return db.list("SELECT w.*,u.name user_name FROM task_work_logs w JOIN users u ON u.id=w.user_id WHERE w.task_id=:task ORDER BY w.work_date DESC,w.id DESC", Map.of("task", taskId));
     }
 
-    /** 任务进展记录：按时间倒序，用于记录完成思路与结果，也可当备注用。 */
+    /** 进展记录：每份是命名的 Markdown 文件，按时间倒序，正文里的 attachment:{id} 指向本任务附件。 */
     public List<Map<String, Object>> taskNotes(long taskId) {
         permissions.requireProjectRead(permissions.projectForTask(taskId));
         return db.list("""
-                SELECT n.id, n.task_id, n.author_id, u.name author_name, n.content, n.created_at
+                SELECT n.id, n.task_id, n.title, n.author_id, u.name author_name, n.content, n.created_at
                 FROM task_notes n JOIN users u ON u.id = n.author_id
                 WHERE n.task_id = :task
                 ORDER BY n.created_at DESC, n.id DESC
@@ -433,17 +433,30 @@ public class WorkService {
     @Transactional
     public Map<String, Object> addTaskNote(long taskId, Map<String, Object> body) {
         permissions.requireTaskManager(taskId, true);
-        String content = requiredText(body, "content");
-        if (content.length() > 2000) throw BusinessException.badRequest("记录不能超过 2000 字");
+        String title = noteTitle(body);
+        String content = text(body, "content");
+        if (content == null) throw BusinessException.badRequest("记录内容不能为空");
+        if (content.length() > 20000) throw BusinessException.badRequest("记录不能超过 20000 字");
         // 与删任务串行：先锁工作项和任务行，避免记录插入时任务已被删除导致外键 500
         long nodeId = number(db.one("SELECT node_id FROM tasks WHERE id=:id", Map.of("id", taskId), "任务不存在").get("nodeId"));
         lockNode(nodeId);
         db.one("SELECT id FROM tasks WHERE id=:id FOR UPDATE", Map.of("id", taskId), "任务不存在");
         // 记录本身带作者与时间，不重复写 node_logs（其 action 枚举未包含记录事件）；时间用注入的 Clock，避免依赖数据库时区
-        long id = db.insert("INSERT INTO task_notes(task_id,author_id,content,created_at) VALUES(:task,:author,:content,:created)",
-                map("task", taskId, "author", permissions.current().id(), "content", content,
+        long id = db.insert("INSERT INTO task_notes(task_id,title,author_id,content,created_at) VALUES(:task,:title,:author,:content,:created)",
+                map("task", taskId, "title", title, "author", permissions.current().id(), "content", content,
                         "created", LocalDateTime.now(clock)));
         return db.one("SELECT n.*,u.name author_name FROM task_notes n JOIN users u ON u.id=n.author_id WHERE n.id=:id", Map.of("id", id), "记录不存在");
+    }
+
+    /** 记录名即 .md 文件名：缺省为「进展记录.md」，统一补 .md 后缀并拒绝路径与文件系统保留字符。 */
+    private static String noteTitle(Map<String, Object> body) {
+        String title = text(body, "title");
+        if (title == null) title = "进展记录.md";
+        if (!title.toLowerCase(Locale.ROOT).endsWith(".md")) title += ".md";
+        if (title.length() > 120) throw BusinessException.badRequest("记录名称不能超过 120 字");
+        if (title.chars().anyMatch(ch -> ch < 32 || "\\/:*?\"<>|".indexOf(ch) >= 0))
+            throw BusinessException.badRequest("记录名称不能包含 \\ / : * ? \" < > | 等文件名字符");
+        return title;
     }
 
     @Transactional

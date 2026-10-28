@@ -25,9 +25,41 @@ test('assignee opens Bug, keeps note draft across 409 and saves it independently
   await expect(draft).toHaveValue('本次未保存的进展')
   const write=state.writes.find(item=>item.path==='/tasks/11/status')
   expect(write.body).toEqual({status:'DONE',expectedStatus:'DOING'})
-  await page.getByRole('button',{name:'追加记录',exact:true}).click()
+  await page.getByRole('button',{name:'保存记录',exact:true}).click()
   await expect(draft).toHaveValue('')
   await expect(page.getByText('本次未保存的进展',{exact:true})).toBeVisible()
+})
+
+test('progress record saves as a named Markdown file and pasted files join attachments', async ({ page }) => {
+  test.setTimeout(30_000)
+  const state=await prepare(page)
+  await page.goto('/nodes/106?task=11')
+  await page.getByRole('tab',{name:/进展记录/}).click()
+  const name=page.getByRole('textbox',{name:'进展记录名称'})
+  await expect(name).toHaveValue(/修复记录-.*\.md/)
+  await name.fill('修复步骤')
+  const draft=page.getByRole('textbox',{name:'进展记录内容'})
+  await draft.fill('## 复现\n\n- 上传图片后建档失败')
+  await page.evaluate(() => {
+    const target=document.querySelector('textarea[aria-label="进展记录内容"]')
+    const data=new DataTransfer()
+    data.items.add(new File([new Uint8Array([137,80,78,71])],'screenshot.png',{type:'image/png'}))
+    const event=new ClipboardEvent('paste',{bubbles:true,cancelable:true})
+    Object.defineProperty(event,'clipboardData',{value:data})
+    target.dispatchEvent(event)
+  })
+  await expect(draft).toHaveValue(/!\[screenshot\.png\]\(attachment:900\)/)
+  expect(state.files[0].category).toBe('TASK_RECORD')
+  await page.getByRole('button',{name:'保存记录',exact:true}).click()
+  const write=state.writes.filter(item=>item.path==='/tasks/11/notes').pop()
+  expect(write.body.title).toBe('修复步骤.md')
+  expect(write.body.content).toContain('![screenshot.png](attachment:900)')
+  await expect(page.getByText('📄 修复步骤.md',{exact:true})).toBeVisible()
+  const inlineImage=page.locator('.task-note .md-image img')
+  await expect(inlineImage).toBeVisible()
+  expect(await inlineImage.evaluate(image=>image.naturalWidth)).toBe(1)
+  await page.getByRole('tab',{name:'附件',exact:true}).click()
+  await expect(page.locator('.attachment-panel').getByText('screenshot.png').first()).toBeVisible()
 })
 
 test('PM edits Bug core fields while fixed type, origin and collapsed legacy values are preserved', async ({ page }) => {
@@ -68,7 +100,7 @@ test('archived Bug and VIEWER expose no mutation actions', async ({ page }) => {
   await expect(page.getByRole('button',{name:'报告 Bug',exact:true})).toHaveCount(0)
   await page.getByRole('tab',{name:/进展记录/}).click()
   await expect(page.getByRole('textbox',{name:'进展记录内容'})).toHaveCount(0)
-  await expect(page.getByRole('button',{name:'追加记录',exact:true})).toHaveCount(0)
+  await expect(page.getByRole('button',{name:'保存记录',exact:true})).toHaveCount(0)
 })
 
 test('Bug draft prompts before close and invalid deep link has explicit unavailable state', async ({ page }) => {
@@ -82,7 +114,7 @@ test('Bug draft prompts before close and invalid deep link has explicit unavaila
   await expect(page).not.toHaveURL(/task=/)
   await page.goto('/nodes/106?task=999')
   await expect(page.getByText('任务已删除或不属于这个工作项',{exact:true})).toBeVisible()
-  await expect(page.getByRole('button',{name:'追加记录',exact:true})).toHaveCount(0)
+  await expect(page.getByRole('button',{name:'保存记录',exact:true})).toHaveCount(0)
 })
 
 test('mobile Bug rows retain a full-width detail entry', async ({ page }) => {
