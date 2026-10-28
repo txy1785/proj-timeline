@@ -492,3 +492,13 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 已知：打开旧记录保存会由 turndown 规范化列表缩进、表格分隔符（**列对齐不保留**）、裸链接转 `[url](url)`、任务列表方括号转义等（语义保持）；要求逐字不变时切「源码」；不新增后端解析。
 - 独立审核（fc6d8a3）无 P1、2 项 P2；已修：超 20MB/非图片图片语法保留 `![name](attachment:id)` 占位、保真 e2e 真实键入触发序列化；另修软键盘占位、粘贴图片 Referer、`turndown(host)` 减少一次解析，并补 HTML 消毒用例。
 - 复核 `86eea9d`“可合并”，清理审核尾项（删除调试监听、删除线过滤兼容 `<strike>`、快捷输入忽略修饰键）后以 `0786df3` 收尾；合并提交 `162a09f` 集成 develop 并推送 `origin/develop`，功能分支已删除，工作树干净。前端 Vite 热更新，后端无改动。
+
+## 2026-10-28 · 任务详情页替换右侧抽屉
+
+- 用户反馈 Bug 等最小单位在右侧抽屉里修改/操作不方便，要求点击直接进入对应空间。从 develop 建立 `feature/task-detail-page`。
+- 新增路由 `/nodes/:nodeId/tasks/:taskId`（`meta.nodeParam` 让 App 外壳加载项目上下文）；原 `TaskDrawer.vue` 迁移为 `views/TaskDetailView.vue` 页面，保留说明、进展记录（单栏 Markdown）、附件、状态操作、编辑 Bug、权限与冲突逻辑，改为页面级面包屑、标题、「返回工作项」和 `surface` 布局。
+- 工作项列表/看板、我的工作、人员负载的 `openTask` 全部改为 `router.push` 进入任务页；Bug 报告成功后的跳转同步改新路由；旧 `/nodes/:id?task=...` 在 NodeDetailView 加载后自动 `router.replace` 到新页面（无效任务也进入页面显示明确错误）。
+- 草稿保护从抽屉 `before-close` 迁移到路由守卫 + 页面返回按钮：离开/返回时按权限提示保存或放弃，上传在途禁止返回；页面返回目标为关联工作项并带 `tab=bugs|history`。
+- 验证：前端 `lint`/`typecheck`/`build`、Playwright **45 项**通过（任务页用例改为 `.task-detail-page` 并断言新 URL；新增直接打开 `/nodes/106/tasks/11` 及刷新用例，覆盖 App 项目上下文与深链）；无后端/接口/迁移变更，58080/5173 运行。
+- 独立审核“可合并”、无 P1/P2；按 P3 清理 `requestClose` 死参数、路由守卫同时比较 node/task 参数、项目文档的附件跳转改用新路径；并补直接深链/刷新 e2e。
+- 待合并 develop。

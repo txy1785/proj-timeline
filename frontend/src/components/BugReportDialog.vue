@@ -71,7 +71,7 @@ async function submit() {
 function openSubmitted() {
   if (!receipt.value) return
   emit('update:modelValue', false)
-  void router.push(`/nodes/${receipt.value.routedNodeId}?task=${receipt.value.id}`)
+  void router.push(`/nodes/${receipt.value.routedNodeId}/tasks/${receipt.value.id}`)
 }
 </script>
 

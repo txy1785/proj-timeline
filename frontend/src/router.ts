@@ -15,6 +15,7 @@ const router = createRouter({
     { path: '/projects/:id/modules', component: () => import('./views/ModulesView.vue'), meta: { projectParam: 'id' } },
     { path: '/projects/:projectId/modules/:moduleId', component: () => import('./views/ModuleDetailView.vue'), meta: { projectParam: 'projectId' } },
     { path: '/nodes/:id', component: () => import('./views/NodeDetailView.vue'), meta: { nodeParam: 'id' } },
+    { path: '/nodes/:nodeId/tasks/:taskId', component: () => import('./views/TaskDetailView.vue'), meta: { nodeParam: 'nodeId' } },
     { path: '/nodes/:id/kanban', component: () => import('./views/KanbanView.vue'), meta: { nodeParam: 'id' } },
     { path: '/workload', component: () => import('./views/WorkloadView.vue') },
     { path: '/notifications', component: () => import('./views/NotificationsView.vue') },

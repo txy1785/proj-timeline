@@ -40,7 +40,7 @@ async function loadFiles() {
 function openOwner(file: LinkedAttachment) {
   if (file.ownerType === 'MODULE') router.push(`/projects/${projectId}/modules/${file.ownerId}`)
   else if (file.ownerType === 'NODE') router.push(`/nodes/${file.ownerId}`)
-  else if (file.ownerType === 'TASK' && file.nodeId) router.push(`/nodes/${file.nodeId}?task=${file.ownerId}`)
+  else if (file.ownerType === 'TASK' && file.nodeId) router.push(`/nodes/${file.nodeId}/tasks/${file.ownerId}`)
   else router.push(`/projects/${projectId}/${file.ownerType === 'PROJECT' ? 'overview' : 'work-items'}`)
 }
 async function save(file: Attachment) { try { await downloadAttachment(file) } catch (e) { ElMessage.error((e as Error).message) } }
