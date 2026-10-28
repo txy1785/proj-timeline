@@ -50,6 +50,16 @@ test('the project overview shows modules before work items', async ({ page }) =>
   await expect(page).toHaveURL('/projects/1/modules/3')
 })
 
+test('module cards fit a 320px viewport without horizontal page overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  const state = await prepare(page, 'USER', 2)
+  state.extraModules.push(emptyModule)
+  await page.goto('/projects/1/modules')
+  await expect(moduleCard(page)).toBeVisible()
+  const width = await page.evaluate(() => ({ content: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth }))
+  expect(width.content).toBeLessThanOrEqual(width.viewport)
+})
+
 test('empty modules respect location, risk and search filters', async ({ page }) => {
   const state = await prepare(page, 'USER', 2)
   state.extraModules.push(emptyModule)
