@@ -152,6 +152,24 @@ test('editing a saved record prompts before closing with unsaved changes', async
   expect(state.writes.some(item=>item.method==='PUT'&&item.path==='/task-notes/200')).toBe(false)
 })
 
+test('record editing is paused while an attachment is uploading', async ({ page }) => {
+  test.setTimeout(30_000)
+  const state=await prepare(page)
+  state.notes.push({id:200,taskId:11,title:'初稿.md',authorId:6,authorName:'钱工',content:'第一版',createdAt:'2026-10-27T09:30:00'})
+  state.uploadDelayMs=800
+  await page.goto('/nodes/106?task=11')
+  await page.getByRole('tab',{name:/进展记录/}).click()
+  const draft=page.getByRole('textbox',{name:'进展记录内容'})
+  await draft.fill('上传中的记录')
+  await pasteFile(page,'slow.png','image/png')
+  await expect(page.getByRole('button',{name:'保存记录',exact:true})).toBeDisabled()
+  await expect(page.locator('.task-note .note-meta').getByRole('button',{name:'编辑',exact:true})).toBeDisabled()
+  await expect(page.getByRole('button',{name:'关闭Bug详情'})).toBeDisabled()
+  await expect(draft).toHaveValue(/attachment:900/)
+  await expect(page.getByRole('button',{name:'保存记录',exact:true})).toBeEnabled()
+  await expect(page.locator('.task-note .note-meta').getByRole('button',{name:'编辑',exact:true})).toBeEnabled()
+})
+
 test('PM edits Bug core fields while fixed type, origin and collapsed legacy values are preserved', async ({ page }) => {
   const state=await prepare(page,'USER',2)
   await page.goto('/nodes/106?task=11')

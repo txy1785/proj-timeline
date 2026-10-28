@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, upload } from '../api/client'
 import type { Attachment, AttachmentOwnerType } from '../api/types'
@@ -42,6 +42,7 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
   (e: 'uploaded', attachment: Attachment): void
   (e: 'removed', attachmentId: number): void
+  (e: 'uploading', count: number): void
 }>()
 
 const textareaRef = ref<HTMLTextAreaElement>()
@@ -201,6 +202,7 @@ async function acceptFiles(files: File[]) {
   })
   if (!accepted.length) return
   uploading.value += accepted.length
+  emit('uploading', uploading.value)
   for (const file of accepted) {
     try {
       const body = new FormData()
@@ -216,6 +218,7 @@ async function acceptFiles(files: File[]) {
       ElMessage.error(`${file.name} 上传失败：${(error as Error).message}`)
     } finally {
       uploading.value -= 1
+      emit('uploading', uploading.value)
     }
   }
 }
@@ -224,6 +227,8 @@ async function acceptFiles(files: File[]) {
 watch(() => props.modelValue, value => {
   if (!value.trim()) uploaded.value = []
 })
+
+onBeforeUnmount(() => { if (uploading.value) emit('uploading', 0) })
 </script>
 
 <template>

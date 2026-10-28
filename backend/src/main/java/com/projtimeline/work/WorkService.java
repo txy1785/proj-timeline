@@ -458,7 +458,7 @@ public class WorkService {
         permissions.requireProjectActive(permissions.projectForTask(taskId));
         if (number(note.get("authorId")) != permissions.current().id()) permissions.requireTaskManager(taskId, false);
         // title 可选：未传或为空时保留原记录名，避免只改正文却把文件静默改名
-        String title = text(body, "title") == null ? Objects.toString(note.get("title")) : noteTitle(body);
+        String title = text(body, "title") == null ? Objects.toString(note.get("title"), "进展记录.md") : noteTitle(body);
         String content = noteContent(body);
         // 与删任务串行：锁工作项后再改记录，避免任务被删后更新孤儿行
         long nodeId = number(db.one("SELECT node_id FROM tasks WHERE id=:id", Map.of("id", taskId), "任务不存在").get("nodeId"));

@@ -89,6 +89,7 @@ export async function prepare(page, role = 'USER', userId = 6, options = {}) {
       const match = raw.match(/filename="([^"]*)"/)
       const originalName = match ? match[1] : 'attachment.png'
       const category = (raw.match(/name="category"\r\n\r\n([^\r\n]+)/) || [])[1] || 'TASK_OTHER'
+      if (state.uploadDelayMs) await new Promise(resolve => setTimeout(resolve, state.uploadDelayMs))
       const file = { id: 900 + state.files.length, projectId: 1, ownerType: 'TASK', ownerId: 11, category, categoryName: '进展记录附件', title: originalName, originalName, contentType: 'image/png', sizeBytes: 4, version: 1, uploaderId: userId, uploaderName: '钱工', createdAt: '2026-10-27T09:30:00' }
       state.files.push(file); return reply(file)
     }

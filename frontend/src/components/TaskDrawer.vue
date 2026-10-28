@@ -34,6 +34,7 @@ const composerRef = ref<HTMLElement>()
 const attachments = ref<Attachment[]>([])
 const filesError = ref('')
 const filesVersion = ref(0)
+const noteUploading = ref(0)
 const loading = ref(false)
 const error = ref('')
 const notesError = ref('')
@@ -44,7 +45,7 @@ const activeTab = ref('description')
 const editing = ref(false)
 const relatedWorkItems = ref<NodeItem[]>([])
 let generation = 0
-const pending = computed(() => savingNote.value || savingStatus.value || deletingNote.value > 0)
+const pending = computed(() => savingNote.value || savingStatus.value || deletingNote.value > 0 || noteUploading.value > 0)
 const hasDraft = computed(() => editingNoteId.value
   ? noteTitle.value !== originalNoteTitle.value || noteText.value !== originalNoteText.value
   : noteText.value.trim().length > 0)
@@ -102,6 +103,7 @@ watch([() => props.modelValue, () => props.nodeId, () => props.taskId], ([open, 
   if (!old?.[0] || nodeId !== old[1] || taskId !== old[2]) {
     noteTitle.value = ''; noteText.value = ''; notes.value = []; node.value = undefined; task.value = undefined
     editingNoteId.value = null; originalNoteTitle.value = ''; originalNoteText.value = ''
+    noteUploading.value = 0
     attachments.value = []; filesError.value = ''; filesVersion.value = 0
     activeTab.value = 'description'; relatedWorkItems.value = []
     void load()
@@ -177,6 +179,10 @@ function resetComposer() {
 function onUploaded(file: Attachment) {
   attachments.value = [file, ...attachments.value]
   filesVersion.value++
+}
+
+function onNoteUploading(count: number) {
+  noteUploading.value = count
 }
 
 function onAttachmentRemoved(attachmentId: number) {
@@ -303,7 +309,7 @@ async function openWorkItem() {
                 <span v-if="editingNoteId" class="note-editing-flag">编辑已保存记录</span>
                 <span v-else class="muted">保存为 .md</span>
               </div>
-              <MarkdownEditor :key="editorKey" v-model="noteText" owner-type="TASK" :owner-id="task.id" :can-upload="canAct && !archived" :disabled="savingNote" :attachments="attachments" aria-label="进展记录内容" placeholder="记录本次进展、问题或结果，支持 Markdown；直接粘贴截图或文件会自动上传" @uploaded="onUploaded" @removed="onAttachmentRemoved" />
+              <MarkdownEditor :key="editorKey" v-model="noteText" owner-type="TASK" :owner-id="task.id" :can-upload="canAct && !archived" :disabled="savingNote" :attachments="attachments" aria-label="进展记录内容" placeholder="记录本次进展、问题或结果，支持 Markdown；直接粘贴截图或文件会自动上传" @uploaded="onUploaded" @removed="onAttachmentRemoved" @uploading="onNoteUploading" />
               <div class="note-composer-actions">
                 <span class="muted">{{ editingNoteId ? '保存修改会更新原记录，并记下最后编辑时间。' : '每保存一次生成一份命名的 Markdown 记录；粘贴的文件同时出现在「附件」，保存前可在编辑区下方移除。' }}</span>
                 <div class="note-composer-buttons">
