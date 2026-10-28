@@ -501,4 +501,4 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 草稿保护从抽屉 `before-close` 迁移到路由守卫 + 页面返回按钮：离开/返回时按权限提示保存或放弃，上传在途禁止返回；页面返回目标为关联工作项并带 `tab=bugs|history`。
 - 验证：前端 `lint`/`typecheck`/`build`、Playwright **45 项**通过（任务页用例改为 `.task-detail-page` 并断言新 URL；新增直接打开 `/nodes/106/tasks/11` 及刷新用例，覆盖 App 项目上下文与深链）；无后端/接口/迁移变更，58080/5173 运行。
 - 独立审核“可合并”、无 P1/P2；按 P3 清理 `requestClose` 死参数、路由守卫同时比较 node/task 参数、项目文档的附件跳转改用新路径；并补直接深链/刷新 e2e。
-- 待合并 develop。
+- 已完成：提交 `313c2f5`、`c23cae5` 以合并提交 `24b71aa` 集成 develop 并推送 `origin/develop`，功能分支已删除，工作树干净。前端 Vite 热更新，后端无改动。
