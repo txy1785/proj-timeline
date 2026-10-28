@@ -470,4 +470,4 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - e2e 夹具改为 240×120 PNG（可见图形），新增断言：编辑区实时预览出现图片、PDF 只显示文件名链接、保存后记录图片 `naturalWidth=240`。
 - 验证：前端 lint/typecheck/build、Playwright 37 项通过；本轮无后端、接口、迁移或数据库变更，58080/5173 服务保持运行。
 - 审核通过；按复核建议补：同实例并发取图时复用已写入缓存并释放竞态 URL、首屏实时预览同步初始化、390px 下实时预览可见且无横向溢出、PDF 只显示文件名不内联。
-- 待合并 develop。
+- 已完成：独立审核“可合并”、无 P1/P2；提交 `e54564e`、`bb4b708`、`425e164` 以合并提交 `dbcc361` 集成 develop 并推送 `origin/develop`，功能分支已删除，工作树干净。前端由 Vite 热更新，后端无改动、无需重启。
