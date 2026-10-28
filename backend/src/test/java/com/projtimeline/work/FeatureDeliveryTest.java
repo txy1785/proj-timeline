@@ -120,4 +120,30 @@ class FeatureDeliveryTest {
         f.login(5,"VIEWER");
         assertThatThrownBy(()->f.work.addTaskNote(1001,Map.of("title","只读","content","x"))).isInstanceOf(BusinessException.class);
     }
+
+    @Test void authorOrTaskManagerCanEditSavedProgressRecord(){
+        f.login(2,"USER");
+        long id=((Number)f.work.addTaskNote(1001,Map.of("title","初稿","content","第一版")).get("id")).longValue();
+        Map<String,Object> edited=f.work.updateTaskNote(id,Map.of("title","修复步骤","content","## 第二版\n\n见 attachment:1"));
+        assertThat(edited).containsEntry("title","修复步骤.md").containsEntry("content","## 第二版\n\n见 attachment:1")
+                .containsEntry("updatedByName","执行人");
+        assertThat(edited.get("updatedAt")).isNotNull();
+        assertThat(f.work.taskNotes(1001)).hasSize(1).extracting(row->row.get("title")).containsExactly("修复步骤.md");
+        // 非作者的模块/工作项负责人可编辑，并记录最后编辑人
+        f.login(3,"USER");
+        Map<String,Object> byManager=f.work.updateTaskNote(id,Map.of("title","修复步骤","content","负责人补充"));
+        assertThat(byManager).containsEntry("content","负责人补充").containsEntry("updatedByName","模块负责人");
+        // 非项目成员与 VIEWER 不能编辑
+        f.login(4,"USER");
+        assertThatThrownBy(()->f.work.updateTaskNote(id,Map.of("title","越权","content","x"))).isInstanceOf(BusinessException.class);
+        f.login(5,"VIEWER");
+        assertThatThrownBy(()->f.work.updateTaskNote(id,Map.of("title","只读","content","x"))).isInstanceOf(BusinessException.class);
+        // 标题/正文校验沿用新建口径
+        f.login(2,"USER");
+        assertThatThrownBy(()->f.work.updateTaskNote(id,Map.of("title","截图/复现","content","x"))).isInstanceOf(BusinessException.class);
+        assertThatThrownBy(()->f.work.updateTaskNote(id,Map.of("title","超长正文","content","x".repeat(20001)))).isInstanceOf(BusinessException.class);
+        // 归档项目只读
+        f.jdbc.update("UPDATE projects SET status='ARCHIVED' WHERE id=10");
+        assertThatThrownBy(()->f.work.updateTaskNote(id,Map.of("title","归档修改","content","x"))).isInstanceOf(BusinessException.class);
+    }
 }

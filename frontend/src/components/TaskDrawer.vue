@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api/client'
@@ -27,6 +27,10 @@ const members = ref<User[]>([])
 const notes = ref<TaskNote[]>([])
 const noteTitle = ref('')
 const noteText = ref('')
+const editingNoteId = ref<number | null>(null)
+const originalNoteTitle = ref('')
+const originalNoteText = ref('')
+const composerRef = ref<HTMLElement>()
 const attachments = ref<Attachment[]>([])
 const filesError = ref('')
 const filesVersion = ref(0)
@@ -41,7 +45,9 @@ const editing = ref(false)
 const relatedWorkItems = ref<NodeItem[]>([])
 let generation = 0
 const pending = computed(() => savingNote.value || savingStatus.value || deletingNote.value > 0)
-const hasDraft = computed(() => noteText.value.trim().length > 0)
+const hasDraft = computed(() => editingNoteId.value
+  ? noteTitle.value !== originalNoteTitle.value || noteText.value !== originalNoteText.value
+  : noteText.value.trim().length > 0)
 const canAct = computed(() => !!task.value && !loading.value && !error.value && canManageTask(auth.user, members.value, node.value, task.value))
 const isBug = computed(() => task.value?.kind === 'BUG')
 const origin = computed(() => task.value ? taskWorkItemContext(node.value, task.value) : node.value)
@@ -93,6 +99,7 @@ watch([() => props.modelValue, () => props.nodeId, () => props.taskId], ([open, 
   if (!open) { generation++; loading.value = false; return }
   if (!old?.[0] || nodeId !== old[1] || taskId !== old[2]) {
     noteTitle.value = ''; noteText.value = ''; notes.value = []; node.value = undefined; task.value = undefined
+    editingNoteId.value = null; originalNoteTitle.value = ''; originalNoteText.value = ''
     attachments.value = []; filesError.value = ''; filesVersion.value = 0
     activeTab.value = 'description'; relatedWorkItems.value = []
     void load()
@@ -100,7 +107,9 @@ watch([() => props.modelValue, () => props.nodeId, () => props.taskId], ([open, 
 }, { immediate: true })
 
 async function saveNote(): Promise<boolean> {
-  if (!canAct.value || !task.value || savingNote.value) return false
+  if (!task.value || savingNote.value) return false
+  const editingId = editingNoteId.value
+  if (!canAct.value && editingId === null) return false
   const content = noteText.value.trim()
   if (!content) { ElMessage.warning('请先填写记录内容'); return false }
   if (content.length > 20000) { ElMessage.warning('记录不能超过 20000 字'); return false }
@@ -109,13 +118,58 @@ async function saveNote(): Promise<boolean> {
   if (/[\\/:*?"<>|]/.test(title)) { ElMessage.warning('记录名称不能包含 \\ / : * ? " < > | 等文件名字符'); return false }
   savingNote.value = true
   try {
-    await api('POST', `/tasks/${task.value.id}/notes`, { title, content })
-    noteText.value = ''; noteTitle.value = ''
+    if (editingId !== null) {
+      await api('PUT', `/task-notes/${editingId}`, { title, content })
+      ElMessage.success('记录已更新')
+    } else {
+      await api('POST', `/tasks/${task.value.id}/notes`, { title, content })
+      ElMessage.success('进展记录已保存为 Markdown 文件')
+    }
+    resetComposer()
     await load()
-    emit('updated'); ElMessage.success('进展记录已保存为 Markdown 文件')
+    emit('updated')
     return true
   } catch (e) { ElMessage.error((e as Error).message); return false }
   finally { savingNote.value = false }
+}
+
+/** 进入再编辑：把已保存记录的标题与正文带回编辑区，并滚动到编辑区。 */
+async function editNote(note: TaskNote) {
+  if (!canEditNote(note) || pending.value || editingNoteId.value === note.id) return
+  if (hasDraft.value) {
+    try {
+      await ElMessageBox.confirm('当前未保存的修改将丢弃，继续编辑这份记录？', '编辑记录', {
+        type: 'warning', confirmButtonText: '继续编辑', cancelButtonText: '保留当前'
+      })
+    } catch { return }
+  }
+  editingNoteId.value = note.id
+  noteTitle.value = note.title || '进展记录.md'
+  noteText.value = note.content
+  originalNoteTitle.value = noteTitle.value
+  originalNoteText.value = noteText.value
+  activeTab.value = 'records'
+  await nextTick()
+  composerRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+async function cancelEdit() {
+  if (pending.value) return
+  if (hasDraft.value) {
+    try {
+      await ElMessageBox.confirm('放弃对这份记录的修改？', '取消编辑', {
+        type: 'warning', confirmButtonText: '放弃修改', cancelButtonText: '继续编辑'
+      })
+    } catch { return }
+  }
+  resetComposer()
+  noteTitle.value = nextNoteTitle()
+}
+
+function resetComposer() {
+  editingNoteId.value = null
+  originalNoteTitle.value = ''; originalNoteText.value = ''
+  noteTitle.value = ''; noteText.value = ''
 }
 
 function onUploaded(file: Attachment) {
@@ -135,7 +189,7 @@ function downloadNote(note: TaskNote) {
 async function allowLeave(): Promise<boolean> {
   if (pending.value || editing.value) { ElMessage.info('请先完成当前操作'); return false }
   if (!hasDraft.value) return true
-  if (!canAct.value) {
+  if (!canAct.value && editingNoteId.value === null) {
     try {
       await ElMessageBox.confirm('当前任务已不可写入。请先复制草稿保留；关闭后将放弃本次输入。', '未保存的进展记录', {
         type: 'warning', confirmButtonText: '放弃并关闭', cancelButtonText: '返回保留草稿', distinguishCancelAndClose: true
@@ -180,17 +234,23 @@ async function changeStatus(status: TaskStatus) {
   } finally { savingStatus.value = false }
 }
 
-function canDeleteNote(note: TaskNote) {
+function canManageNote(note: TaskNote) {
   return !loading.value && !error.value && node.value?.projectStatus === 'ACTIVE' && !!auth.user
     && auth.user.active !== false && !auth.isViewer
     && (canManageNode(auth.user, members.value, origin.value) || note.authorId === auth.user.id)
 }
+function canDeleteNote(note: TaskNote) { return canManageNote(note) }
+function canEditNote(note: TaskNote) { return canManageNote(note) }
 async function removeNote(note: TaskNote) {
   if (!canDeleteNote(note) || pending.value) return
   try { await ElMessageBox.confirm('删除后不能恢复这条记录，确定删除？', '删除记录', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '保留' }) }
   catch { return }
   deletingNote.value = note.id
-  try { await api('DELETE', `/task-notes/${note.id}`); await load(); emit('updated'); ElMessage.success('记录已删除') }
+  try {
+    await api('DELETE', `/task-notes/${note.id}`)
+    if (editingNoteId.value === note.id) resetComposer()
+    await load(); emit('updated'); ElMessage.success('记录已删除')
+  }
   catch (e) { ElMessage.error((e as Error).message) }
   finally { deletingNote.value = 0 }
 }
@@ -234,16 +294,20 @@ async function openWorkItem() {
             <dl class="task-description"><dt>类型</dt><dd>{{ isBug ? 'Bug' : TASK_KIND_LABELS[task.kind || 'FEATURE'] }}</dd><template v-if="isBug || task.relatedNodeName"><dt>关联功能</dt><dd>{{ origin?.name || task.relatedNodeName }}</dd></template><dt>描述</dt><dd>{{ task.description || '暂无描述，可在进展记录中补充执行情况。' }}</dd><template v-if="task.situation"><dt>{{ isBug ? '问题背景' : '任务情况' }}</dt><dd>{{ task.situation }}</dd></template><template v-if="task.handling"><dt>处理方式</dt><dd>{{ task.handling }}</dd></template><template v-if="!isBug"><dt>历史计划人天</dt><dd>{{ task.estimateDays ?? '尚未估算' }}</dd></template></dl>
           </el-tab-pane>
           <el-tab-pane :label="`进展记录 ${notes.length}`" name="records">
-            <div v-if="canAct" class="note-composer">
+            <div v-if="canAct || editingNoteId !== null" ref="composerRef" class="note-composer">
               <div class="note-file-row">
-                <label class="note-file-label" for="note-title">记录名称</label>
+                <label class="note-file-label" for="note-title">{{ editingNoteId ? '编辑记录' : '记录名称' }}</label>
                 <el-input id="note-title" v-model="noteTitle" maxlength="117" placeholder="例如：修复步骤.md" aria-label="进展记录名称" />
-                <span class="muted">保存为 .md</span>
+                <span v-if="editingNoteId" class="note-editing-flag">编辑已保存记录</span>
+                <span v-else class="muted">保存为 .md</span>
               </div>
-              <MarkdownEditor v-model="noteText" owner-type="TASK" :owner-id="task.id" :can-upload="canAct && !archived" :disabled="savingNote" aria-label="进展记录内容" placeholder="记录本次进展、问题或结果，支持 Markdown；直接粘贴截图或文件会自动上传" @uploaded="onUploaded" @removed="onAttachmentRemoved" />
+              <MarkdownEditor v-model="noteText" owner-type="TASK" :owner-id="task.id" :can-upload="canAct && !archived" :disabled="savingNote" :attachments="attachments" aria-label="进展记录内容" placeholder="记录本次进展、问题或结果，支持 Markdown；直接粘贴截图或文件会自动上传" @uploaded="onUploaded" @removed="onAttachmentRemoved" />
               <div class="note-composer-actions">
-                <span class="muted">每保存一次生成一份命名的 Markdown 记录；粘贴的文件同时出现在「附件」，保存前可在编辑区下方移除。</span>
-                <el-button type="primary" :loading="savingNote" :disabled="pending && !savingNote" @click="saveNote">保存记录</el-button>
+                <span class="muted">{{ editingNoteId ? '保存修改会更新原记录，并记下最后编辑时间。' : '每保存一次生成一份命名的 Markdown 记录；粘贴的文件同时出现在「附件」，保存前可在编辑区下方移除。' }}</span>
+                <div class="note-composer-buttons">
+                  <el-button v-if="editingNoteId" :disabled="pending" @click="cancelEdit">取消编辑</el-button>
+                  <el-button type="primary" :loading="savingNote" :disabled="pending && !savingNote" @click="saveNote">{{ editingNoteId ? '保存修改' : '保存记录' }}</el-button>
+                </div>
               </div>
             </div>
             <div v-else-if="noteText.trim()" class="note-composer"><p class="muted">当前任务不可写入。未保存的草稿仍保留在这里，可复制后保存到其他位置。</p><el-input :model-value="noteText" type="textarea" :rows="4" readonly aria-label="未保存的记录草稿" /></div>
@@ -255,6 +319,8 @@ async function openWorkItem() {
                 <span class="note-file">📄 {{ note.title || '进展记录.md' }}</span>
                 <strong>{{ note.authorName }}</strong>
                 <time>{{ formatDateTime(note.createdAt) }}</time>
+                <time v-if="note.updatedAt" class="note-edited" :title="note.updatedByName ? `最后编辑：${note.updatedByName}` : ''">编辑于 {{ formatDateTime(note.updatedAt) }}<template v-if="note.updatedByName"> · {{ note.updatedByName }}</template></time>
+                <el-button v-if="canEditNote(note)" link type="primary" :disabled="pending || editingNoteId === note.id" @click="editNote(note)">{{ editingNoteId === note.id ? '编辑中' : '编辑' }}</el-button>
                 <el-button link type="primary" title="正文里的附件以系统内引用保存，下载的 .md 需回到系统查看附件" @click="downloadNote(note)">下载 .md</el-button>
                 <el-button v-if="canDeleteNote(note)" link type="danger" :loading="deletingNote === note.id" :disabled="pending && deletingNote !== note.id" @click="removeNote(note)">删除</el-button>
               </div>
@@ -279,8 +345,11 @@ async function openWorkItem() {
 .task-drawer-tabs{margin-top:22px}.task-description{margin:8px 0 24px}.task-description dt{color:var(--muted);font-size:14px;margin:19px 0 6px}.task-description dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .note-composer{margin:8px 0 22px}.note-file-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
 .note-file-label{font-size:14px;color:var(--muted);flex:none}.note-file-row .el-input{flex:1 1 240px;max-width:380px}
+.note-editing-flag{font-size:12px;color:var(--blue);background:#eef3fe;padding:1px 8px;border-radius:10px}
 .note-composer-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px}.note-composer-actions .muted{font-size:12px}
+.note-composer-buttons{display:flex;align-items:center;gap:8px}
 .task-note{padding:18px 0;border-bottom:1px solid var(--line)}.note-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:14px}.note-meta time{color:var(--muted)}
+.note-edited{font-size:13px;color:var(--blue)}
 .note-file{color:var(--navy);font-weight:600;overflow-wrap:anywhere}.task-note .markdown-body{margin-top:10px}
 .drawer-parent{border-top:1px solid var(--line);padding-top:20px;margin-top:24px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}.drawer-error p{line-height:1.7}
 @media(max-width:600px){.drawer-heading h2{font-size:22px}.task-meta{gap:10px}.task-drawer-content{padding:0}}

@@ -93,6 +93,9 @@ public class WorkController {
     @PostMapping("/tasks/{id}/notes")
     ApiResponse<Map<String, Object>> addTaskNote(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.addTaskNote(id, body)); }
 
+    @PutMapping("/task-notes/{id}")
+    ApiResponse<Map<String, Object>> updateTaskNote(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.updateTaskNote(id, body)); }
+
     @DeleteMapping("/task-notes/{id}")
     ApiResponse<Void> deleteTaskNote(@PathVariable long id) { service.deleteTaskNote(id); return ApiResponse.ok(null); }
 

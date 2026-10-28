@@ -280,7 +280,7 @@ CREATE TABLE attachments (
 ) ENGINE=InnoDB COMMENT='项目、模块、工作项与任务的文档附件';
 
 -- ------------------------------------------------------------
--- 12. 任务进展记录（Flyway V6，V13 升级为命名的 Markdown 文件）
+-- 12. 任务进展记录（Flyway V6，V13 升级为命名的 Markdown 文件，V14 支持再编辑）
 --     每行是一份 .md 记录：title 为记录名/文件名，content 为 Markdown 正文；
 --     正文里的 attachment:{id} 指向本任务的普通附件（分类 TASK_RECORD），不重复存文件。
 -- ------------------------------------------------------------
@@ -289,13 +289,16 @@ CREATE TABLE task_notes (
   task_id    BIGINT UNSIGNED NOT NULL,
   title      VARCHAR(200) NOT NULL DEFAULT '进展记录.md' COMMENT '进展记录名称，按 .md 文件名保存',
   author_id  BIGINT UNSIGNED NOT NULL,
+  updated_by BIGINT UNSIGNED NULL COMMENT '最后编辑人，未编辑过为空',
   content    MEDIUMTEXT NOT NULL COMMENT 'Markdown 正文，粘贴的附件以 attachment:{id} 占位',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NULL COMMENT '最后编辑时间，未编辑过为空',
   PRIMARY KEY (id),
   KEY idx_task_notes_task (task_id, created_at),
   CONSTRAINT fk_task_notes_task FOREIGN KEY (task_id) REFERENCES tasks(id),
-  CONSTRAINT fk_task_notes_author FOREIGN KEY (author_id) REFERENCES users(id)
-) ENGINE=InnoDB COMMENT='任务进展记录（命名的 Markdown 文件）';
+  CONSTRAINT fk_task_notes_author FOREIGN KEY (author_id) REFERENCES users(id),
+  CONSTRAINT fk_task_notes_updated_by FOREIGN KEY (updated_by) REFERENCES users(id)
+) ENGINE=InnoDB COMMENT='任务进展记录（命名的 Markdown 文件，可再编辑）';
 
 -- ------------------------------------------------------------
 -- 13. 工作项交付物清单（Flyway V9）
