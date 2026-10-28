@@ -136,6 +136,7 @@ function onPickFiles(event: Event) {
 async function onPaste(event: ClipboardEvent) {
   const files = Array.from(event.clipboardData?.files || [])
   if (!files.length) return
+  if (props.disabled) { ElMessage.warning('正在保存，请稍后再粘贴附件'); return }
   event.preventDefault()
   // 预览态也能直接粘贴：切回编辑后在当前光标处插入
   if (mode.value === 'preview') { mode.value = 'edit'; await nextTick() }
@@ -168,8 +169,9 @@ async function removeUpload(attachment: Attachment) {
   try {
     await api<void>('DELETE', `/attachments/${attachment.id}`)
     uploaded.value = uploaded.value.filter(item => item.id !== attachment.id)
-    const pattern = new RegExp(`!?\\[[^\\]]*\\]\\(attachment:${attachment.id}\\)\\n?`, 'g')
-    const next = props.modelValue.replace(pattern, '').replace(/\n{3,}/g, '\n\n')
+    // 转义感知：文件名里的 [ ] 在插入时已转义为 \[ \]，不能用近似正则；只删占位及其后的一个换行
+    const pattern = new RegExp(`!?\\[(?:[^\\]\\\\]|\\\\.)*\\]\\(attachment:${attachment.id}\\)\\n?`, 'g')
+    const next = props.modelValue.replace(pattern, '')
     if (next !== props.modelValue) emit('update:modelValue', next)
     emit('removed', attachment.id)
     ElMessage.success('附件已移除')
@@ -181,7 +183,7 @@ async function removeUpload(attachment: Attachment) {
 }
 
 async function acceptFiles(files: File[]) {
-  if (props.disabled) return
+  if (props.disabled) { ElMessage.warning('正在保存，请稍后再添加附件'); return }
   if (!props.canUpload || !props.ownerId) { ElMessage.warning('当前没有上传附件的权限'); return }
   const accepted = files.filter(file => {
     if (file.size > MAX_ATTACHMENT_BYTES) { ElMessage.warning(`「${file.name}」超过 50MB，未能上传`); return false }
@@ -239,7 +241,7 @@ watch(() => props.modelValue, value => {
       <span class="md-uploads-label">本次上传</span>
       <span v-for="file in uploaded" :key="file.id" class="md-upload-chip">
         <span class="md-upload-name" :title="file.originalName">{{ file.originalName }}</span>
-        <button type="button" class="md-upload-remove" :aria-label="`移除 ${file.originalName}`" :title="`移除 ${file.originalName}`" :disabled="disabled || removing.includes(file.id)" @click="removeUpload(file)">×</button>
+        <button type="button" class="md-upload-remove" :aria-label="`移除 ${file.originalName}`" :title="`移除 ${file.originalName}`" :disabled="disabled || !canUpload || removing.includes(file.id)" @click="removeUpload(file)">×</button>
       </span>
     </div>
 

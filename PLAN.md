@@ -444,8 +444,9 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 
 - 用户回复“继续”。从最新 develop 建立 `feature/markdown-record-polish`，处理上轮审核的 P3 中与编辑区直接相关的项：
   - 编辑区新增「本次上传」附件列表，保存前可逐个移除；移除调用 `DELETE /attachments/{id}` 软删除该任务附件，并从正文去掉全部 `attachment:{id}` 占位，父组件同步任务附件列表与「附件」页签。
-  - 粘贴事件提升到编辑区容器：预览态粘贴自动切回编辑再上传并插入占位；拖放仅在剪贴板含文件时 `preventDefault`，非文件拖放不再被拦截。
+  - 粘贴事件提升到编辑区容器：焦点在编辑区内时，预览态粘贴自动切回编辑再上传并插入占位；拖放仅在剪贴板含文件时 `preventDefault`，非文件拖放不再被拦截。
   - 外链图片增加 `referrerpolicy="no-referrer"`，减少向第三方泄露来源页面地址；未开放原始 HTML、未新增服务端接口。
-- 新增两条 e2e：粘贴附件保存前移除（断言 `DELETE /attachments/{id}` 与占位消失）、预览态粘贴切回编辑并插入占位。
-- 验证：Maven 72 项通过；前端 lint/typecheck/build 通过；Playwright 34 项通过（28.2s）；`git diff --check` 通过。本轮无后端、接口、迁移或数据库变更，58080/5173 服务保持运行。
-- 待独立审核后合并 develop。
+- 新增两条 e2e：粘贴附件保存前移除（断言 `DELETE /attachments/{id}` 与占位消失，覆盖文件名含 `[ ]` 的转义与本轮非图片链接）、预览态粘贴切回编辑并插入占位。
+- 复审发现移除正则对含 `[`/`]` 的文件名失配（附件已删但占位残留），已改为转义感知正则并去掉全局换行折叠；同时补充保存中粘贴提示、移除按钮跟随 `canUpload` 灰化，并把预览态粘贴的文档口径限定为“焦点在编辑区内时”。
+- 验证：Maven 72 项通过；前端 lint/typecheck/build 通过；Playwright 34 项通过（31.6s）；`git diff --check` 通过。本轮无后端、接口、迁移或数据库变更，58080/5173 服务保持运行。
+- 待最终复审后合并 develop。
