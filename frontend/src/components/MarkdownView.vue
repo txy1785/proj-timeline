@@ -21,6 +21,7 @@ const html = computed(() => renderMarkdown(props.content))
 const key = computed(() => `${props.content}\u0000${props.attachments.map(item => item.id).join(',')}`)
 
 let generation = 0
+let disposed = false
 /** 图片 Blob URL 缓存：实时预览每次输入都会重渲染，缓存避免图片反复请求与闪烁；组件卸载时统一释放。 */
 const blobCache = new Map<number, string>()
 
@@ -77,6 +78,8 @@ async function hydrateImages() {
     try {
       const blob = await fetchAttachmentBlob(attachment)
       const url = URL.createObjectURL(blob)
+      // 卸载后仍在途的请求只释放，不写入已失效的缓存
+      if (disposed) { URL.revokeObjectURL(url); return }
       blobCache.set(id, url)
       if (current !== generation) return
       showImage(container, attachment, url)
@@ -99,7 +102,7 @@ function onClick(event: MouseEvent) {
 }
 
 watch(key, () => { void hydrateImages() }, { immediate: true })
-onBeforeUnmount(() => { generation++; releaseCache() })
+onBeforeUnmount(() => { disposed = true; generation++; releaseCache() })
 </script>
 
 <template>

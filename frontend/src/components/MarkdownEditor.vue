@@ -266,7 +266,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="md-live" aria-label="实时预览">
         <p class="md-live-label">实时预览 · 图片直接显示，文件显示文件名，点击查看</p>
-        <MarkdownView v-if="liveContent.trim()" :content="liveContent" :attachments="previewAttachments" />
+        <MarkdownView v-if="mode === 'edit' && liveContent.trim()" :content="liveContent" :attachments="previewAttachments" />
         <p v-else class="muted md-live-empty">粘贴图片后会在这里直接预览；文件只显示文件名，点击查看全文。</p>
       </div>
     </div>
