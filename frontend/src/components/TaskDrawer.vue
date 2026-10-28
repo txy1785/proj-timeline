@@ -123,6 +123,11 @@ function onUploaded(file: Attachment) {
   filesVersion.value++
 }
 
+function onAttachmentRemoved(attachmentId: number) {
+  attachments.value = attachments.value.filter(item => item.id !== attachmentId)
+  filesVersion.value++
+}
+
 function downloadNote(note: TaskNote) {
   downloadMarkdown(note.title || '进展记录.md', note.content)
 }
@@ -235,9 +240,9 @@ async function openWorkItem() {
                 <el-input id="note-title" v-model="noteTitle" maxlength="117" placeholder="例如：修复步骤.md" aria-label="进展记录名称" />
                 <span class="muted">保存为 .md</span>
               </div>
-              <MarkdownEditor v-model="noteText" owner-type="TASK" :owner-id="task.id" :can-upload="canAct && !archived" :disabled="savingNote" aria-label="进展记录内容" placeholder="记录本次进展、问题或结果，支持 Markdown；直接粘贴截图或文件会自动上传" @uploaded="onUploaded" />
+              <MarkdownEditor v-model="noteText" owner-type="TASK" :owner-id="task.id" :can-upload="canAct && !archived" :disabled="savingNote" aria-label="进展记录内容" placeholder="记录本次进展、问题或结果，支持 Markdown；直接粘贴截图或文件会自动上传" @uploaded="onUploaded" @removed="onAttachmentRemoved" />
               <div class="note-composer-actions">
-                <span class="muted">每保存一次生成一份命名的 Markdown 记录；粘贴的文件同时出现在「附件」。</span>
+                <span class="muted">每保存一次生成一份命名的 Markdown 记录；粘贴的文件同时出现在「附件」，保存前可在编辑区下方移除。</span>
                 <el-button type="primary" :loading="savingNote" :disabled="pending && !savingNote" @click="saveNote">保存记录</el-button>
               </div>
             </div>
