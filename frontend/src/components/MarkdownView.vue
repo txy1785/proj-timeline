@@ -21,20 +21,29 @@ const html = computed(() => renderMarkdown(props.content))
 const key = computed(() => `${props.content}\u0000${props.attachments.map(item => item.id).join(',')}`)
 
 let generation = 0
-let blobUrls: string[] = []
+/** 图片 Blob URL 缓存：实时预览每次输入都会重渲染，缓存避免图片反复请求与闪烁；组件卸载时统一释放。 */
+const blobCache = new Map<number, string>()
 
-function releaseBlobs() {
-  blobUrls.forEach(url => URL.revokeObjectURL(url))
-  blobUrls = []
+function releaseCache() {
+  blobCache.forEach(url => URL.revokeObjectURL(url))
+  blobCache.clear()
 }
 
 function attachmentOf(id: number) {
   return props.attachments.find(item => item.id === id)
 }
 
+function showImage(container: HTMLElement, attachment: Attachment, url: string) {
+  const image = document.createElement('img')
+  image.src = url
+  image.alt = attachment.title || attachment.originalName
+  image.title = attachment.originalName
+  image.onerror = () => { container.innerHTML = '<span class="md-image-state">图片加载失败</span>' }
+  container.replaceChildren(image)
+}
+
 async function hydrateImages() {
   const current = ++generation
-  releaseBlobs()
   await nextTick()
   if (!host.value) return
   const containers = host.value.querySelectorAll<HTMLElement>('.md-image[data-attachment-id]')
@@ -63,17 +72,14 @@ async function hydrateImages() {
       container.replaceChildren(link)
       continue
     }
+    const cached = blobCache.get(id)
+    if (cached) { showImage(container, attachment, cached); continue }
     try {
       const blob = await fetchAttachmentBlob(attachment)
-      if (current !== generation) return
       const url = URL.createObjectURL(blob)
-      blobUrls.push(url)
-      const image = document.createElement('img')
-      image.src = url
-      image.alt = attachment.title || attachment.originalName
-      image.title = attachment.originalName
-      image.onerror = () => { container.innerHTML = '<span class="md-image-state">图片加载失败</span>' }
-      container.replaceChildren(image)
+      blobCache.set(id, url)
+      if (current !== generation) return
+      showImage(container, attachment, url)
     } catch {
       if (current !== generation) return
       container.innerHTML = '<span class="md-image-state">图片加载失败</span>'
@@ -93,7 +99,7 @@ function onClick(event: MouseEvent) {
 }
 
 watch(key, () => { void hydrateImages() }, { immediate: true })
-onBeforeUnmount(() => { generation++; releaseBlobs() })
+onBeforeUnmount(() => { generation++; releaseCache() })
 </script>
 
 <template>

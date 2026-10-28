@@ -51,6 +51,13 @@ const mode = ref<'edit' | 'preview'>('edit')
 const uploading = ref(0)
 const uploaded = ref<Attachment[]>([])
 const removing = ref<number[]>([])
+/** 实时预览内容：输入时轻量防抖，避免每个按键都重渲染并重新解析图片。 */
+const liveContent = ref('')
+let liveTimer: ReturnType<typeof setTimeout> | undefined
+watch(() => props.modelValue, value => {
+  if (liveTimer) clearTimeout(liveTimer)
+  liveTimer = setTimeout(() => { liveContent.value = value }, 200)
+}, { immediate: true })
 let disposed = false
 /** 预览解析范围：父组件传入的既有任务附件 + 本次上传，后者覆盖同 id（标题/版本）。 */
 const previewAttachments = computed(() => {
@@ -229,7 +236,11 @@ watch(() => props.modelValue, value => {
   if (!value.trim()) uploaded.value = []
 })
 
-onBeforeUnmount(() => { disposed = true; if (uploading.value) emit('uploading', 0) })
+onBeforeUnmount(() => {
+  disposed = true
+  if (liveTimer) clearTimeout(liveTimer)
+  if (uploading.value) emit('uploading', 0)
+})
 </script>
 
 <template>
@@ -246,11 +257,18 @@ onBeforeUnmount(() => { disposed = true; if (uploading.value) emit('uploading', 
     </div>
 
     <div v-show="mode === 'edit'" class="md-editor-pane">
-      <textarea ref="textareaRef" class="md-textarea" :value="modelValue" :rows="rows" :disabled="disabled" :placeholder="placeholder" :aria-label="ariaLabel" @input="onInput" />
-      <p class="md-editor-hint">
-        支持 Markdown；直接 <strong>Ctrl+V 粘贴截图或文件</strong> 会自动上传到本任务附件，并在正文插入占位：图片预览、文件超链接。
-      </p>
-      <p v-if="uploading" class="md-editor-uploading" role="status">正在上传 {{ uploading }} 个文件…</p>
+      <div class="md-source">
+        <textarea ref="textareaRef" class="md-textarea" :value="modelValue" :rows="rows" :disabled="disabled" :placeholder="placeholder" :aria-label="ariaLabel" @input="onInput" />
+        <p class="md-editor-hint">
+          支持 Markdown；直接 <strong>Ctrl+V 粘贴截图或文件</strong> 会自动上传到本任务附件，并在正文插入占位：图片预览、文件超链接。
+        </p>
+        <p v-if="uploading" class="md-editor-uploading" role="status">正在上传 {{ uploading }} 个文件…</p>
+      </div>
+      <div class="md-live" aria-label="实时预览">
+        <p class="md-live-label">实时预览 · 图片直接显示，文件显示文件名，点击查看</p>
+        <MarkdownView v-if="liveContent.trim()" :content="liveContent" :attachments="previewAttachments" />
+        <p v-else class="muted md-live-empty">粘贴图片后会在这里直接预览；文件只显示文件名，点击查看全文。</p>
+      </div>
     </div>
 
     <div v-if="uploaded.length" class="md-uploads">
@@ -282,10 +300,15 @@ onBeforeUnmount(() => { disposed = true; if (uploading.value) emit('uploading', 
 .md-modes { display:flex; gap:2px; }
 .md-mode { border:0; background:transparent; padding:4px 10px; border-radius:5px; font-size:12px; color:var(--muted); cursor:pointer; }
 .md-mode.active { background:#e8eef9; color:var(--blue); font-weight:600; }
-.md-textarea { display:block; width:100%; min-height:180px; max-height:52vh; padding:12px 14px; border:0; outline:none; resize:vertical; font-family:inherit; font-size:14px; line-height:1.7; color:var(--navy); background:transparent; }
+.md-editor-pane { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:stretch; }
+.md-source { min-width:0; display:flex; flex-direction:column; }
+.md-textarea { display:block; width:100%; min-height:200px; max-height:42vh; padding:12px 14px; border:0; outline:none; resize:vertical; font-family:inherit; font-size:14px; line-height:1.7; color:var(--navy); background:transparent; }
 .md-textarea:disabled { color:var(--muted); cursor:not-allowed; }
-.md-editor-hint { margin:0; padding:0 14px 10px; font-size:12px; color:var(--muted); line-height:1.6; }
+.md-editor-hint { margin:auto 0 0; padding:0 14px 10px; font-size:12px; color:var(--muted); line-height:1.6; }
 .md-editor-uploading { margin:0; padding:0 14px 10px; font-size:12px; color:var(--blue); }
+.md-live { min-width:0; max-height:42vh; overflow:auto; padding:8px 14px 12px; border-left:1px solid var(--line); background:#fcfdff; }
+.md-live-label { margin:0 0 6px; font-size:12px; color:var(--muted); }
+.md-live-empty { font-size:12px; line-height:1.7; }
 .md-uploads { display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding:0 14px 10px; }
 .md-uploads-label { font-size:12px; color:var(--muted); }
 .md-upload-chip { display:inline-flex; align-items:center; gap:2px; max-width:100%; padding:1px 4px 1px 8px; border:1px solid var(--line); border-radius:12px; background:#f8fafd; font-size:12px; color:#43546e; }
@@ -295,4 +318,9 @@ onBeforeUnmount(() => { disposed = true; if (uploading.value) emit('uploading', 
 .md-upload-remove:disabled { opacity:.5; cursor:not-allowed; }
 .md-editor-preview { min-height:180px; max-height:52vh; overflow:auto; padding:12px 14px; }
 .md-editor-file { display:none; }
+@media(max-width:640px) {
+  .md-editor-pane { grid-template-columns:minmax(0,1fr); }
+  .md-live { border-left:0; border-top:1px solid var(--line); max-height:32vh; }
+  .md-textarea { max-height:36vh; }
+}
 </style>
