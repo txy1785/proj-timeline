@@ -469,4 +469,5 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - `MarkdownView` 的图片 Blob URL 改为按附件 id 缓存到组件卸载，实时预览输入时不再重复请求和闪烁；图片超 20MB 或非图片附件仍降级为文件名链接。
 - e2e 夹具改为 240×120 PNG（可见图形），新增断言：编辑区实时预览出现图片、PDF 只显示文件名链接、保存后记录图片 `naturalWidth=240`。
 - 验证：前端 lint/typecheck/build、Playwright 37 项通过；本轮无后端、接口、迁移或数据库变更，58080/5173 服务保持运行。
-- 待独立审核后合并 develop。
+- 审核通过；按复核建议补：同实例并发取图时复用已写入缓存并释放竞态 URL、首屏实时预览同步初始化、390px 下实时预览可见且无横向溢出、PDF 只显示文件名不内联。
+- 待合并 develop。

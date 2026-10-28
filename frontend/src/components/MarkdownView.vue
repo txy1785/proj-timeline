@@ -80,6 +80,14 @@ async function hydrateImages() {
       const url = URL.createObjectURL(blob)
       // 卸载后仍在途的请求只释放，不写入已失效的缓存
       if (disposed) { URL.revokeObjectURL(url); return }
+      // 同实例并发刷新时，另一个请求可能已写好同一附件的缓存，复用并释放本次 URL
+      const raced = blobCache.get(id)
+      if (raced) {
+        URL.revokeObjectURL(url)
+        if (current !== generation) return
+        showImage(container, attachment, raced)
+        continue
+      }
       blobCache.set(id, url)
       if (current !== generation) return
       showImage(container, attachment, url)

@@ -86,6 +86,7 @@ test('pasted attachment can be removed before the record is saved', async ({ pag
   await pasteFile(page,'notes.pdf','application/pdf')
   await expect(draft).toHaveValue(/\[notes\.pdf\]\(attachment:901\)/)
   await expect(page.locator('.md-live .md-file').filter({hasText:'notes.pdf'})).toBeVisible()
+  await expect(page.locator('.md-live img')).toHaveCount(0)
   await page.getByRole('button',{name:'移除 notes.pdf',exact:true}).click()
   await page.getByRole('button',{name:'移除',exact:true}).click()
   await expect(draft).not.toHaveValue(/attachment:901/)
@@ -235,6 +236,10 @@ test('mobile Bug rows retain a full-width detail entry', async ({ page }) => {
   await page.goto('/nodes/106')
   await openBug(page)
   await expect.poll(async()=>Math.round((await page.locator('.el-drawer').boundingBox()).x)).toBe(0)
+  await page.getByRole('tab',{name:/进展记录/}).click()
+  await page.getByRole('textbox',{name:'进展记录内容'}).fill('移动端的实时预览')
+  await expect(page.getByRole('region',{name:'实时预览'})).toBeVisible()
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
 })
 
 test('PM confirms delivery despite unfinished legacy tasks and sends expected work-item state', async ({ page }) => {

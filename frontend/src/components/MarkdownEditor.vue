@@ -51,13 +51,13 @@ const mode = ref<'edit' | 'preview'>('edit')
 const uploading = ref(0)
 const uploaded = ref<Attachment[]>([])
 const removing = ref<number[]>([])
-/** 实时预览内容：输入时轻量防抖，避免每个按键都重渲染并重新解析图片。 */
-const liveContent = ref('')
+/** 实时预览内容：输入时轻量防抖，避免每个按键都重渲染并重新解析图片；首屏直接使用当前正文。 */
+const liveContent = ref(props.modelValue)
 let liveTimer: ReturnType<typeof setTimeout> | undefined
 watch(() => props.modelValue, value => {
   if (liveTimer) clearTimeout(liveTimer)
   liveTimer = setTimeout(() => { liveContent.value = value }, 200)
-}, { immediate: true })
+})
 let disposed = false
 /** 预览解析范围：父组件传入的既有任务附件 + 本次上传，后者覆盖同 id（标题/版本）。 */
 const previewAttachments = computed(() => {
@@ -264,7 +264,7 @@ onBeforeUnmount(() => {
         </p>
         <p v-if="uploading" class="md-editor-uploading" role="status">正在上传 {{ uploading }} 个文件…</p>
       </div>
-      <div class="md-live" aria-label="实时预览">
+      <div class="md-live" role="region" aria-label="实时预览">
         <p class="md-live-label">实时预览 · 图片直接显示，文件显示文件名，点击查看</p>
         <MarkdownView v-if="mode === 'edit' && liveContent.trim()" :content="liveContent" :attachments="previewAttachments" />
         <p v-else class="muted md-live-empty">粘贴图片后会在这里直接预览；文件只显示文件名，点击查看全文。</p>
