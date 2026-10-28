@@ -51,6 +51,7 @@ const mode = ref<'edit' | 'preview'>('edit')
 const uploading = ref(0)
 const uploaded = ref<Attachment[]>([])
 const removing = ref<number[]>([])
+let disposed = false
 /** 预览解析范围：父组件传入的既有任务附件 + 本次上传，后者覆盖同 id（标题/版本）。 */
 const previewAttachments = computed(() => {
   const merged = new Map<number, Attachment>()
@@ -202,7 +203,7 @@ async function acceptFiles(files: File[]) {
   })
   if (!accepted.length) return
   uploading.value += accepted.length
-  emit('uploading', uploading.value)
+  if (!disposed) emit('uploading', uploading.value)
   for (const file of accepted) {
     try {
       const body = new FormData()
@@ -218,7 +219,7 @@ async function acceptFiles(files: File[]) {
       ElMessage.error(`${file.name} 上传失败：${(error as Error).message}`)
     } finally {
       uploading.value -= 1
-      emit('uploading', uploading.value)
+      if (!disposed) emit('uploading', uploading.value)
     }
   }
 }
@@ -228,7 +229,7 @@ watch(() => props.modelValue, value => {
   if (!value.trim()) uploaded.value = []
 })
 
-onBeforeUnmount(() => { if (uploading.value) emit('uploading', 0) })
+onBeforeUnmount(() => { disposed = true; if (uploading.value) emit('uploading', 0) })
 </script>
 
 <template>

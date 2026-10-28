@@ -195,6 +195,7 @@ function downloadNote(note: TaskNote) {
 }
 
 async function allowLeave(): Promise<boolean> {
+  if (noteUploading.value > 0) { ElMessage.info('附件正在上传，请稍候'); return false }
   if (pending.value || editing.value) { ElMessage.info('请先完成当前操作'); return false }
   if (!hasDraft.value) return true
   if (!canAct.value && editingNoteId.value === null) {

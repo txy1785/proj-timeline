@@ -156,7 +156,7 @@ test('record editing is paused while an attachment is uploading', async ({ page 
   test.setTimeout(30_000)
   const state=await prepare(page)
   state.notes.push({id:200,taskId:11,title:'初稿.md',authorId:6,authorName:'钱工',content:'第一版',createdAt:'2026-10-27T09:30:00'})
-  state.uploadDelayMs=800
+  state.uploadDelayMs=1800
   await page.goto('/nodes/106?task=11')
   await page.getByRole('tab',{name:/进展记录/}).click()
   const draft=page.getByRole('textbox',{name:'进展记录内容'})
