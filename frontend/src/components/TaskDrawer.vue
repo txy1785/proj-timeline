@@ -48,6 +48,8 @@ const pending = computed(() => savingNote.value || savingStatus.value || deletin
 const hasDraft = computed(() => editingNoteId.value
   ? noteTitle.value !== originalNoteTitle.value || noteText.value !== originalNoteText.value
   : noteText.value.trim().length > 0)
+/** 切换新建/编辑或换记录时重建编辑器，复位预览模式与「本次上传」chips。 */
+const editorKey = computed(() => `note-editor-${editingNoteId.value ?? 'new'}`)
 const canAct = computed(() => !!task.value && !loading.value && !error.value && canManageTask(auth.user, members.value, node.value, task.value))
 const isBug = computed(() => task.value?.kind === 'BUG')
 const origin = computed(() => task.value ? taskWorkItemContext(node.value, task.value) : node.value)
@@ -301,12 +303,12 @@ async function openWorkItem() {
                 <span v-if="editingNoteId" class="note-editing-flag">编辑已保存记录</span>
                 <span v-else class="muted">保存为 .md</span>
               </div>
-              <MarkdownEditor v-model="noteText" owner-type="TASK" :owner-id="task.id" :can-upload="canAct && !archived" :disabled="savingNote" :attachments="attachments" aria-label="进展记录内容" placeholder="记录本次进展、问题或结果，支持 Markdown；直接粘贴截图或文件会自动上传" @uploaded="onUploaded" @removed="onAttachmentRemoved" />
+              <MarkdownEditor :key="editorKey" v-model="noteText" owner-type="TASK" :owner-id="task.id" :can-upload="canAct && !archived" :disabled="savingNote" :attachments="attachments" aria-label="进展记录内容" placeholder="记录本次进展、问题或结果，支持 Markdown；直接粘贴截图或文件会自动上传" @uploaded="onUploaded" @removed="onAttachmentRemoved" />
               <div class="note-composer-actions">
                 <span class="muted">{{ editingNoteId ? '保存修改会更新原记录，并记下最后编辑时间。' : '每保存一次生成一份命名的 Markdown 记录；粘贴的文件同时出现在「附件」，保存前可在编辑区下方移除。' }}</span>
                 <div class="note-composer-buttons">
                   <el-button v-if="editingNoteId" :disabled="pending" @click="cancelEdit">取消编辑</el-button>
-                  <el-button type="primary" :loading="savingNote" :disabled="pending && !savingNote" @click="saveNote">{{ editingNoteId ? '保存修改' : '保存记录' }}</el-button>
+                  <el-button type="primary" :loading="savingNote" :disabled="(pending && !savingNote) || (editingNoteId !== null && !hasDraft)" @click="saveNote">{{ editingNoteId ? '保存修改' : '保存记录' }}</el-button>
                 </div>
               </div>
             </div>

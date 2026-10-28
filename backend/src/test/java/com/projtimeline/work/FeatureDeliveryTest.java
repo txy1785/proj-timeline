@@ -129,6 +129,8 @@ class FeatureDeliveryTest {
                 .containsEntry("updatedByName","执行人");
         assertThat(edited.get("updatedAt")).isNotNull();
         assertThat(f.work.taskNotes(1001)).hasSize(1).extracting(row->row.get("title")).containsExactly("修复步骤.md");
+        // 只改正文时保留原记录名
+        assertThat(f.work.updateTaskNote(id,Map.of("content","只改正文"))).containsEntry("title","修复步骤.md").containsEntry("content","只改正文");
         // 非作者的模块/工作项负责人可编辑，并记录最后编辑人
         f.login(3,"USER");
         Map<String,Object> byManager=f.work.updateTaskNote(id,Map.of("title","修复步骤","content","负责人补充"));

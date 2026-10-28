@@ -452,12 +452,13 @@ public class WorkService {
     /** 再编辑已保存的记录：作者本人或任务管理者；标题、正文校验与新建一致，并记录最后编辑人与时间。 */
     @Transactional
     public Map<String, Object> updateTaskNote(long id, Map<String, Object> body) {
-        Map<String, Object> note = db.one("SELECT id,task_id,author_id FROM task_notes WHERE id=:id", Map.of("id", id), "记录不存在");
+        Map<String, Object> note = db.one("SELECT id,task_id,author_id,title FROM task_notes WHERE id=:id", Map.of("id", id), "记录不存在");
         long taskId = number(note.get("taskId"));
         // 归档项目与 VIEWER 一律拒绝；作者身份只决定能否越过管理者校验，不决定是否检查项目状态
         permissions.requireProjectActive(permissions.projectForTask(taskId));
         if (number(note.get("authorId")) != permissions.current().id()) permissions.requireTaskManager(taskId, false);
-        String title = noteTitle(body);
+        // title 可选：未传或为空时保留原记录名，避免只改正文却把文件静默改名
+        String title = text(body, "title") == null ? Objects.toString(note.get("title")) : noteTitle(body);
         String content = noteContent(body);
         // 与删任务串行：锁工作项后再改记录，避免任务被删后更新孤儿行
         long nodeId = number(db.one("SELECT node_id FROM tasks WHERE id=:id", Map.of("id", taskId), "任务不存在").get("nodeId"));

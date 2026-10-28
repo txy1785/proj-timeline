@@ -125,6 +125,7 @@ test('saved progress record can be re-edited by its author', async ({ page }) =>
   await expect(name).toHaveValue('初稿.md')
   await expect(draft).toHaveValue('第一版')
   await expect(page.getByText('编辑已保存记录',{exact:true})).toBeVisible()
+  await expect(page.getByRole('button',{name:'保存修改',exact:true})).toBeDisabled()
   await name.fill('修复步骤')
   await draft.fill('## 第二版\n\n已完成')
   await page.getByRole('button',{name:'保存修改',exact:true}).click()
@@ -134,6 +135,21 @@ test('saved progress record can be re-edited by its author', async ({ page }) =>
   await expect(page.getByRole('heading',{name:'第二版',exact:true})).toBeVisible()
   await expect(page.locator('.note-edited')).toContainText('钱工')
   await expect(page.getByRole('button',{name:'保存记录',exact:true})).toBeVisible()
+})
+
+test('editing a saved record prompts before closing with unsaved changes', async ({ page }) => {
+  test.setTimeout(30_000)
+  const state=await prepare(page)
+  state.notes.push({id:200,taskId:11,title:'初稿.md',authorId:6,authorName:'钱工',content:'第一版',createdAt:'2026-10-27T09:30:00'})
+  await page.goto('/nodes/106?task=11')
+  await page.getByRole('tab',{name:/进展记录/}).click()
+  await page.locator('.task-note .note-meta').getByRole('button',{name:'编辑',exact:true}).click()
+  await page.getByRole('textbox',{name:'进展记录内容'}).fill('未保存的第二版')
+  await page.getByRole('button',{name:'关闭Bug详情'}).click()
+  await expect(page.getByRole('button',{name:'保存并关闭',exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'放弃并关闭',exact:true}).click()
+  await expect(page).not.toHaveURL(/task=/)
+  expect(state.writes.some(item=>item.method==='PUT'&&item.path==='/task-notes/200')).toBe(false)
 })
 
 test('PM edits Bug core fields while fixed type, origin and collapsed legacy values are preserved', async ({ page }) => {
@@ -166,7 +182,8 @@ test('delivered function keeps Bug editable while closed legacy tasks remain rea
 })
 
 test('archived Bug and VIEWER expose no mutation actions', async ({ page }) => {
-  await prepare(page,'VIEWER',6,{archived:true})
+  const state=await prepare(page,'VIEWER',6,{archived:true})
+  state.notes.push({id:200,taskId:11,title:'历史记录.md',authorId:6,authorName:'钱工',content:'只读内容',createdAt:'2026-10-27T09:30:00'})
   await page.goto('/nodes/106?task=11')
   await expect(page.getByRole('heading',{name:'库存扣减接口',exact:true})).toBeVisible()
   await expect(page.locator('.el-drawer').getByRole('button',{name:'标记已解决',exact:true})).toHaveCount(0)
@@ -175,6 +192,7 @@ test('archived Bug and VIEWER expose no mutation actions', async ({ page }) => {
   await page.getByRole('tab',{name:/进展记录/}).click()
   await expect(page.getByRole('textbox',{name:'进展记录内容'})).toHaveCount(0)
   await expect(page.getByRole('button',{name:'保存记录',exact:true})).toHaveCount(0)
+  await expect(page.locator('.task-note').getByRole('button',{name:'编辑',exact:true})).toHaveCount(0)
 })
 
 test('Bug draft prompts before close and invalid deep link has explicit unavailable state', async ({ page }) => {
