@@ -80,7 +80,7 @@
 - 2026-10-26 的体验走查问题现已按批准方案实施：修正工作项/模块的项目导航、增加我的工作与独立项目概览、按日期独立分行的时间线、按项目职务显示操作。历史问题证据保留在 [走查记录](docs/用户体验走查与简化建议.md)，不代表当前仍存在。
 
 - 功能交付轮次验证：Maven 71 项测试通过；前端 lint/typecheck/build 通过；Playwright 当时 29 项通过；另在明确命名的本机隔离 MySQL 库执行真实 HTTP 与浏览器流程。详细命令、截图、边界见 [功能交付验收](docs/功能交付验收/README.md)。2026-10-28 模块入口恢复后前端 lint/typecheck/build、完整 Playwright 31 项通过（含 320px 窄屏）；用户原库只读确认仍有 12 条模块记录，5173 页面与 58080 健康接口均返回 200。
-- 2026-10-28 Markdown 进展记录轮次验证：Maven 72 项测试通过；前端 lint/typecheck/build 通过；Playwright 32 项通过（新增「保存为命名 .md 记录 + 粘贴截图进正文和附件区」）；在本机隔离 MySQL 库 `proj_timeline_mdnote_verify` 执行 V1–V13 迁移并跑真实 HTTP（登录、上传 `TASK_RECORD` 附件、保存/读取 Markdown 记录、文件名与长度校验），验证后删除测试库并停止临时服务。随后重启 58080 后端（原 IntelliJ 进程已停止，改由 `mvn spring-boot:run` 后台运行），V13 已应用到本机 `proj_timeline`（迁移前该表 0 条记录），健康接口 UP、OpenAPI 仍 75 个操作；5173 页面 HTTP 200、`/api` 代理返回 401（未登录，符合预期）。
+- 2026-10-28 Markdown 进展记录轮次验证：Maven 72 项测试通过；前端 lint/typecheck/build 通过；Playwright 32 项通过（新增「保存为命名 .md 记录 + 粘贴截图进正文和附件区」，并断言正文图片真实内联渲染）；在本机隔离 MySQL 库 `proj_timeline_mdnote_verify` 执行 V1–V13 迁移并跑真实 HTTP（登录、上传 `TASK_RECORD` 附件、保存/读取 Markdown 记录、文件名与长度校验），验证后删除测试库并停止临时服务。随后重启 58080 后端（原 IntelliJ 进程已停止，改由 `mvn spring-boot:run` 后台运行），V13 已应用到本机 `proj_timeline`（迁移前该表 0 条记录），健康接口 UP、OpenAPI 仍 75 个操作；5173 页面 HTTP 200、`/api` 代理返回 401（未登录，符合预期）。独立审核两轮均为“可合并”、无 P1/P2；功能提交 `12b127c` 以合并提交 `d02d578` 集成 develop 并推送。
 - `PLAN.md` 中早期接口/页面/表数量是历史快照。当前接口 75 个（本轮未新增路径）、表 16 张（含 flyway_schema_history）；V13 只扩列不建表。
 - 当前工作站此前未运行 Docker Compose 的真实构建；部署仍需在具备 Docker 的目标环境验证。
 - 文件存储当前用本地磁盘（`app.storage.root` 默认 `./data/files`，容器内 `/app/data/files` 挂 `file-data` 卷）。未接入 MinIO/对象存储：存储层已抽成 `FileStorage` 接口，切换时只加实现并改配置。单文件上限 50MB，Nginx 侧 `client_max_body_size 60m`，后端 `spring.servlet.multipart` 与 `app.storage.max-file-bytes` 同步。
