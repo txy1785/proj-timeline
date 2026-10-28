@@ -480,3 +480,14 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 验证：lint/typecheck/build、Playwright 37 项通过（390px 用例新增断言编辑区实际为单列）；无后端/接口/迁移变更，58080/5173 运行。
 - 审核通过（无 P1/P2）；按复核建议把最小高度改为 `min(360px, 52vh)` 并补窄屏单列断言。
 - 已完成：提交 `72fd4f8`、`e7600e1` 以合并提交 `b533c46` 集成 develop 并推送 `origin/develop`，功能分支已删除，工作树干净。前端 Vite 热更新，后端无改动。
+
+## 2026-10-28 · 单栏所见即所得编辑区
+
+- 用户要求不再分编辑区和预览区，直接编辑就按 Markdown 效果展示。从 develop 建立 `feature/inline-markdown-editor`。
+- `MarkdownEditor` 改为单栏 contenteditable：初始内容用 `renderMarkdown` 渲染（图片、标题、列表、代码、表格、文件名链接直接可见），输入时用 `turndown` + `turndown-plugin-gfm` 序列化回 Markdown 保存；仍保留「源码」开关供复杂语法直接编辑，默认不再有预览分栏。
+- 工具栏支持二级标题、加粗、斜体、删除线、引用、无序/有序列表、行内代码、代码块、链接、表格、附件；选中文本加粗/斜体用 Range 包裹，跨块选择失败时退回原生命令，避免整段被替换。
+- 新增 `turndown`、`turndown-plugin-gfm`、`dompurify` 依赖；粘贴 HTML 先经 DOMPurify 白名单清洗，初始渲染仍固定 `markdown-it` 的 `html:false`。附件图片按 id 缓存 Blob（切换源码/编辑不重复请求）；非图片或超 20MB 降级为文件名链接，点击走 `AttachmentPreview`；文件链接、上传中移除、源码态粘贴等沿用原逻辑。
+- 编辑区高度 `min(360px, 52vh)`/最大 52vh；任务抽屉 960px；移动端 390px 无横向溢出。
+- 验证：`lint`/`typecheck`/`build`、Playwright **42 项**通过（含单栏编辑、图片内联、PDF 文件名链接与点击预览、加粗/标题工具栏、源码模式、既有复杂 Markdown 结构保持、移除附件、上传暂停、移动端）；无后端/接口/迁移变更，58080/5173 运行。
+- 已知：打开旧记录后保存会由 turndown 规范化列表缩进/表格排版等（语义保持），复杂语法可切「源码」避免；本轮不新增后端解析。
+- 待独立审核后合并 develop。
