@@ -7,6 +7,17 @@ async function openBug(page) {
   await expect(page.getByRole('heading', { name: '库存扣减接口', exact: true })).toBeVisible()
 }
 
+async function pasteFile(page, name, type, targetSelector = 'textarea[aria-label="进展记录内容"]') {
+  await page.evaluate(([fileName, fileType, selector]) => {
+    const target = document.querySelector(selector)
+    const data = new DataTransfer()
+    data.items.add(new File([new Uint8Array([137, 80, 78, 71])], fileName, { type: fileType }))
+    const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', { value: data })
+    target.dispatchEvent(event)
+  }, [name, type, targetSelector])
+}
+
 test('assignee opens Bug, keeps note draft across 409 and saves it independently', async ({ page }) => {
   const state=await prepare(page)
   await page.goto('/nodes/106')
@@ -40,14 +51,7 @@ test('progress record saves as a named Markdown file and pasted files join attac
   await name.fill('修复步骤')
   const draft=page.getByRole('textbox',{name:'进展记录内容'})
   await draft.fill('## 复现\n\n- 上传图片后建档失败')
-  await page.evaluate(() => {
-    const target=document.querySelector('textarea[aria-label="进展记录内容"]')
-    const data=new DataTransfer()
-    data.items.add(new File([new Uint8Array([137,80,78,71])],'screenshot.png',{type:'image/png'}))
-    const event=new ClipboardEvent('paste',{bubbles:true,cancelable:true})
-    Object.defineProperty(event,'clipboardData',{value:data})
-    target.dispatchEvent(event)
-  })
+  await pasteFile(page,'screenshot.png','image/png')
   await expect(draft).toHaveValue(/!\[screenshot\.png\]\(attachment:900\)/)
   expect(state.files[0].category).toBe('TASK_RECORD')
   await page.getByRole('button',{name:'保存记录',exact:true}).click()
@@ -60,6 +64,52 @@ test('progress record saves as a named Markdown file and pasted files join attac
   expect(await inlineImage.evaluate(image=>image.naturalWidth)).toBe(1)
   await page.getByRole('tab',{name:'附件',exact:true}).click()
   await expect(page.locator('.attachment-panel').getByText('screenshot.png').first()).toBeVisible()
+})
+
+test('pasted attachment can be removed before the record is saved', async ({ page }) => {
+  test.setTimeout(30_000)
+  const state=await prepare(page)
+  await page.goto('/nodes/106?task=11')
+  await page.getByRole('tab',{name:/进展记录/}).click()
+  const draft=page.getByRole('textbox',{name:'进展记录内容'})
+  await draft.fill('先粘贴一张截图')
+  await pasteFile(page,'report[1].png','image/png')
+  await expect(draft).toHaveValue(/attachment:900/)
+  await expect(page.getByText('本次上传',{exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'移除 report[1].png',exact:true}).click()
+  await page.getByRole('button',{name:'移除',exact:true}).click()
+  await expect(draft).not.toHaveValue(/attachment:900/)
+  await expect(draft).not.toHaveValue(/report/)
+  await expect(page.getByText('本次上传',{exact:true})).toHaveCount(0)
+
+  await pasteFile(page,'notes.pdf','application/pdf')
+  await expect(draft).toHaveValue(/\[notes\.pdf\]\(attachment:901\)/)
+  await page.getByRole('button',{name:'移除 notes.pdf',exact:true}).click()
+  await page.getByRole('button',{name:'移除',exact:true}).click()
+  await expect(draft).not.toHaveValue(/attachment:901/)
+  await expect(draft).not.toHaveValue(/notes/)
+  expect(state.writes.some(write=>write.method==='DELETE'&&write.path==='/attachments/900')).toBe(true)
+  expect(state.writes.some(write=>write.method==='DELETE'&&write.path==='/attachments/901')).toBe(true)
+
+  // 不再覆盖正文：保存的必须是移除占位后剩下的内容
+  await page.getByRole('button',{name:'保存记录',exact:true}).click()
+  const saved=state.writes.filter(item=>item.method==='POST'&&item.path==='/tasks/11/notes').pop()
+  expect(saved.body.content).toBe('先粘贴一张截图')
+  expect(saved.body.content).not.toContain('attachment:')
+})
+
+test('pasting a file while previewing switches back to edit and inserts the placeholder', async ({ page }) => {
+  test.setTimeout(30_000)
+  await prepare(page)
+  await page.goto('/nodes/106?task=11')
+  await page.getByRole('tab',{name:/进展记录/}).click()
+  const draft=page.getByRole('textbox',{name:'进展记录内容'})
+  await draft.fill('预览中继续粘贴')
+  await page.getByRole('button',{name:'预览',exact:true}).click()
+  await expect(page.locator('.md-editor-preview')).toBeVisible()
+  await pasteFile(page,'screenshot.png','image/png','.md-editor')
+  await expect(draft).toHaveValue(/attachment:900/)
+  await expect(page.getByRole('button',{name:'编辑',exact:true})).toHaveClass(/active/)
 })
 
 test('PM edits Bug core fields while fixed type, origin and collapsed legacy values are preserved', async ({ page }) => {

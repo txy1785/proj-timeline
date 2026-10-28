@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { upload } from '../api/client'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { api, upload } from '../api/client'
 import type { Attachment, AttachmentOwnerType } from '../api/types'
 import { attachmentMarkdown } from '../utils/markdown'
 import { MAX_ATTACHMENT_BYTES, previewKind } from '../utils/attachment'
@@ -38,6 +38,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
   (e: 'uploaded', attachment: Attachment): void
+  (e: 'removed', attachmentId: number): void
 }>()
 
 const textareaRef = ref<HTMLTextAreaElement>()
@@ -45,6 +46,7 @@ const fileInputRef = ref<HTMLInputElement>()
 const mode = ref<'edit' | 'preview'>('edit')
 const uploading = ref(0)
 const uploaded = ref<Attachment[]>([])
+const removing = ref<number[]>([])
 
 const tools = [
   { label: 'H', title: '二级标题', run: () => linePrefix('## ', '标题') },
@@ -134,18 +136,54 @@ function onPickFiles(event: Event) {
 async function onPaste(event: ClipboardEvent) {
   const files = Array.from(event.clipboardData?.files || [])
   if (!files.length) return
+  if (props.disabled) { ElMessage.warning('正在保存，请稍后再粘贴附件'); return }
   event.preventDefault()
+  // 预览态也能直接粘贴：切回编辑后在当前光标处插入
+  if (mode.value === 'preview') { mode.value = 'edit'; await nextTick() }
   await acceptFiles(files)
+}
+
+function hasFiles(event: DragEvent) {
+  return Array.from(event.dataTransfer?.types || []).includes('Files')
+}
+
+function onDragOver(event: DragEvent) {
+  if (hasFiles(event)) event.preventDefault()
 }
 
 async function onDrop(event: DragEvent) {
-  const files = Array.from(event.dataTransfer?.files || [])
-  if (!files.length) return
-  await acceptFiles(files)
+  if (!hasFiles(event)) return
+  event.preventDefault()
+  await acceptFiles(Array.from(event.dataTransfer?.files || []))
+}
+
+/** 撤销本次粘贴：删除刚上传的任务附件，并从正文去掉它的全部占位。 */
+async function removeUpload(attachment: Attachment) {
+  if (props.disabled || removing.value.includes(attachment.id)) return
+  try {
+    await ElMessageBox.confirm(`从记录正文和任务附件中移除「${attachment.originalName}」？`, '移除附件', {
+      type: 'warning', confirmButtonText: '移除', cancelButtonText: '保留'
+    })
+  } catch { return }
+  removing.value = [...removing.value, attachment.id]
+  try {
+    await api<void>('DELETE', `/attachments/${attachment.id}`)
+    uploaded.value = uploaded.value.filter(item => item.id !== attachment.id)
+    // 转义感知：文件名里的 [ ] 在插入时已转义为 \[ \]，不能用近似正则；只删占位及其后的一个换行
+    const pattern = new RegExp(`!?\\[(?:[^\\]\\\\]|\\\\.)*\\]\\(attachment:${attachment.id}\\)\\n?`, 'g')
+    const next = props.modelValue.replace(pattern, '')
+    if (next !== props.modelValue) emit('update:modelValue', next)
+    emit('removed', attachment.id)
+    ElMessage.success('附件已移除')
+  } catch (error) {
+    ElMessage.error((error as Error).message)
+  } finally {
+    removing.value = removing.value.filter(id => id !== attachment.id)
+  }
 }
 
 async function acceptFiles(files: File[]) {
-  if (props.disabled) return
+  if (props.disabled) { ElMessage.warning('正在保存，请稍后再添加附件'); return }
   if (!props.canUpload || !props.ownerId) { ElMessage.warning('当前没有上传附件的权限'); return }
   const accepted = files.filter(file => {
     if (file.size > MAX_ATTACHMENT_BYTES) { ElMessage.warning(`「${file.name}」超过 50MB，未能上传`); return false }
@@ -179,7 +217,7 @@ watch(() => props.modelValue, value => {
 </script>
 
 <template>
-  <div class="md-editor" :class="{ 'is-disabled': disabled }" @dragover.prevent @drop.prevent="onDrop">
+  <div class="md-editor" :class="{ 'is-disabled': disabled }" tabindex="-1" @paste="onPaste" @dragover="onDragOver" @drop="onDrop">
     <div class="md-editor-bar">
       <div class="md-tools" role="toolbar" aria-label="Markdown 工具栏">
         <button v-for="tool in tools" :key="tool.title" type="button" class="md-tool" :title="tool.title" :aria-label="tool.title" :disabled="disabled || mode === 'preview'" @mousedown.prevent @click="tool.run">{{ tool.label }}</button>
@@ -192,11 +230,19 @@ watch(() => props.modelValue, value => {
     </div>
 
     <div v-show="mode === 'edit'" class="md-editor-pane">
-      <textarea ref="textareaRef" class="md-textarea" :value="modelValue" :rows="rows" :disabled="disabled" :placeholder="placeholder" :aria-label="ariaLabel" @input="onInput" @paste="onPaste" />
+      <textarea ref="textareaRef" class="md-textarea" :value="modelValue" :rows="rows" :disabled="disabled" :placeholder="placeholder" :aria-label="ariaLabel" @input="onInput" />
       <p class="md-editor-hint">
         支持 Markdown；直接 <strong>Ctrl+V 粘贴截图或文件</strong> 会自动上传到本任务附件，并在正文插入占位：图片预览、文件超链接。
       </p>
       <p v-if="uploading" class="md-editor-uploading" role="status">正在上传 {{ uploading }} 个文件…</p>
+    </div>
+
+    <div v-if="uploaded.length" class="md-uploads">
+      <span class="md-uploads-label">本次上传</span>
+      <span v-for="file in uploaded" :key="file.id" class="md-upload-chip">
+        <span class="md-upload-name" :title="file.originalName">{{ file.originalName }}</span>
+        <button type="button" class="md-upload-remove" :aria-label="`移除 ${file.originalName}`" :title="`移除 ${file.originalName}`" :disabled="disabled || !canUpload || removing.includes(file.id)" @click="removeUpload(file)">×</button>
+      </span>
     </div>
 
     <div v-if="mode === 'preview'" class="md-editor-preview">
@@ -224,6 +270,13 @@ watch(() => props.modelValue, value => {
 .md-textarea:disabled { color:var(--muted); cursor:not-allowed; }
 .md-editor-hint { margin:0; padding:0 14px 10px; font-size:12px; color:var(--muted); line-height:1.6; }
 .md-editor-uploading { margin:0; padding:0 14px 10px; font-size:12px; color:var(--blue); }
+.md-uploads { display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding:0 14px 10px; }
+.md-uploads-label { font-size:12px; color:var(--muted); }
+.md-upload-chip { display:inline-flex; align-items:center; gap:2px; max-width:100%; padding:1px 4px 1px 8px; border:1px solid var(--line); border-radius:12px; background:#f8fafd; font-size:12px; color:#43546e; }
+.md-upload-name { max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.md-upload-remove { border:0; background:transparent; color:var(--muted); cursor:pointer; padding:0 4px; font-size:14px; line-height:1; }
+.md-upload-remove:hover:not(:disabled) { color:var(--danger); }
+.md-upload-remove:disabled { opacity:.5; cursor:not-allowed; }
 .md-editor-preview { min-height:180px; max-height:52vh; overflow:auto; padding:12px 14px; }
 .md-editor-file { display:none; }
 </style>

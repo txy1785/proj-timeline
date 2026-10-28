@@ -32,7 +32,8 @@ md.renderer.rules.image = (tokens, idx) => {
       + '<span class="md-image-state">图片加载中…</span></span>'
   }
   const title = token.attrGet('title')
-  return `<img src="${escape(src)}" alt="${escape(alt)}"${title ? ` title="${escape(String(title))}"` : ''} loading="lazy">`
+  // 外链图片不携带 Referer，减少向第三方泄露来源页面地址
+  return `<img src="${escape(src)}" alt="${escape(alt)}"${title ? ` title="${escape(String(title))}"` : ''} loading="lazy" referrerpolicy="no-referrer">`
 }
 
 const defaultLinkOpen = md.renderer.rules.link_open
