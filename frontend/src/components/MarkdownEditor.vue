@@ -260,12 +260,12 @@ onBeforeUnmount(() => {
       <div class="md-source">
         <textarea ref="textareaRef" class="md-textarea" :value="modelValue" :rows="rows" :disabled="disabled" :placeholder="placeholder" :aria-label="ariaLabel" @input="onInput" />
         <p class="md-editor-hint">
-          支持 Markdown；直接 <strong>Ctrl+V 粘贴截图或文件</strong> 会自动上传到本任务附件，并在正文插入占位：图片预览、文件超链接。
+          支持 Markdown；直接 <strong>Ctrl+V 粘贴截图或文件</strong> 会自动上传并插入正文。
         </p>
         <p v-if="uploading" class="md-editor-uploading" role="status">正在上传 {{ uploading }} 个文件…</p>
       </div>
       <div class="md-live" role="region" aria-label="实时预览">
-        <p class="md-live-label">实时预览 · 图片直接显示，文件显示文件名，点击查看</p>
+        <p class="md-live-label">实时预览 · 图片内联，文件只显示文件名，点击查看</p>
         <MarkdownView v-if="mode === 'edit' && liveContent.trim()" :content="liveContent" :attachments="previewAttachments" />
         <p v-else class="muted md-live-empty">粘贴图片后会在这里直接预览；文件只显示文件名，点击查看全文。</p>
       </div>
@@ -289,7 +289,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.md-editor { border:1px solid var(--line); border-radius:8px; background:#fff; overflow:hidden; }
+.md-editor { border:1px solid var(--line); border-radius:8px; background:#fff; overflow:hidden; container-type:inline-size; }
 .md-editor.is-disabled { background:#fafbfd; }
 .md-editor-bar { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; padding:6px 8px; border-bottom:1px solid var(--line); background:#f8fafd; }
 .md-tools { display:flex; flex-wrap:wrap; gap:2px; }
@@ -300,14 +300,15 @@ onBeforeUnmount(() => {
 .md-modes { display:flex; gap:2px; }
 .md-mode { border:0; background:transparent; padding:4px 10px; border-radius:5px; font-size:12px; color:var(--muted); cursor:pointer; }
 .md-mode.active { background:#e8eef9; color:var(--blue); font-weight:600; }
-.md-editor-pane { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:stretch; }
+/* 编辑区窄于 780px 时改为上下堆叠，不依赖视口/抽屉宽度 */
+.md-editor-pane { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); align-items:stretch; min-height:min(360px, 52vh); }
 .md-source { min-width:0; display:flex; flex-direction:column; }
-.md-textarea { display:block; width:100%; min-height:200px; max-height:42vh; padding:12px 14px; border:0; outline:none; resize:vertical; font-family:inherit; font-size:14px; line-height:1.7; color:var(--navy); background:transparent; }
+.md-textarea { display:block; width:100%; min-height:min(360px, 52vh); max-height:52vh; padding:14px 16px; border:0; outline:none; resize:vertical; font-family:inherit; font-size:14px; line-height:1.7; color:var(--navy); background:transparent; }
 .md-textarea:disabled { color:var(--muted); cursor:not-allowed; }
-.md-editor-hint { margin:auto 0 0; padding:0 14px 10px; font-size:12px; color:var(--muted); line-height:1.6; }
-.md-editor-uploading { margin:0; padding:0 14px 10px; font-size:12px; color:var(--blue); }
-.md-live { min-width:0; max-height:42vh; overflow:auto; padding:8px 14px 12px; border-left:1px solid var(--line); background:#fcfdff; }
-.md-live-label { margin:0 0 6px; font-size:12px; color:var(--muted); }
+.md-editor-hint { margin:auto 0 0; padding:0 16px 10px; font-size:12px; color:var(--muted); line-height:1.6; }
+.md-editor-uploading { margin:0; padding:0 16px 10px; font-size:12px; color:var(--blue); }
+.md-live { min-width:0; max-height:52vh; overflow:auto; padding:10px 16px 14px; border-left:1px solid var(--line); background:#fcfdff; }
+.md-live-label { margin:0 0 8px; font-size:12px; color:var(--muted); }
 .md-live-empty { font-size:12px; line-height:1.7; }
 .md-uploads { display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding:0 14px 10px; }
 .md-uploads-label { font-size:12px; color:var(--muted); }
@@ -318,9 +319,14 @@ onBeforeUnmount(() => {
 .md-upload-remove:disabled { opacity:.5; cursor:not-allowed; }
 .md-editor-preview { min-height:180px; max-height:52vh; overflow:auto; padding:12px 14px; }
 .md-editor-file { display:none; }
-@media(max-width:640px) {
+@container (max-width:780px) {
   .md-editor-pane { grid-template-columns:minmax(0,1fr); }
   .md-live { border-left:0; border-top:1px solid var(--line); max-height:32vh; }
-  .md-textarea { max-height:36vh; }
+  .md-textarea { max-height:44vh; }
+}
+@media(max-width:640px) {
+  .md-editor-pane { grid-template-columns:minmax(0,1fr); min-height:0; }
+  .md-live { border-left:0; border-top:1px solid var(--line); max-height:32vh; }
+  .md-textarea { min-height:min(260px, 36vh); max-height:36vh; }
 }
 </style>
