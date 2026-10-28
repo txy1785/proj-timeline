@@ -74,6 +74,7 @@ async function load() {
     if (!Number.isSafeInteger(currentNodeId) || currentNodeId <= 0 || !Number.isSafeInteger(currentTaskId) || currentTaskId <= 0) throw new Error('任务链接无效')
     const value = await api<NodeItem>('GET', `/nodes/${currentNodeId}`)
     const found = value.tasks?.find(item => item.id === currentTaskId && item.nodeId === currentNodeId)
+      || value.bugs?.find(item => item.id === currentTaskId && item.nodeId === currentNodeId)
     if (!found) throw new Error('任务已删除或不属于这个工作项')
     const [people, records, files] = await Promise.allSettled([
       api<User[]>('GET', `/projects/${value.projectId}/members`),
@@ -216,12 +217,11 @@ async function allowLeave(): Promise<boolean> {
   } catch (action) { return action === 'cancel' }
 }
 
-async function requestClose(done?: () => void) {
+async function requestClose() {
   if (!await allowLeave()) return
   resetComposer()
   noteTitle.value = ''
-  if (done) done()
-  else await returnToWorkItem()
+  await returnToWorkItem()
 }
 
 async function returnToWorkItem() {
@@ -231,7 +231,7 @@ async function returnToWorkItem() {
 }
 
 onBeforeRouteLeave(async () => await allowLeave())
-onBeforeRouteUpdate(async (to, from) => to.params.taskId === from.params.taskId || await allowLeave())
+onBeforeRouteUpdate(async (to, from) => (to.params.taskId === from.params.taskId && to.params.nodeId === from.params.nodeId) || await allowLeave())
 function beforeUnload(event: BeforeUnloadEvent) {
   if (hasDraft.value) { event.preventDefault(); event.returnValue = '' }
 }

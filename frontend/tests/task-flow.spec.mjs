@@ -42,6 +42,19 @@ test('assignee opens Bug, keeps note draft across 409 and saves it independently
   await expect(page.getByText('本次未保存的进展',{exact:true})).toBeVisible()
 })
 
+test('task detail page supports direct deep links and refresh', async ({ page }) => {
+  await prepare(page)
+  await page.goto('/nodes/106/tasks/11')
+  await expect(page).toHaveURL(/\/nodes\/106\/tasks\/11/)
+  await expect(page.getByRole('heading',{name:'库存扣减接口',exact:true})).toBeVisible()
+  await expect(page.locator('.task-detail-page')).toBeVisible()
+  await expect(page.locator('.el-drawer')).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByRole('heading',{name:'库存扣减接口',exact:true})).toBeVisible()
+  await page.getByRole('tab',{name:/进展记录/}).click()
+  await expect(page.getByRole('textbox',{name:'进展记录内容'})).toBeVisible()
+})
+
 test('progress record saves as a named Markdown file and pasted files join attachments', async ({ page }) => {
   test.setTimeout(30_000)
   const state=await prepare(page)

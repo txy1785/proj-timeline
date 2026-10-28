@@ -499,5 +499,6 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 新增路由 `/nodes/:nodeId/tasks/:taskId`（`meta.nodeParam` 让 App 外壳加载项目上下文）；原 `TaskDrawer.vue` 迁移为 `views/TaskDetailView.vue` 页面，保留说明、进展记录（单栏 Markdown）、附件、状态操作、编辑 Bug、权限与冲突逻辑，改为页面级面包屑、标题、「返回工作项」和 `surface` 布局。
 - 工作项列表/看板、我的工作、人员负载的 `openTask` 全部改为 `router.push` 进入任务页；Bug 报告成功后的跳转同步改新路由；旧 `/nodes/:id?task=...` 在 NodeDetailView 加载后自动 `router.replace` 到新页面（无效任务也进入页面显示明确错误）。
 - 草稿保护从抽屉 `before-close` 迁移到路由守卫 + 页面返回按钮：离开/返回时按权限提示保存或放弃，上传在途禁止返回；页面返回目标为关联工作项并带 `tab=bugs|history`。
-- 验证：前端 `lint`/`typecheck`/`build`、Playwright 全量通过（任务页用例由 `.el-drawer` 改为 `.task-detail-page`，补充打开后 URL 断言；移除临时视觉用例后以实际全量结果为准）；无后端/接口/迁移变更，58080/5173 运行。
-- 待独立审核后合并 develop。
+- 验证：前端 `lint`/`typecheck`/`build`、Playwright **45 项**通过（任务页用例改为 `.task-detail-page` 并断言新 URL；新增直接打开 `/nodes/106/tasks/11` 及刷新用例，覆盖 App 项目上下文与深链）；无后端/接口/迁移变更，58080/5173 运行。
+- 独立审核“可合并”、无 P1/P2；按 P3 清理 `requestClose` 死参数、路由守卫同时比较 node/task 参数、项目文档的附件跳转改用新路径；并补直接深链/刷新 e2e。
+- 待合并 develop。
