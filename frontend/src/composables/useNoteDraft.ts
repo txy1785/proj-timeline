@@ -2,7 +2,7 @@ import { computed, reactive } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { NoteRecord } from '../api/types'
 
-/** 进展记录草稿由页面持有：记录区块因重新加载或出错卸载时，草稿与离开提示仍然有效。 */
+/** 进展记录草稿由页面持有：记录区块因重新加载或出错卸载时，草稿与离开提示仍然有效。NoteRecords 直接读写 `state`。 */
 export function useNoteDraft() {
   const state = reactive({ title: '', text: '', editingId: null as number | null, originalTitle: '', originalText: '' })
   const hasDraft = computed(() => state.editingId !== null
