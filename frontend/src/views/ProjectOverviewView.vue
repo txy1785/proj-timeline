@@ -7,7 +7,7 @@ import { useProjectContext } from '../composables/useProjectContext'
 import { addDays, shortDate, weekStart } from '../utils/date'
 import { canManageNode } from '../utils/permissions'
 import { hasWorkItemRisk, workItemCounts } from '../utils/workItem'
-import { scheduleProgress } from '../utils/progress'
+import { deliveredPercent, scheduleProgress } from '../utils/progress'
 import ProgressSummary from '../components/ProgressSummary.vue'
 import WorkItemFormDialog from '../components/WorkItemFormDialog.vue'
 import ModuleFormDialog from '../components/ModuleFormDialog.vue'
@@ -47,7 +47,7 @@ function created(node: NodeItem) { void refresh(); router.push(`/nodes/${node.id
         <div class="page-actions"><el-button v-if="canCreateWorkItem" type="primary" @click="workItemDialog = true">新建工作项</el-button><el-button v-if="!auth.isViewer && active && allNodes.some(node => node.status !== 'CANCELLED')" @click="bugDialog = true">报告 Bug</el-button></div>
       </header>
       <el-alert v-if="!active" title="项目已归档，以下为保留的交付记录。业务内容只读。" type="info" :closable="false" class="section-gap" />
-      <ProgressSummary v-if="allNodes.length" class="section-gap" :progress="progress" :project-id="id" />
+      <ProgressSummary v-if="allNodes.length" class="section-gap" :progress="progress" :project-id="id" :today="businessDate" />
       <section class="surface project-facts section-gap" aria-label="项目交付信息">
         <div><small>项目经理</small><strong>{{ pm?.name || '未读取到负责人' }}</strong></div>
         <div><small>项目计划</small><strong>{{ project.planStart }} — {{ project.planEnd || '完成日期未定' }}</strong></div>
@@ -55,7 +55,7 @@ function created(node: NodeItem) { void refresh(); router.push(`/nodes/${node.id
       </section>
       <section class="surface module-overview section-gap" aria-label="功能模块">
         <div class="section-heading"><div><h2>功能模块</h2><p class="muted">项目按模块划分功能，每个模块下安排小功能工作项。</p></div><div class="page-actions"><el-button v-if="isPm && active" @click="moduleDialog = true">新建模块</el-button><RouterLink :to="`/projects/${id}/modules`"><el-button>查看全部模块</el-button></RouterLink></div></div>
-        <div v-if="project.modules.length" class="module-preview-grid"><RouterLink v-for="module in project.modules" :key="module.id" class="module-preview" :to="`/projects/${id}/modules/${module.id}`"><strong>{{ module.name }}</strong><span>负责人 {{ module.ownerName }} · {{ workItemCounts(module.nodes || []).done }}/{{ workItemCounts(module.nodes || []).total }} 已交付<b v-if="moduleBehind(module.nodes)" class="danger"> · {{ moduleBehind(module.nodes) }} 项延期</b></span><i class="module-bar" :class="{ behind: moduleBehind(module.nodes) }" aria-hidden="true"><i :style="{ width: scheduleProgress(module.nodes || [], '').donePercent + '%' }" /></i><small>进入模块 →</small></RouterLink></div>
+        <div v-if="project.modules.length" class="module-preview-grid"><RouterLink v-for="module in project.modules" :key="module.id" class="module-preview" :to="`/projects/${id}/modules/${module.id}`"><strong>{{ module.name }}</strong><span>负责人 {{ module.ownerName }} · {{ workItemCounts(module.nodes || []).done }}/{{ workItemCounts(module.nodes || []).total }} 已交付<b v-if="moduleBehind(module.nodes)" class="danger"> · {{ moduleBehind(module.nodes) }} 项延期</b></span><i class="module-bar" :class="{ behind: moduleBehind(module.nodes) }" aria-hidden="true"><i :style="{ width: deliveredPercent(workItemCounts(module.nodes || []).done, workItemCounts(module.nodes || []).total) + '%' }" /></i><small>进入模块 →</small></RouterLink></div>
         <p v-else class="muted">尚未划分功能模块。跨模块工作仍可在“工作项”中安排。</p>
       </section>
       <section v-if="!allNodes.length" class="surface first-work section-gap">

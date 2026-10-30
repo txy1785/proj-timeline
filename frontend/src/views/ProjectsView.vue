@@ -11,8 +11,8 @@ import { scheduleVerdict } from '../utils/progress'
 
 const router=useRouter()
 const auth=useAuthStore()
-function cardVerdict(project:Project){return scheduleVerdict({total:project.stats.total,done:project.stats.done,behind:project.stats.overdue,expected:0,donePercent:project.progress})}
 const app=useAppStore()
+function cardVerdict(project:Project){return scheduleVerdict({...project.stats,behind:project.stats.overdue})}
 const data=ref<PageResponse<Project>>()
 const loading=ref(true)
 const error=ref('')
