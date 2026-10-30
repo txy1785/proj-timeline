@@ -11,6 +11,7 @@ import { TASK_KIND_LABELS, TASK_NEXT_ACTION, TASK_STATUS_LABELS, TASK_STATUS_TYP
 import { BUG_NEXT_ACTION, BUG_STATUS_LABELS } from '../utils/bug'
 import AttachmentPanel from '../components/AttachmentPanel.vue'
 import NoteRecords from '../components/NoteRecords.vue'
+import { useNoteDraft } from '../composables/useNoteDraft'
 import TaskFormDialog from '../components/TaskFormDialog.vue'
 
 const route = useRoute()
@@ -26,6 +27,7 @@ const task = ref<Task>()
 const members = ref<User[]>([])
 const records = ref<InstanceType<typeof NoteRecords>>()
 const noteCount = ref(0)
+const noteDraft = useNoteDraft()
 const attachments = ref<Attachment[]>([])
 const filesError = ref('')
 const filesVersion = ref(0)
@@ -36,9 +38,10 @@ const activeTab = ref('description')
 const editing = ref(false)
 const relatedWorkItems = ref<NodeItem[]>([])
 let generation = 0
-const pending = computed(() => savingStatus.value || !!records.value?.pending)
-const hasDraft = computed(() => !!records.value?.hasDraft)
-const draftText = computed(() => records.value?.draft || '')
+const recordsBusy = computed(() => !!records.value && (records.value.saving || records.value.deleting > 0 || records.value.uploading > 0))
+const pending = computed(() => savingStatus.value || recordsBusy.value)
+const hasDraft = noteDraft.hasDraft
+const draftText = computed(() => noteDraft.state.text)
 const canAct = computed(() => !!task.value && !loading.value && !error.value && canManageTask(auth.user, members.value, node.value, task.value))
 const isBug = computed(() => task.value?.kind === 'BUG')
 const origin = computed(() => task.value ? taskWorkItemContext(node.value, task.value) : node.value)
@@ -75,7 +78,7 @@ async function load() {
 
 watch([nodeId, taskId], ([currentNodeId, currentTaskId], old) => {
   if (old && currentNodeId === old[0] && currentTaskId === old[1]) return
-  node.value = undefined; task.value = undefined; noteCount.value = 0
+  node.value = undefined; task.value = undefined; noteCount.value = 0; noteDraft.reset()
   attachments.value = []; filesError.value = ''; filesVersion.value = 0
   activeTab.value = 'description'; relatedWorkItems.value = []
   void load()
@@ -93,12 +96,12 @@ function onAttachmentRemoved(attachmentId: number) {
 
 async function allowLeave(): Promise<boolean> {
   if (savingStatus.value || editing.value) { ElMessage.info('请先完成当前操作'); return false }
-  return records.value ? await records.value.allowLeave() : true
+  return await noteDraft.allowLeave(records.value, canAct.value)
 }
 
 async function requestClose() {
   if (!await allowLeave()) return
-  records.value?.discard()
+  noteDraft.reset()
   await returnToWorkItem()
 }
 
@@ -147,7 +150,7 @@ async function openEdit() {
 async function afterEdit() { await load() }
 async function openWorkItem() {
   if (!node.value || !await allowLeave()) return
-  records.value?.discard()
+  noteDraft.reset()
   await router.push({ path: `/nodes/${origin.value?.id || node.value.id}`, query: { tab: isBug.value ? 'bugs' : 'history' } })
 }
 </script>
@@ -185,7 +188,7 @@ async function openWorkItem() {
           </el-tab-pane>
           <el-tab-pane :label="`进展记录 ${noteCount}`" name="records">
             <el-alert v-if="filesError" class="files-warning" title="附件列表暂时无法加载，记录中的图片和文件链接可能显示为已删除；请稍后重新打开。" type="warning" :closable="false" />
-            <NoteRecords ref="records" owner-type="TASK" :owner-id="task.id" :list-path="`/tasks/${task.id}/notes`" item-path="/task-notes" category="TASK_RECORD" :title-prefix="isBug ? '修复记录' : '进展记录'" :attachments="attachments" :can-write="canAct" :can-upload="canAct && !archived" :can-manage="canManageNote" read-only-hint="当前任务不可写入。" @uploaded="onUploaded" @removed="onAttachmentRemoved" @count="noteCount = $event" />
+            <NoteRecords ref="records" owner-type="TASK" :owner-id="task.id" :draft="noteDraft" :busy="savingStatus" :list-path="`/tasks/${task.id}/notes`" item-path="/task-notes" category="TASK_RECORD" :title-prefix="isBug ? '修复记录' : '进展记录'" :attachments="attachments" :can-write="canAct" :can-upload="canAct && !archived" :can-manage="canManageNote" read-only-hint="当前任务不可写入。" @uploaded="onUploaded" @removed="onAttachmentRemoved" @count="noteCount = $event" />
           </el-tab-pane>
           <el-tab-pane label="附件" name="files" lazy><AttachmentPanel :key="`${task.id}-${filesVersion}`" owner-type="TASK" :owner-id="task.id" :can-manage="canAct" :archived="archived" :show-category-nav="false" :hint="isBug ? '上传复现截图、修复说明与验证资料；进展记录里粘贴的文件也会出现在这里。' : '历史任务的交付物与参考资料；进展记录里粘贴的文件也会出现在这里。'" /></el-tab-pane>
         </el-tabs>

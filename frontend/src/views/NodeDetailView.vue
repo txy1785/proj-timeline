@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api/client'
 import type { Attachment, NodeItem, NodeLog, NodeStatus, NoteRecord, Task, TaskStatus } from '../api/types'
@@ -16,6 +16,7 @@ import DeliverablePanel from '../components/DeliverablePanel.vue'
 import WorkItemFormDialog from '../components/WorkItemFormDialog.vue'
 import BugReportDialog from '../components/BugReportDialog.vue'
 import NoteRecords from '../components/NoteRecords.vue'
+import { useNoteDraft } from '../composables/useNoteDraft'
 
 const props = withDefaults(defineProps<{ initialView?: 'list' | 'kanban' }>(), { initialView: 'list' })
 const route = useRoute()
@@ -40,6 +41,7 @@ const riskBaseline = ref('')
 const savingRisk = ref(false)
 const records = ref<InstanceType<typeof NoteRecords>>()
 const noteCount = ref(0)
+const noteDraft = useNoteDraft()
 const noteFiles = ref<Attachment[]>([])
 const filesVersion = ref(0)
 let generation = 0
@@ -50,6 +52,9 @@ const archived = computed(() => node.value?.projectStatus === 'ARCHIVED')
 const closed = computed(() => isNodeClosed(node.value))
 const manager = computed(() => !loading.value && !error.value && canManageNode(auth.user, members.value, node.value))
 const canMutateNode = computed(() => manager.value && !closed.value)
+/** 记录可写不随重新加载闪断，避免编辑器在上传中被卸载；只在出错或失去权限时收起。 */
+const canWriteNotes = computed(() => !error.value && !archived.value && canManageNode(auth.user, members.value, node.value))
+const notesBusy = computed(() => !!records.value && (records.value.saving || records.value.deleting > 0 || records.value.uploading > 0))
 const bugs = computed(() => node.value?.bugs || (node.value?.tasks || []).filter(task => task.kind === 'BUG'))
 const openBugs = computed(() => bugs.value.filter(bug => bug.status !== 'DONE').length)
 const legacyTasks = computed(() => (node.value?.tasks || []).filter(task => task.kind !== 'BUG'))
@@ -82,17 +87,18 @@ async function load(refreshContext = false) {
     if (current === generation) { error.value = (e as Error).message; node.value = undefined }
   } finally { if (current === generation) loading.value = false }
 }
-watch(id, () => { node.value = undefined; activeTab.value = 'description'; noteCount.value = 0; void load(); void loadNoteFiles() }, { immediate: true })
+watch(id, () => { node.value = undefined; activeTab.value = 'description'; noteCount.value = 0; noteDraft.reset(); void load(); void loadNoteFiles() }, { immediate: true })
 watch(() => [route.query.tab, route.query.kind, route.query.status], () => {
   if (['description', 'records', 'materials', 'bugs', 'activity', 'history'].includes(String(route.query.tab))) activeTab.value = String(route.query.tab)
   else if (route.query.kind === 'BUG') activeTab.value = 'bugs'
   const status = String(route.query.status || 'ALL') as TaskStatus | 'ALL' | 'OPEN'
   statusFilter.value = status === 'OPEN' || TASK_STATUSES.includes(status as TaskStatus) ? status : 'ALL'
 }, { immediate: true })
+watch(activeTab, tab => { if (tab === 'records') void loadNoteFiles() })
 onBeforeUnmount(() => { generation++; window.removeEventListener('beforeunload', beforeUnload) })
 onMounted(() => window.addEventListener('beforeunload', beforeUnload))
 function beforeUnload(event: BeforeUnloadEvent) {
-  if (records.value?.hasDraft) { event.preventDefault(); event.returnValue = '' }
+  if (noteDraft.hasDraft.value) { event.preventDefault(); event.returnValue = '' }
 }
 /** 记录正文里的 attachment:{id} 解析自本工作项附件；读取失败只影响图片与链接显示。 */
 async function loadNoteFiles() {
@@ -105,9 +111,10 @@ async function loadNoteFiles() {
 function onNoteUploaded(file: Attachment) { noteFiles.value = [file, ...noteFiles.value]; filesVersion.value++ }
 function onNoteFileRemoved(attachmentId: number) { noteFiles.value = noteFiles.value.filter(file => file.id !== attachmentId); filesVersion.value++ }
 function canManageNote(note: NoteRecord) {
-  return !loading.value && !error.value && !archived.value && !auth.isViewer && !!auth.user
-    && (manager.value || note.authorId === auth.user.id)
+  return !error.value && !archived.value && !auth.isViewer && !!auth.user && auth.user.active !== false
+    && (canWriteNotes.value || note.authorId === auth.user.id)
 }
+const leaveNotes = () => noteDraft.allowLeave(records.value, canWriteNotes.value)
 
 function updateFilters() {
   const query = { ...route.query }
@@ -118,7 +125,7 @@ function openTask(task: Task) { void router.push(`/nodes/${task.nodeId || id.val
 function goView(view: 'list' | 'kanban') { void router.push({ path: '/nodes/' + id.value + (view === 'kanban' ? '/kanban' : ''), query: { ...route.query, tab: 'history' } }) }
 function canChangeTask(task: Task) { return !loading.value && !error.value && canChangeTaskStatus(auth.user, members.value, node.value, task) }
 async function quickStatus(task: Task) {
-  if (busyTaskId.value || busyNode.value || !canChangeTask(task)) return
+  if (busyTaskId.value || busyNode.value || notesBusy.value || !canChangeTask(task)) return
   const action = task.kind === 'BUG' ? BUG_NEXT_ACTION[task.status] : TASK_NEXT_ACTION[task.status]
   busyTaskId.value = task.id
   try {
@@ -128,7 +135,7 @@ async function quickStatus(task: Task) {
   finally { busyTaskId.value = 0 }
 }
 async function setNodeStatus(status: NodeStatus) {
-  if (!canMutateNode.value || busyNode.value || busyTaskId.value) return
+  if (!canMutateNode.value || busyNode.value || busyTaskId.value || notesBusy.value) return
   if (status === 'DONE') {
     const warning = openBugs.value ? `当前仍有 ${openBugs.value} 个未解决Bug，可在交付后继续跟踪。` : ''
     try { await ElMessageBox.confirm('请确认功能达到约定的交付要求，相关资料已按需要提供。' + warning, '确认交付', { type: 'info', confirmButtonText: '确认已交付', cancelButtonText: '继续检查' }) }
@@ -162,9 +169,10 @@ async function allowRiskClose(): Promise<boolean> {
   } catch { return false }
 }
 async function closeRisk(done?: () => void) { if (await allowRiskClose()) { if (done) done(); else riskDialog.value = false } }
-onBeforeRouteLeave(async () => await allowRiskClose() && (!records.value || await records.value.allowLeave()))
+onBeforeRouteLeave(async () => await allowRiskClose() && await leaveNotes())
+onBeforeRouteUpdate(async (to, from) => to.params.id === from.params.id || (await allowRiskClose() && await leaveNotes()))
 async function saveRisk() {
-  if (!canMutateNode.value || savingRisk.value) return
+  if (!canMutateNode.value || savingRisk.value || notesBusy.value) return
   if (riskMode.value === 'overdue' && !node.value?.flags.overdue) { ElMessage.warning('工作项已不再延期，未保存的说明仍保留在窗口中'); return }
   const reason = riskReason.value.trim()
   if (!reason) { ElMessage.warning(riskMode.value === 'block' ? '请填写具体受阻原因' : '请填写延期说明'); return }
@@ -179,7 +187,7 @@ async function saveRisk() {
   finally { savingRisk.value = false }
 }
 async function unblock() {
-  if (!canMutateNode.value || busyNode.value) return
+  if (!canMutateNode.value || busyNode.value || notesBusy.value) return
   try { await ElMessageBox.confirm('确认当前阻塞问题已经解决？解除后仍保留历史记录。', '解除受阻', { confirmButtonText: '确认解除', cancelButtonText: '仍未解决' }) }
   catch { return }
   busyNode.value = true
@@ -196,7 +204,7 @@ function logDetail(log: NodeLog & { detail?: string }) {
 
 <template>
   <div v-loading="loading" class="node-page">
-    <section v-if="error" class="surface node-error" role="alert"><h1>工作项暂时不可用</h1><p>{{ error }}</p><div class="page-actions"><el-button @click="load(true)">重新加载</el-button><el-button @click="router.push('/projects')">返回项目</el-button></div></section>
+    <section v-if="error" class="surface node-error" role="alert"><h1>工作项暂时不可用</h1><p>{{ error }}</p><template v-if="noteDraft.state.text.trim()"><p class="muted">未保存的记录草稿，可复制后保留：</p><el-input :model-value="noteDraft.state.text" type="textarea" :rows="4" readonly aria-label="未保存的记录草稿" /></template><div class="page-actions"><el-button @click="load(true)">重新加载</el-button><el-button @click="router.push('/projects')">返回项目</el-button></div></section>
     <template v-else-if="node">
       <header class="page-head node-page-head">
         <div><el-breadcrumb separator="/"><el-breadcrumb-item :to="'/projects/' + node.projectId + '/overview'">{{ project?.name || '所属项目' }}</el-breadcrumb-item><el-breadcrumb-item :to="'/projects/' + node.projectId + '/work-items'">工作项</el-breadcrumb-item><el-breadcrumb-item>{{ node.name }}</el-breadcrumb-item></el-breadcrumb><div class="node-title"><h1>{{ node.name }}</h1><el-tag :type="NODE_STATUS_TYPES[node.status]">{{ node.status === 'DONE' ? '已交付' : NODE_STATUS_LABELS[node.status] }}</el-tag><el-tag v-if="node.flags.overdue" type="danger">已延期</el-tag><el-tag v-if="node.flags.blocked && !closed" type="warning">受阻</el-tag></div><p><RouterLink v-if="node.moduleId" :to="'/projects/' + node.projectId + '/modules/' + node.moduleId">{{ node.moduleName }}</RouterLink><span v-else>项目级工作项</span> · 负责人 {{ node.ownerName }} · 计划 {{ node.planStart }}—{{ node.planEnd }}</p></div>
@@ -211,7 +219,7 @@ function logDetail(log: NodeLog & { detail?: string }) {
       <section class="surface node-body">
         <el-tabs v-model="activeTab">
           <el-tab-pane label="功能说明" name="description"><div class="feature-description"><h2>这项功能要交付什么</h2><p>{{ node.description || '尚未填写功能说明，可补充功能范围、预期效果和验收要求。' }}</p><p class="muted">{{ WORK_ITEM_TYPE_LABELS[node.type] }} · 由 {{ node.ownerName }} 负责交付</p><el-button v-if="canMutateNode" @click="workItemDialog = true">完善功能说明</el-button></div><div v-if="canMutateNode && !node.flags.blocked" class="section-actions"><el-button @click="openRisk('block')">标记受阻</el-button></div></el-tab-pane>
-          <el-tab-pane :label="'进展记录 ' + noteCount" name="records"><NoteRecords ref="records" owner-type="NODE" :owner-id="id" :list-path="`/nodes/${id}/notes`" item-path="/node-notes" category="NODE_RECORD" title-prefix="进展记录" :attachments="noteFiles" :can-write="manager && !archived" :can-upload="manager && !archived" :can-manage="canManageNote" read-only-hint="当前工作项不可写入。" @uploaded="onNoteUploaded" @removed="onNoteFileRemoved" @count="noteCount = $event" /></el-tab-pane>
+          <el-tab-pane :label="'进展记录 ' + noteCount" name="records"><NoteRecords ref="records" owner-type="NODE" :owner-id="id" :list-path="`/nodes/${id}/notes`" item-path="/node-notes" category="NODE_RECORD" title-prefix="进展记录" :attachments="noteFiles" :draft="noteDraft" :busy="busyNode || savingRisk" :can-write="canWriteNotes" :can-upload="canWriteNotes" :can-manage="canManageNote" read-only-hint="当前工作项不可写入。" @uploaded="onNoteUploaded" @removed="onNoteFileRemoved" @count="noteCount = $event" /></el-tab-pane>
           <el-tab-pane label="交付资料" name="materials" lazy><DeliverablePanel :node-id="id" :items="node.deliverables || []" :members="members" :can-manage="manager" :node-closed="closed" :archived="archived" @refresh="load(true)" /><div class="material-files"><h2>图纸、文档与实际文件</h2><AttachmentPanel :key="`${id}-${filesVersion}`" owner-type="NODE" :owner-id="id" :can-manage="manager" :archived="archived" :show-category-nav="false" hint="上传本功能的图纸、接口说明、测试截图和其他资料；可在上方交付要求中关联文件。" /></div></el-tab-pane>
           <el-tab-pane :label="'Bug ' + bugs.length" name="bugs"><div class="section-heading"><div><h2>功能问题与修复</h2><p class="muted">已交付的功能仍可独立跟踪Bug，保留原交付记录。</p></div><el-button v-if="canReportBug" type="primary" @click="bugDialog = true">报告 Bug</el-button></div><el-select v-model="bugStatus" class="status-filter" aria-label="Bug状态筛选"><el-option label="全部Bug" value="ALL"/><el-option v-for="status in TASK_STATUSES" :key="status" :label="BUG_STATUS_LABELS[status]" :value="status" /></el-select><div v-if="!filteredBugs.length" class="empty">{{ bugs.length ? '当前筛选下没有Bug' : '当前没有报告Bug' }}</div><article v-for="bug in filteredBugs" :key="bug.id" class="issue-row"><div><el-button link type="primary" class="issue-title" @click="openTask(bug)">{{ bug.name }}</el-button><p class="muted">负责人 {{ bug.assigneeName }} · 截止 {{ bug.dueDate || '未设置' }}</p></div><div class="page-actions"><el-tag :type="TASK_STATUS_TYPES[bug.status]">{{ BUG_STATUS_LABELS[bug.status] }}</el-tag><el-button v-if="canChangeTask(bug)" :loading="busyTaskId === bug.id" :disabled="!!busyTaskId || busyNode" @click="quickStatus(bug)">{{ BUG_NEXT_ACTION[bug.status].label }}</el-button><el-button @click="openTask(bug)">查看详情</el-button></div></article></el-tab-pane>
           <el-tab-pane :label="'活动记录 ' + logs.length" name="activity"><div v-if="!logs.length" class="empty">暂无活动记录</div><article v-for="log in logs" :key="log.id" class="node-log"><strong>{{ logDetail(log) }}</strong><p class="muted">{{ log.userName || '系统' }} · {{ formatDateTime(log.createdAt) }}</p></article></el-tab-pane>
