@@ -32,6 +32,8 @@
 
 16. **进度对照计划**（2026-10-30 用户同意按推荐执行）：项目进度以“已过计划完成日的未取消工作项 = 已交付 + 延期”表达，结论标签为 落后 N 项（N=当前延期数）/按计划进行/全部已交付/尚无有效工作项，并并列交付进度与时间进度；“今天”只取 `/context` 业务日期，进行中仍不估算完成量（不加手填百分比）。概览、时间线、项目卡片共用 `utils/progress.ts`。后续体验收敛按顺序：② 项目内入口收敛为 进度/工作项/设置、Bug 进入工作项列表、全局单一“新建”；③ 列表内直接改状态、快速新建只填名称/负责人/截止日、隐藏低频功能（模块变更申请、目标量化指标、历史任务、看板、工时）但保留数据。
 
+17. **工作项也有进展记录**（2026-10-30 用户要求“工作项也需要记录编辑功能，能产出文件”）：工作项详情新增「进展记录」页签，形态与第 14 条完全一致（命名 .md、单栏所见即所得、粘贴文件即上传、可再编辑/删除/下载）。表 `node_notes`（V15），接口 `GET/POST /nodes/{id}/notes`、`PUT/DELETE /node-notes/{id}`；粘贴文件为**工作项附件**（分类 `NODE_RECORD`），同时出现在「交付资料」文件列表。写入限工作项负责人/模块负责人/PM/ADMIN（同工作项级附件），改删限作者本人或上述管理者；已交付/取消的工作项仍可补记录，归档与 VIEWER 只读。前后端分别复用 `WorkService.noteTitle/noteContent` 与 `NoteRecords` 组件；草稿由页面 `useNoteDraft` 持有，重新加载失败时出错页仍显示草稿并保留离开提示。
+
 ## 当前实现定位
 
 | 内容 | 当前位置 |
@@ -46,6 +48,7 @@
 | 项目设置与阶段目标编辑 | `frontend/src/views/ProjectSettingsView.vue` |
 | 工作项/模块工作页 | `frontend/src/views/WorkItemsView.vue`、`ModulesView.vue`（独立模块列表）、`ModuleDetailView.vue` |
 | 项目时间线、工作项详情 | `frontend/src/views/TimelineView.vue`、`NodeDetailView.vue` |
+| 工作项进展记录 | 后端 `work/NodeNoteService.java`、`NodeNoteController.java`、Flyway V15；前端 `components/NoteRecords.vue`（任务与工作项共用）、`composables/useNoteDraft.ts`、`views/NodeDetailView.vue` |
 | 进度对照计划 | `frontend/src/utils/progress.ts`、`components/ProgressSummary.vue`（概览、时间线、项目卡片） |
 | 路由、会话、HTTP 客户端 | `frontend/src/router.ts`、`stores/auth.ts`、`api/client.ts` |
 | 项目、模块、工作项与任务的文档附件 | `backend/src/main/java/com/projtimeline/file/`、`frontend/src/components/AttachmentPanel.vue`、`AttachmentPreview.vue`、`ProjectDocsView.vue`、`utils/attachment.ts` |
@@ -58,8 +61,8 @@
 
 - 后端：Java 17、Spring Boot 3.5.16、MyBatis-Plus 3.5.17、Spring Security、Flyway、MySQL 8。
 - 前端：Vue 3、TypeScript、Vite、Vue Router、Pinia、Element Plus、Axios；使用 npm 和 `package-lock.json`。文件预览额外依赖 `docx-preview` 与 `read-excel-file`（按需动态加载，不进入主包）；Markdown 渲染依赖 `markdown-it`（`html:false`，随任务详情页加载），单栏编辑区额外依赖 `turndown`/`turndown-plugin-gfm`（DOM→Markdown）与 `dompurify`（粘贴 HTML 清洗）。
-- 当前 Flyway 版本为 V14。V1 建表，V2 将项目开始日期设为必填并过渡性增加模块日期，V3 建立 `project_stage_targets` 并移除模块日期，V4 建立 `attachments` 文档附件表，V5 只修正 `owner_type` 注释（V4 已应用到环境，不得再改写），V6 建立 `task_notes` 并让 `attachments.owner_type` 支持 TASK，V7 只把 `nodes.progress` 列注释改为「已弃用」（进度改为任务完成率派生，保留列与历史值，不删列），V8 给 `tasks` 增加 `situation`/`handling` 并为 `node_logs.action` 增加 `TASK_UPDATE`/`TASK_DELETE`，V9 建立 `node_deliverables` 并为 `node_logs.action` 增加 `DELIVERABLE_ADD`/`DELIVERABLE_UPDATE`/`DELIVERABLE_DELETE`，V10 给 `project_stage_targets` 增加四个可空指标列（`metric_name/metric_unit/metric_target/metric_current`），V11 建立 `module_change_requests` 并把 `notifications.type` 扩到 7 类，V12 让 `nodes.module_id` 可空、增加 `nodes.type`，给 `tasks` 增加 `kind` 和 `related_node_id`，V13 给 `task_notes` 增加 `title`（默认「进展记录.md」）并把 `content` 扩为 `MEDIUMTEXT` 存 Markdown，V14 给 `task_notes` 增加 `updated_by`/`updated_at` 支持再编辑。已有迁移文件不能改写；新变更追加 V15 及以后版本。
-- 当前 OpenAPI 有 76 个 `/api` 操作：本轮在进展记录上新增 `PUT /task-notes/{id}` 再编辑接口，其余路径沿用。前端 `frontend/src/api/schema.d.ts` 已由运行中的新版后端生成；默认脚本端口 8080，本机服务其他端口需显式指定。
+- 当前 Flyway 版本为 V15。V1 建表，V2 将项目开始日期设为必填并过渡性增加模块日期，V3 建立 `project_stage_targets` 并移除模块日期，V4 建立 `attachments` 文档附件表，V5 只修正 `owner_type` 注释（V4 已应用到环境，不得再改写），V6 建立 `task_notes` 并让 `attachments.owner_type` 支持 TASK，V7 只把 `nodes.progress` 列注释改为「已弃用」（进度改为任务完成率派生，保留列与历史值，不删列），V8 给 `tasks` 增加 `situation`/`handling` 并为 `node_logs.action` 增加 `TASK_UPDATE`/`TASK_DELETE`，V9 建立 `node_deliverables` 并为 `node_logs.action` 增加 `DELIVERABLE_ADD`/`DELIVERABLE_UPDATE`/`DELIVERABLE_DELETE`，V10 给 `project_stage_targets` 增加四个可空指标列（`metric_name/metric_unit/metric_target/metric_current`），V11 建立 `module_change_requests` 并把 `notifications.type` 扩到 7 类，V12 让 `nodes.module_id` 可空、增加 `nodes.type`，给 `tasks` 增加 `kind` 和 `related_node_id`，V13 给 `task_notes` 增加 `title`（默认「进展记录.md」）并把 `content` 扩为 `MEDIUMTEXT` 存 Markdown，V14 给 `task_notes` 增加 `updated_by`/`updated_at` 支持再编辑，V15 建立 `node_notes`（工作项进展记录）。已有迁移文件不能改写；新变更追加 V16 及以后版本。
+- 当前 OpenAPI 有 80 个 `/api` 操作：2026-10-30 新增工作项进展记录 4 个接口（#77–80），其余路径沿用。前端 `frontend/src/api/schema.d.ts` 已由运行中的新版后端生成；默认脚本端口 8080，本机服务其他端口需显式指定。
 - 认证为 8 小时 JWT，仅保存用户 ID；每次请求重新检查账号启用状态与角色。浏览器会话存于 `sessionStorage`。
 - 日期判定使用注入的 `Clock`，默认业务时区 `Asia/Shanghai`。延期和临近到期由服务端实时计算。
 - 演示数据只在显式执行 `docs/demo_seed.sql` 时导入；不属于 Flyway 正式迁移。根目录 `.env` 和本机数据库凭据不得写入文档或提交。
@@ -88,7 +91,8 @@
 - 2026-10-28 Markdown 进展记录轮次验证：Maven 73 项测试通过；前端 lint/typecheck/build 通过；Playwright 37 项通过（含命名 .md、粘贴截图进正文与附件、编辑区实时预览图片与文件名链接、图片真实内联、粘贴附件可移除、预览态粘贴、已保存记录再编辑与编辑中关闭草稿提示、上传在途暂停编辑）；在本机隔离 MySQL 库执行 V1–V14 迁移并跑真实 HTTP（创建/编辑/读取进展记录、`updatedBy/updatedAt`、文件名与长度校验；assignee 非作者编辑 403、工作项负责人成功、VIEWER 403），验证后删除测试库并停止临时服务。随后重启 58080 后端（IntelliJ 进程已停止，改由 `mvn spring-boot:run` 后台运行），V14 已应用到本机 `proj_timeline`，健康接口 UP、OpenAPI 76 个操作并已重新生成 `schema.d.ts`；5173 页面 HTTP 200。再编辑功能经独立审核两轮（`bb3b91d`、`f3296e4`）均“可合并”、无 P1/P2，最终提交 `89fbd59` 以合并提交 `bfde145` 集成 develop 并推送，功能分支已删除。随后按用户反馈把编辑区改为左右分栏实时预览（图片内联、文件只显示文件名），以合并提交 `dbcc361` 集成 develop；前端 Vite 热更新，后端无改动。用户再反馈编辑区太小，任务抽屉加宽到 960px、编辑区源码:预览改为 3:2、最小高度 `min(360px,52vh)`、容器窄于 780px 自动堆叠，以合并提交 `b533c46` 集成 develop（前端热更新，无后端/迁移变更）。
 - 2026-10-28 单栏编辑区轮次验证：按用户“不分编辑/预览”要求，把进展记录编辑器改为 contenteditable + turndown/DOMPurify 的单栏所见即所得，保留源码开关；前端 `lint`/`typecheck`/`build` 通过，Playwright **44 项**通过（含既有复杂 Markdown 在真实键入后的保真、超 20MB 图片占位保留、粘贴 HTML 消毒、工具栏加粗/标题、源码模式、行首快捷标题、上传暂停、移动端）；本轮无后端/接口/迁移变更，58080 后端与 5173 前端保持运行。独立审核 `86eea9d`“可合并”（无 P1/P2），清理尾项后提交 `0786df3` 以合并提交 `162a09f` 集成 develop 并推送，功能分支已删除。已知 turndown 会规范化列表缩进/表格列对齐/裸链接/任务列表转义等排版，要求逐字保留时用「源码」。
 - 2026-10-28 任务详情页轮次验证：按用户要求把 Bug/历史任务从右侧抽屉改为独立页面 `/nodes/:nodeId/tasks/:taskId`；前端 `lint`/`typecheck`/`build` 通过，Playwright **45 项**通过（含直接打开/刷新任务 URL、从 Bug 列表点击进入、返回工作项、草稿与上传保护、旧 `?task=` 重定向、移动端无横向溢出）；本轮无后端/接口/迁移变更，58080/5173 保持运行。独立审核 `313c2f5`“可合并”、无 P1/P2，清理 P3 后提交 `c23cae5`，以合并提交 `24b71aa` 集成 develop 并推送，功能分支已删除。
-- `PLAN.md` 中早期接口/页面/表数量是历史快照。当前接口 76 个、表 16 张（含 flyway_schema_history）；V13–V14 只扩列不建表。
+- `PLAN.md` 中早期接口/页面/表数量是历史快照。当前接口 80 个、表 17 张（含 flyway_schema_history）；V15 新建 `node_notes`。
+- 已知限制：工作项页重新加载时若项目上下文刷新失败（两次请求之间失去项目权限），App 外壳会直接替换页面，未保存的工作项记录草稿不经提示丢失；触发窗口很窄，暂不处理。
 - 当前工作站此前未运行 Docker Compose 的真实构建；部署仍需在具备 Docker 的目标环境验证。
 - 文件存储当前用本地磁盘（`app.storage.root` 默认 `./data/files`，容器内 `/app/data/files` 挂 `file-data` 卷）。未接入 MinIO/对象存储：存储层已抽成 `FileStorage` 接口，切换时只加实现并改配置。单文件上限 50MB，Nginx 侧 `client_max_body_size 60m`，后端 `spring.servlet.multipart` 与 `app.storage.max-file-bytes` 同步。
 - Git 远程：`https://github.com/txy1785/proj-timeline.git`。分支模型：`main` 版本上线、`develop` 开发主线、`feature/<描述>` 功能分支从 `develop` 拉出；功能代码必须经独立审核（干净会话/子代理）后合并 `develop`，发布从 `develop` 合并 `main` 并打 tag。GitHub 默认分支为 `main`，远程仅保留 `main` 与 `develop`（旧 `master` 已删除）。提交前先 `git status` 核对未被 .gitignore 遗漏的文件。

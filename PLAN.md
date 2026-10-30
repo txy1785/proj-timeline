@@ -510,3 +510,12 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 独立审核首轮“不可合并”（P1：应交付/已交付口径不一致导致数字对不上；夹具 107 未标延期掩盖问题）。修复为 due = dueDone + behind 分解、测试中补齐延期标记、全取消文案、业务日期未知不显示对照、进度条 aria-label、百分比与后端一致最多 99、新增纯函数边界测试；复审“可合并”，按 P3 把文案改为“已过计划完成日”。
 - 验证：前端 lint/typecheck/build 通过；Playwright 全量 **53 项**通过（新增 `progress.spec.mjs` 3 项、`progress-rules.spec.mjs` 5 项）。Playwright 自带 webServer 在本机 30s 内探测超时，改为后台手动启动 41731 后用临时配置复用，测试后已关闭。无后端/接口/迁移变更。
 - 提交 `66d5d30`、`d46b246`、`081d713` 以合并提交 `e935b0b` 集成本地 develop，功能分支已删除。
+
+## 2026-10-30 · 工作项进展记录
+
+- 用户反馈：只有 Bug 记录可以编辑，工作项也需要能产出文件的记录编辑功能。从 develop 建立 `feature/work-item-records`。
+- 后端：Flyway V15 建 `node_notes`（与 task_notes 同形态）；新增 `work/NodeNoteService`、`NodeNoteController`（GET/POST `/nodes/{id}/notes`，PUT/DELETE `/node-notes/{id}`），写入 `requireNodeManager`，改删作者或工作项管理者，复用 `WorkService.noteTitle/noteContent`；`DocumentCatalog` 增加 NODE 分类 `NODE_RECORD`；`docs/database.sql`、`docs/接口设计.md`（#77–80）、复用库同步；新增 `WorkItemRecordTest` 3 项。
+- 前端：从 TaskDetailView 抽出共享 `components/NoteRecords.vue`，任务页与工作项页共用；工作项详情增加「进展记录」页签；`schema.d.ts` 由新后端重新生成（80 个操作）。
+- 独立审核首轮“不可合并”（P1：抽取后草稿在组件内，任务页重新加载失败时草稿与离开提示丢失；P2：工作项页每次重新加载卸载编辑器导致上传计数卡死、出错时草稿丢失）。修复：新增 `composables/useNoteDraft.ts` 由页面持有草稿与离开确认，出错页显示只读草稿；工作项页记录可写不依赖 loading，记录忙碌时禁用状态操作；补 onBeforeRouteUpdate、切页签刷新附件等。新增 2 条“重新加载失败仍保留草稿”e2e，并做变异验证确认能捕获回归。复审“可合并”，按 P3 让状态按钮在记录忙碌时置灰；项目上下文刷新失败导致的草稿丢失作为已知限制记录。
+- 验证：Maven 76 项通过；前端 lint/typecheck/build 通过；Playwright 全量 **58 项**通过。在明确命名的本机隔离库 `proj_timeline_v15_check` 执行 V1–V15 迁移并跑真实 HTTP（负责人新建、PM 再编辑、普通成员 403、VIEWER 只读、非法名称 400、`NODE_RECORD` 附件上传、删除与 404），验证后删除测试库并停止临时服务。
+- 提交 `5af2208`、`d3825c7`、`01a5746` 以合并提交 `86b568b` 集成本地 develop，功能分支已删除。用户本机库尚未升级到 V15，需重启 58080 后端执行迁移（待用户确认）。
