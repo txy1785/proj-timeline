@@ -7,10 +7,12 @@ import type { PageResponse, Project } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import { useAppStore } from '../stores/app'
 import { boundedPage } from '../utils/pagination'
+import { scheduleVerdict } from '../utils/progress'
 
 const router=useRouter()
 const auth=useAuthStore()
 const app=useAppStore()
+function cardVerdict(project:Project){return scheduleVerdict({...project.stats,behind:project.stats.overdue})}
 const data=ref<PageResponse<Project>>()
 const loading=ref(true)
 const error=ref('')
@@ -70,7 +72,7 @@ onMounted(load)
         <p class="project-description">{{project.description||'尚未填写项目说明'}}</p>
         <div class="project-fact"><span>项目经理</span><strong>{{project.pmName||'进入项目查看'}}</strong></div>
         <div class="project-fact"><span>计划完成</span><strong>{{project.planEnd||'完成日期未定'}}</strong></div>
-        <div v-if="project.stats.total" class="project-progress"><el-progress :percentage="project.progress" :stroke-width="6" :show-text="false"/><span class="muted">{{project.stats.done}} / {{project.stats.total}} 项功能已交付</span></div>
+        <div v-if="project.stats.total" class="project-progress"><el-progress :percentage="project.progress" :stroke-width="6" :show-text="false"/><span class="muted">{{project.stats.done}} / {{project.stats.total}} 项功能已交付</span><el-tag :type="cardVerdict(project).tone" size="small">{{cardVerdict(project).label}}</el-tag></div>
         <p v-else class="muted">尚未建立工作项</p>
         <div class="project-risks"><RouterLink v-if="project.stats.overdue" class="danger" :to="'/projects/'+project.id+'/work-items?risk=overdue'">{{project.stats.overdue}} 项延期 ›</RouterLink><RouterLink v-if="project.stats.blocked" class="purple" :to="'/projects/'+project.id+'/work-items?risk=blocked'">{{project.stats.blocked}} 项受阻 ›</RouterLink><RouterLink v-if="project.stats.near" class="warning" :to="'/projects/'+project.id+'/work-items?risk=near'">{{project.stats.near}} 项临近 ›</RouterLink><span v-if="!project.stats.overdue&&!project.stats.blocked&&!project.stats.near" class="muted">{{project.stats.total?'当前没有延期、受阻或临近项':'从首个工作项开始安排交付'}}</span></div>
         <RouterLink class="project-enter" :to="'/projects/'+project.id+'/overview'">进入项目 <span aria-hidden="true">→</span></RouterLink>
@@ -86,6 +88,6 @@ onMounted(load)
 .project-card{cursor:default;display:flex;flex-direction:column;gap:3px}.project-card h2 a:hover{color:var(--blue)}.project-card-head{display:flex;justify-content:space-between;gap:10px;font-size:12px}
 .project-description{min-height:44px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .project-fact{display:flex;justify-content:space-between;gap:10px;margin-top:9px;font-size:13px}.project-fact>span{color:var(--muted)}.project-fact strong{font-weight:500}
-.project-progress{margin-top:18px}.project-progress>span{font-size:12px}.project-risks{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0;font-size:12px;min-height:20px}
+.project-progress{margin-top:18px}.project-progress>span{font-size:12px}.project-progress .el-tag{margin-left:8px}.project-risks{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0;font-size:12px;min-height:20px}
 .project-enter{display:flex;justify-content:space-between;color:var(--blue);border-top:1px solid var(--line);padding-top:12px;margin-top:auto}
 </style>

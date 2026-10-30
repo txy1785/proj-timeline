@@ -97,5 +97,6 @@ export async function prepare(page, role = 'USER', userId = 6, options = {}) {
     if (path.startsWith('/attachments')) return reply([])
     return reply(null, 404, 'Unexpected mock endpoint: ' + method + ' ' + path)
   })
+  state.project = project
   return state
 }
