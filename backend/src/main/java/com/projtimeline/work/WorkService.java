@@ -477,7 +477,7 @@ public class WorkService {
     }
 
     /** 记录名即 .md 文件名：缺省为「进展记录.md」，统一补 .md 后缀并拒绝路径与文件系统保留字符。 */
-    private static String noteTitle(Map<String, Object> body) {
+    static String noteTitle(Map<String, Object> body) {
         String title = text(body, "title");
         if (title == null) title = "进展记录.md";
         if (!title.toLowerCase(Locale.ROOT).endsWith(".md")) title += ".md";
@@ -487,7 +487,7 @@ public class WorkService {
         return title;
     }
 
-    private static String noteContent(Map<String, Object> body) {
+    static String noteContent(Map<String, Object> body) {
         String content = text(body, "content");
         if (content == null) throw BusinessException.badRequest("记录内容不能为空");
         if (content.length() > 20000) throw BusinessException.badRequest("记录不能超过 20000 字");

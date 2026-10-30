@@ -24,7 +24,9 @@ export interface ChangeRequest { id: number; projectId: number; projectName?: st
 export interface Timeline extends Project { modules: ModuleItem[]; projectWorkItems: NodeItem[]; stageTargets: StageTarget[] }
 export interface Task { id: number; nodeId: number; name: string; description?: string; kind?: TaskKind; relatedNodeId?: number | null; relatedNodeName?: string; situation?: string; handling?: string; assigneeId: number; assigneeName: string; status: TaskStatus; dueDate?: string; estimateDays?: number; actualDays?: number; noteCount?: number; originNodeId?: number; originNodeName?: string; originNodeStatus?: NodeStatus; originOwnerId?: number; originModuleOwnerId?: number | null }
 /** 进展记录：每份是命名的 Markdown 文件，正文里的 attachment:{id} 指向本任务附件；updatedBy/updatedAt 为最后编辑。 */
-export interface TaskNote { id: number; taskId: number; title: string; authorId: number; authorName: string; content: string; createdAt: string; updatedBy?: number; updatedByName?: string; updatedAt?: string }
+export interface NoteRecord { id: number; title: string; authorId: number; authorName: string; content: string; createdAt: string; updatedBy?: number; updatedByName?: string; updatedAt?: string }
+export interface TaskNote extends NoteRecord { taskId: number }
+export interface NodeNote extends NoteRecord { nodeId: number }
 /** 工作项交付物清单项：文件复用工作项附件，attachmentId 可选。 */
 export interface Deliverable { id: number; nodeId: number; projectId: number; name: string; status: DeliverableStatus; ownerId?: number; ownerName?: string; remark?: string; attachmentId?: number; attachmentTitle?: string; attachmentOriginalName?: string; attachmentDeleted?: number; sortOrder?: number; createdAt?: string; updatedAt?: string }
 export interface WorkLog { id: number; taskId: number; userId: number; userName: string; workDate: string; days: number; note?: string }

@@ -301,6 +301,27 @@ CREATE TABLE task_notes (
 ) ENGINE=InnoDB COMMENT='任务进展记录（命名的 Markdown 文件，可再编辑）';
 
 -- ------------------------------------------------------------
+-- 12a. 工作项进展记录（Flyway V15）
+--     与任务进展记录同形态：title 为 .md 文件名，content 为 Markdown；
+--     正文里的 attachment:{id} 指向本工作项附件（分类 NODE_RECORD）。
+-- ------------------------------------------------------------
+CREATE TABLE node_notes (
+  id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  node_id    BIGINT UNSIGNED NOT NULL,
+  title      VARCHAR(200) NOT NULL DEFAULT '进展记录.md' COMMENT '记录名称，按 .md 文件名保存',
+  author_id  BIGINT UNSIGNED NOT NULL,
+  updated_by BIGINT UNSIGNED NULL COMMENT '最后编辑人，未编辑过为空',
+  content    MEDIUMTEXT NOT NULL COMMENT 'Markdown 正文，粘贴的附件以 attachment:{id} 占位',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NULL COMMENT '最后编辑时间，未编辑过为空',
+  PRIMARY KEY (id),
+  KEY idx_node_notes_node (node_id, created_at),
+  CONSTRAINT fk_node_notes_node FOREIGN KEY (node_id) REFERENCES nodes(id),
+  CONSTRAINT fk_node_notes_author FOREIGN KEY (author_id) REFERENCES users(id),
+  CONSTRAINT fk_node_notes_updated_by FOREIGN KEY (updated_by) REFERENCES users(id)
+) ENGINE=InnoDB COMMENT='工作项进展记录（命名的 Markdown 文件，可再编辑）';
+
+-- ------------------------------------------------------------
 -- 13. 工作项交付物清单（Flyway V9）
 --     回答"这个工作项要交什么、还缺什么、文件在哪"；文件复用 attachments 的工作项级文件，
 --     清单项只可选关联一个同工作项附件，不新建文件体系、不做跨工作项依赖。
