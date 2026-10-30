@@ -30,6 +30,8 @@
 14. **进展记录是命名的 Markdown 文件**（2026-10-28 用户指定）：Bug/历史任务修复区的记录编辑区支持 Markdown，保存时命名并生成一份 `.md` 记录（缺后缀自动补），一个任务可保存多份，按时间倒序展示。粘贴/拖入的图片与文件立即上传为**本任务附件**（分类 `TASK_RECORD`「进展记录附件」），正文只保存 `attachment:{id}`：图片用 Blob 内联预览，其他文件显示为可点击超链接（预览或下载），并同步出现在「附件」页签。**编辑区为单栏所见即所得**：直接显示渲染后的标题、列表、图片与文件名链接，输入时由 turndown 序列化回 Markdown，需要手写语法时可切「源码」；不再保留编辑/预览分栏。编辑区列出本次上传并可移除（同时软删除任务附件、去掉正文占位）；非文件拖放不拦截。**已保存记录可由作者本人或任务管理者再编辑标题与正文**（原地更新，记录最后编辑人/时间，不新增记录）；删除限作者本人或管理者。初始 Markdown 渲染固定 `html:false`，不允许原始 HTML；粘贴 HTML 经 DOMPurify 白名单清洗。正文上限 20000 字，记录名 ≤120 字且禁止路径字符。附件仍按任务权限校验，不改四层文件体系。
 15. **最小单位任务详情使用独立页面**（2026-10-28 用户指定）：Bug 与历史任务不再用右侧抽屉，点击任务名称/查看详情直接进入 `/nodes/:nodeId/tasks/:taskId` 页面；工作项列表、看板、我的工作、人员负载统一用 `router.push` 进入。页面保留说明、进展记录、附件、状态操作、编辑 Bug、草稿与未保存离开提示；旧 `/nodes/:id?task=...` 深链自动重定向到新页面。
 
+16. **进度对照计划**（2026-10-30 用户同意按推荐执行）：项目进度以“已过计划完成日的未取消工作项 = 已交付 + 延期”表达，结论标签为 落后 N 项（N=当前延期数）/按计划进行/全部已交付/尚无有效工作项，并并列交付进度与时间进度；“今天”只取 `/context` 业务日期，进行中仍不估算完成量（不加手填百分比）。概览、时间线、项目卡片共用 `utils/progress.ts`。后续体验收敛按顺序：② 项目内入口收敛为 进度/工作项/设置、Bug 进入工作项列表、全局单一“新建”；③ 列表内直接改状态、快速新建只填名称/负责人/截止日、隐藏低频功能（模块变更申请、目标量化指标、历史任务、看板、工时）但保留数据。
+
 ## 当前实现定位
 
 | 内容 | 当前位置 |
@@ -44,6 +46,7 @@
 | 项目设置与阶段目标编辑 | `frontend/src/views/ProjectSettingsView.vue` |
 | 工作项/模块工作页 | `frontend/src/views/WorkItemsView.vue`、`ModulesView.vue`（独立模块列表）、`ModuleDetailView.vue` |
 | 项目时间线、工作项详情 | `frontend/src/views/TimelineView.vue`、`NodeDetailView.vue` |
+| 进度对照计划 | `frontend/src/utils/progress.ts`、`components/ProgressSummary.vue`（概览、时间线、项目卡片） |
 | 路由、会话、HTTP 客户端 | `frontend/src/router.ts`、`stores/auth.ts`、`api/client.ts` |
 | 项目、模块、工作项与任务的文档附件 | `backend/src/main/java/com/projtimeline/file/`、`frontend/src/components/AttachmentPanel.vue`、`AttachmentPreview.vue`、`ProjectDocsView.vue`、`utils/attachment.ts` |
 | 进展记录（命名 Markdown 文件，可再编辑） | 后端 `work/WorkService.java`（`taskNotes/addTaskNote/updateTaskNote`、`noteTitle`）、Flyway V13–V14；前端 `components/MarkdownEditor.vue`（单栏所见即所得）、`MarkdownView.vue`、`utils/markdown.ts`、`utils/editableMarkdown.ts`、`views/TaskDetailView.vue`、全局 `.markdown-body` 样式 |

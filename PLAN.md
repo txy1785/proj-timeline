@@ -502,3 +502,11 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 验证：前端 `lint`/`typecheck`/`build`、Playwright **45 项**通过（任务页用例改为 `.task-detail-page` 并断言新 URL；新增直接打开 `/nodes/106/tasks/11` 及刷新用例，覆盖 App 项目上下文与深链）；无后端/接口/迁移变更，58080/5173 运行。
 - 独立审核“可合并”、无 P1/P2；按 P3 清理 `requestClose` 死参数、路由守卫同时比较 node/task 参数、项目文档的附件跳转改用新路径；并补直接深链/刷新 e2e。
 - 已完成：提交 `313c2f5`、`c23cae5` 以合并提交 `24b71aa` 集成 develop 并推送 `origin/develop`，功能分支已删除，工作树干净。前端 Vite 热更新，后端无改动。
+
+## 2026-10-30 · 进度对照计划（体验收敛第一步）
+
+- 用户反馈：找不到入口、操作步骤太多、进度不明确。评审后约定分三步收敛：① 进度看得清；② 入口收敛为 进度/工作项/设置；③ 列表内直接改状态、快速新建、隐藏低频功能（数据保留）。用户同意按推荐执行；本轮不引入进行中手填进度，沿用“进行中不估算”。
+- 从 develop 建立 `feature/progress-clarity`，仅前端：新增 `utils/progress.ts`（`scheduleProgress/scheduleVerdict/deliveredPercent`）与 `components/ProgressSummary.vue`。项目概览与时间线顶部显示结论标签（落后 N 项/按计划进行/全部已交付/尚无有效工作项）、“已过计划完成日 N 项：已交付 M 项，延期 K 项”、交付进度与时间进度两条；模块卡片加进度条与延期数；时间线延期条红色并标“延期 N 天”，模块分组行显示已交付 x/y 与延期数，打开时自动滚到今天；项目列表卡片显示同一结论标签（用后端 `stats.overdue`）。
+- 独立审核首轮“不可合并”（P1：应交付/已交付口径不一致导致数字对不上；夹具 107 未标延期掩盖问题）。修复为 due = dueDone + behind 分解、测试中补齐延期标记、全取消文案、业务日期未知不显示对照、进度条 aria-label、百分比与后端一致最多 99、新增纯函数边界测试；复审“可合并”，按 P3 把文案改为“已过计划完成日”。
+- 验证：前端 lint/typecheck/build 通过；Playwright 全量 **53 项**通过（新增 `progress.spec.mjs` 3 项、`progress-rules.spec.mjs` 5 项）。Playwright 自带 webServer 在本机 30s 内探测超时，改为后台手动启动 41731 后用临时配置复用，测试后已关闭。无后端/接口/迁移变更。
+- 提交 `66d5d30`、`d46b246`、`081d713` 以合并提交 `e935b0b` 集成本地 develop，功能分支已删除。
