@@ -17,7 +17,7 @@ export interface ScheduleProgress {
   timePercent?: number
 }
 
-/** 进度对照计划：到今天应交付的项拆成已交付与延期，进行中不估算完成量。 */
+/** 进度对照计划：已过计划完成日的项拆成已交付与延期，进行中不估算完成量。 */
 export function scheduleProgress(nodes: ScheduleNode[], today: string, plan?: { planStart: string; planEnd?: string }): ScheduleProgress {
   const { total, done } = workItemCounts(nodes)
   const dueNodes = today ? nodes.filter(node => node.status !== 'CANCELLED' && node.planEnd < today) : []

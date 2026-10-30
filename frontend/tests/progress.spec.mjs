@@ -23,7 +23,7 @@ test('overview breaks the work due by today into delivered and overdue', async (
   await page.goto('/projects/1/overview')
   const summary = page.getByRole('region', { name: '项目进度' })
   await expect(summary.getByText('落后 2 项', { exact: true })).toBeVisible()
-  await expect(summary).toContainText('到今天应交付 3 项：已交付 1 项，延期 2 项')
+  await expect(summary).toContainText('已过计划完成日 3 项：已交付 1 项，延期 2 项')
   await expect(summary).toContainText('全部 4 项已交付 1 项')
   await expect(summary.getByRole('progressbar', { name: '时间进度' })).toBeVisible()
   const card = page.getByRole('region', { name: '功能模块' }).getByRole('link', { name: /订单与支付/ })

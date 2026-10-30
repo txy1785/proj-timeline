@@ -14,9 +14,9 @@ const verdict = computed(() => scheduleVerdict(props.progress))
       <p v-if="!progress.total" class="muted">现有工作项均已取消，新建工作项后这里会对照计划显示进度。</p>
       <template v-else>
         <p v-if="today && progress.due">
-          到今天应交付 <strong>{{ progress.due }}</strong> 项：已交付 <strong>{{ progress.dueDone }}</strong> 项<template v-if="progress.behind">，延期 <strong class="danger">{{ progress.behind }}</strong> 项</template>
+          已过计划完成日 <strong>{{ progress.due }}</strong> 项：已交付 <strong>{{ progress.dueDone }}</strong> 项<template v-if="progress.behind">，延期 <strong class="danger">{{ progress.behind }}</strong> 项</template>
         </p>
-        <p v-else-if="today">还没有到期的工作项。</p>
+        <p v-else-if="today">还没有过计划完成日的工作项。</p>
         <p class="muted">全部 {{ progress.total }} 项已交付 {{ progress.done }} 项
           <RouterLink v-if="progress.behind" class="danger" :to="`/projects/${projectId}/work-items?risk=overdue`">查看延期 →</RouterLink>
         </p>
