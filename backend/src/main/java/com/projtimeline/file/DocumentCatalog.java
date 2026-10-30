@@ -70,6 +70,7 @@ public final class DocumentCatalog {
             new Category(OWNER_NODE, "工作项产出", "NODE_TEST", "自测与联调记录"),
             new Category(OWNER_NODE, "工作项产出", "NODE_SCREENSHOT", "截图与演示"),
             new Category(OWNER_NODE, "工作项产出", "NODE_DELIVERABLE", "工作项交付物"),
+            new Category(OWNER_NODE, "工作项产出", "NODE_RECORD", "进展记录附件"),
             new Category(OWNER_NODE, "其他", "NODE_OTHER", "其他工作项文件"),
             // 任务级 · 任务附件
             new Category(OWNER_TASK, "任务附件", "TASK_DELIVERABLE", "任务交付物"),

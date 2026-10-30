@@ -7,6 +7,7 @@ import com.projtimeline.project.ProjectService;
 import com.projtimeline.report.ReportingService;
 import com.projtimeline.security.CurrentUser;
 import com.projtimeline.security.PermissionService;
+import com.projtimeline.work.NodeNoteService;
 import com.projtimeline.work.WorkService;
 import com.projtimeline.workspace.WorkspaceService;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -33,6 +34,7 @@ public final class UxDatabaseFixture {
     public final WorkspaceService workspace;
     public final NotificationService notifications = mock(NotificationService.class);
     public final WorkService work;
+    public final NodeNoteService nodeNotes;
     public final ReportingService reporting;
 
     public UxDatabaseFixture() {
@@ -45,6 +47,7 @@ public final class UxDatabaseFixture {
         projects = new ProjectService(db, permissions, clock);
         workspace = new WorkspaceService(db, permissions, projects, clock);
         work = new WorkService(db, permissions, projects, notifications, mapper, clock);
+        nodeNotes = new NodeNoteService(db, permissions, clock);
         reporting = new ReportingService(db, permissions, notifications, mapper, clock);
         for (String ddl : new String[]{
                 "CREATE TABLE users(id BIGINT PRIMARY KEY,name VARCHAR(100),username VARCHAR(100),active BOOLEAN,global_role VARCHAR(20))",
@@ -54,6 +57,7 @@ public final class UxDatabaseFixture {
                 "CREATE TABLE nodes(id BIGINT PRIMARY KEY,project_id BIGINT,module_id BIGINT,name VARCHAR(200),description VARCHAR(1000),type VARCHAR(20) DEFAULT 'FEATURE',status VARCHAR(20),owner_id BIGINT,plan_start DATE,plan_end DATE,blocked BOOLEAN DEFAULT FALSE,blocked_reason VARCHAR(1000),overdue_reason VARCHAR(1000),actual_start DATE,actual_end DATE,created_by BIGINT,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
                 "CREATE TABLE tasks(id BIGINT AUTO_INCREMENT PRIMARY KEY,node_id BIGINT,name VARCHAR(200),description VARCHAR(1000),kind VARCHAR(20) DEFAULT 'FEATURE',related_node_id BIGINT,situation VARCHAR(2000),handling VARCHAR(2000),assignee_id BIGINT,status VARCHAR(20) DEFAULT 'TODO',due_date DATE,estimate_days DECIMAL(8,2),created_by BIGINT,done_at TIMESTAMP,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
                 "CREATE TABLE task_notes(id BIGINT AUTO_INCREMENT PRIMARY KEY,task_id BIGINT,title VARCHAR(200),content MEDIUMTEXT,author_id BIGINT,updated_by BIGINT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP)",
+                "CREATE TABLE node_notes(id BIGINT AUTO_INCREMENT PRIMARY KEY,node_id BIGINT,title VARCHAR(200),content MEDIUMTEXT,author_id BIGINT,updated_by BIGINT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP)",
                 "CREATE TABLE task_work_logs(id BIGINT AUTO_INCREMENT PRIMARY KEY,task_id BIGINT,days DECIMAL(8,2))",
                 "CREATE TABLE node_deliverables(id BIGINT AUTO_INCREMENT PRIMARY KEY,node_id BIGINT,status VARCHAR(20),project_id BIGINT,name VARCHAR(200),owner_id BIGINT,remark VARCHAR(500),attachment_id BIGINT,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
                 "CREATE TABLE node_logs(id BIGINT AUTO_INCREMENT PRIMARY KEY,node_id BIGINT,user_id BIGINT,action VARCHAR(40),detail VARCHAR(1000),before_value VARCHAR(4000),after_value VARCHAR(4000),created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",

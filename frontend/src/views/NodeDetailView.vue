@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api/client'
-import type { NodeItem, NodeLog, NodeStatus, Task, TaskStatus } from '../api/types'
+import type { Attachment, NodeItem, NodeLog, NodeStatus, NoteRecord, Task, TaskStatus } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import { useProjectStore } from '../stores/project'
 import { canManageNode, canChangeTaskStatus, isNodeClosed } from '../utils/permissions'
@@ -15,6 +15,7 @@ import AttachmentPanel from '../components/AttachmentPanel.vue'
 import DeliverablePanel from '../components/DeliverablePanel.vue'
 import WorkItemFormDialog from '../components/WorkItemFormDialog.vue'
 import BugReportDialog from '../components/BugReportDialog.vue'
+import NoteRecords from '../components/NoteRecords.vue'
 
 const props = withDefaults(defineProps<{ initialView?: 'list' | 'kanban' }>(), { initialView: 'list' })
 const route = useRoute()
@@ -37,6 +38,10 @@ const riskMode = ref<'block' | 'overdue'>('block')
 const riskReason = ref('')
 const riskBaseline = ref('')
 const savingRisk = ref(false)
+const records = ref<InstanceType<typeof NoteRecords>>()
+const noteCount = ref(0)
+const noteFiles = ref<Attachment[]>([])
+const filesVersion = ref(0)
 let generation = 0
 
 const project = computed(() => context.project?.id === node.value?.projectId ? context.project : undefined)
@@ -77,14 +82,32 @@ async function load(refreshContext = false) {
     if (current === generation) { error.value = (e as Error).message; node.value = undefined }
   } finally { if (current === generation) loading.value = false }
 }
-watch(id, () => { node.value = undefined; activeTab.value = 'description'; void load() }, { immediate: true })
+watch(id, () => { node.value = undefined; activeTab.value = 'description'; noteCount.value = 0; void load(); void loadNoteFiles() }, { immediate: true })
 watch(() => [route.query.tab, route.query.kind, route.query.status], () => {
-  if (['description', 'materials', 'bugs', 'activity', 'history'].includes(String(route.query.tab))) activeTab.value = String(route.query.tab)
+  if (['description', 'records', 'materials', 'bugs', 'activity', 'history'].includes(String(route.query.tab))) activeTab.value = String(route.query.tab)
   else if (route.query.kind === 'BUG') activeTab.value = 'bugs'
   const status = String(route.query.status || 'ALL') as TaskStatus | 'ALL' | 'OPEN'
   statusFilter.value = status === 'OPEN' || TASK_STATUSES.includes(status as TaskStatus) ? status : 'ALL'
 }, { immediate: true })
-onBeforeUnmount(() => { generation++ })
+onBeforeUnmount(() => { generation++; window.removeEventListener('beforeunload', beforeUnload) })
+onMounted(() => window.addEventListener('beforeunload', beforeUnload))
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (records.value?.hasDraft) { event.preventDefault(); event.returnValue = '' }
+}
+/** 记录正文里的 attachment:{id} 解析自本工作项附件；读取失败只影响图片与链接显示。 */
+async function loadNoteFiles() {
+  const current = id.value
+  try {
+    const files = await api<Attachment[]>('GET', '/attachments', undefined, { ownerType: 'NODE', ownerId: current })
+    if (current === id.value) noteFiles.value = files
+  } catch { if (current === id.value) noteFiles.value = [] }
+}
+function onNoteUploaded(file: Attachment) { noteFiles.value = [file, ...noteFiles.value]; filesVersion.value++ }
+function onNoteFileRemoved(attachmentId: number) { noteFiles.value = noteFiles.value.filter(file => file.id !== attachmentId); filesVersion.value++ }
+function canManageNote(note: NoteRecord) {
+  return !loading.value && !error.value && !archived.value && !auth.isViewer && !!auth.user
+    && (manager.value || note.authorId === auth.user.id)
+}
 
 function updateFilters() {
   const query = { ...route.query }
@@ -139,7 +162,7 @@ async function allowRiskClose(): Promise<boolean> {
   } catch { return false }
 }
 async function closeRisk(done?: () => void) { if (await allowRiskClose()) { if (done) done(); else riskDialog.value = false } }
-onBeforeRouteLeave(allowRiskClose)
+onBeforeRouteLeave(async () => await allowRiskClose() && (!records.value || await records.value.allowLeave()))
 async function saveRisk() {
   if (!canMutateNode.value || savingRisk.value) return
   if (riskMode.value === 'overdue' && !node.value?.flags.overdue) { ElMessage.warning('工作项已不再延期，未保存的说明仍保留在窗口中'); return }
@@ -188,7 +211,8 @@ function logDetail(log: NodeLog & { detail?: string }) {
       <section class="surface node-body">
         <el-tabs v-model="activeTab">
           <el-tab-pane label="功能说明" name="description"><div class="feature-description"><h2>这项功能要交付什么</h2><p>{{ node.description || '尚未填写功能说明，可补充功能范围、预期效果和验收要求。' }}</p><p class="muted">{{ WORK_ITEM_TYPE_LABELS[node.type] }} · 由 {{ node.ownerName }} 负责交付</p><el-button v-if="canMutateNode" @click="workItemDialog = true">完善功能说明</el-button></div><div v-if="canMutateNode && !node.flags.blocked" class="section-actions"><el-button @click="openRisk('block')">标记受阻</el-button></div></el-tab-pane>
-          <el-tab-pane label="交付资料" name="materials" lazy><DeliverablePanel :node-id="id" :items="node.deliverables || []" :members="members" :can-manage="manager" :node-closed="closed" :archived="archived" @refresh="load(true)" /><div class="material-files"><h2>图纸、文档与实际文件</h2><AttachmentPanel :key="id" owner-type="NODE" :owner-id="id" :can-manage="manager" :archived="archived" :show-category-nav="false" hint="上传本功能的图纸、接口说明、测试截图和其他资料；可在上方交付要求中关联文件。" /></div></el-tab-pane>
+          <el-tab-pane :label="'进展记录 ' + noteCount" name="records"><NoteRecords ref="records" owner-type="NODE" :owner-id="id" :list-path="`/nodes/${id}/notes`" item-path="/node-notes" category="NODE_RECORD" title-prefix="进展记录" :attachments="noteFiles" :can-write="manager && !archived" :can-upload="manager && !archived" :can-manage="canManageNote" read-only-hint="当前工作项不可写入。" @uploaded="onNoteUploaded" @removed="onNoteFileRemoved" @count="noteCount = $event" /></el-tab-pane>
+          <el-tab-pane label="交付资料" name="materials" lazy><DeliverablePanel :node-id="id" :items="node.deliverables || []" :members="members" :can-manage="manager" :node-closed="closed" :archived="archived" @refresh="load(true)" /><div class="material-files"><h2>图纸、文档与实际文件</h2><AttachmentPanel :key="`${id}-${filesVersion}`" owner-type="NODE" :owner-id="id" :can-manage="manager" :archived="archived" :show-category-nav="false" hint="上传本功能的图纸、接口说明、测试截图和其他资料；可在上方交付要求中关联文件。" /></div></el-tab-pane>
           <el-tab-pane :label="'Bug ' + bugs.length" name="bugs"><div class="section-heading"><div><h2>功能问题与修复</h2><p class="muted">已交付的功能仍可独立跟踪Bug，保留原交付记录。</p></div><el-button v-if="canReportBug" type="primary" @click="bugDialog = true">报告 Bug</el-button></div><el-select v-model="bugStatus" class="status-filter" aria-label="Bug状态筛选"><el-option label="全部Bug" value="ALL"/><el-option v-for="status in TASK_STATUSES" :key="status" :label="BUG_STATUS_LABELS[status]" :value="status" /></el-select><div v-if="!filteredBugs.length" class="empty">{{ bugs.length ? '当前筛选下没有Bug' : '当前没有报告Bug' }}</div><article v-for="bug in filteredBugs" :key="bug.id" class="issue-row"><div><el-button link type="primary" class="issue-title" @click="openTask(bug)">{{ bug.name }}</el-button><p class="muted">负责人 {{ bug.assigneeName }} · 截止 {{ bug.dueDate || '未设置' }}</p></div><div class="page-actions"><el-tag :type="TASK_STATUS_TYPES[bug.status]">{{ BUG_STATUS_LABELS[bug.status] }}</el-tag><el-button v-if="canChangeTask(bug)" :loading="busyTaskId === bug.id" :disabled="!!busyTaskId || busyNode" @click="quickStatus(bug)">{{ BUG_NEXT_ACTION[bug.status].label }}</el-button><el-button @click="openTask(bug)">查看详情</el-button></div></article></el-tab-pane>
           <el-tab-pane :label="'活动记录 ' + logs.length" name="activity"><div v-if="!logs.length" class="empty">暂无活动记录</div><article v-for="log in logs" :key="log.id" class="node-log"><strong>{{ logDetail(log) }}</strong><p class="muted">{{ log.userName || '系统' }} · {{ formatDateTime(log.createdAt) }}</p></article></el-tab-pane>
           <el-tab-pane v-if="legacyTasks.length" :label="'历史任务 ' + legacyTasks.length" name="history"><el-alert title="保留此前创建的任务、记录与附件。功能交付由负责人确认，不再按历史任务完成率计算。" type="info" :closable="false" /><div class="section-heading"><h2>历史任务</h2><el-button-group><el-button :type="mode === 'list' ? 'primary' : 'default'" plain @click="goView('list')">列表</el-button><el-button :type="mode === 'kanban' ? 'primary' : 'default'" plain @click="goView('kanban')">看板</el-button></el-button-group></div><el-select v-model="statusFilter" class="status-filter" aria-label="历史任务状态筛选" @change="updateFilters"><el-option label="全部状态" value="ALL"/><el-option label="未完成任务" value="OPEN"/><el-option v-for="status in TASK_STATUSES" :key="status" :label="TASK_STATUS_LABELS[status]" :value="status"/></el-select><template v-if="mode === 'list'"><article v-for="task in filteredTasks" :key="task.id" class="issue-row"><div><el-button link type="primary" class="issue-title" @click="openTask(task)">{{ task.name }}</el-button><p class="muted">{{ task.assigneeName }} · {{ task.dueDate || '未设截止日' }} · {{ task.noteCount || 0 }} 条记录</p></div><div class="page-actions"><el-tag :type="TASK_STATUS_TYPES[task.status]">{{ TASK_STATUS_LABELS[task.status] }}</el-tag><el-button v-if="canChangeTask(task)" :loading="busyTaskId === task.id" :disabled="!!busyTaskId" @click="quickStatus(task)">{{ TASK_NEXT_ACTION[task.status].label }}</el-button><el-button @click="openTask(task)">查看详情</el-button></div></article><div v-if="!filteredTasks.length" class="empty">当前筛选下没有历史任务</div></template><div v-else class="node-kanban"><section v-for="column in columns" :key="column.status" class="node-kanban-column"><h3>{{ column.label }} · {{ column.tasks.length }}</h3><article v-for="task in column.tasks" :key="task.id" class="node-kanban-card"><el-button link type="primary" class="issue-title" @click="openTask(task)">{{ task.name }}</el-button><p class="muted">{{ task.assigneeName }}</p><el-button v-if="canChangeTask(task)" :loading="busyTaskId === task.id" :disabled="!!busyTaskId" @click="quickStatus(task)">{{ TASK_NEXT_ACTION[task.status].label }}</el-button></article></section></div></el-tab-pane>
