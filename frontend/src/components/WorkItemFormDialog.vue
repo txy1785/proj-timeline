@@ -24,6 +24,12 @@ const location = ref(-1)
 const ownerTouched = ref(false)
 let generation = 0
 const form = reactive({ id: 0, name: '', description: '', type: 'FEATURE' as WorkItemType, planStart: '', planEnd: '', ownerId: 0 })
+/** 交付要求只在新建时填写，创建后由「交付资料」页维护；空行不提交。 */
+const MAX_REQUIREMENTS = 20
+const requirements = ref<string[]>([])
+const requirementLines = computed(() => requirements.value.map(line => line.trim()).filter(Boolean))
+function addRequirement() { if (requirements.value.length < MAX_REQUIREMENTS) requirements.value.push('') }
+function removeRequirement(index: number) { requirements.value = requirements.value.filter((_, position) => position !== index) }
 const isPm = computed(() => isProjectManager(auth.user, props.members))
 const modules = computed(() => (props.modules || []).filter(module => isPm.value || module.ownerId === auth.user?.id))
 const projectLevelAllowed = computed(() => isPm.value && props.canCreateProjectLevel !== false)
@@ -43,6 +49,7 @@ watch(() => props.modelValue, async open => {
   const item = props.workItem
   ownerTouched.value = false
   advanced.value = ''
+  requirements.value = ['']
   location.value = item ? item.moduleId || 0 : props.moduleId !== undefined ? props.moduleId || 0 : props.modules !== undefined ? -1 : 0
   Object.assign(form, {
     id: item?.id || 0, name: item?.name || '', description: item?.description || '', type: item?.type || 'FEATURE',
@@ -96,7 +103,7 @@ async function save() {
       planStart: form.planStart, planEnd: form.planEnd, ownerId: form.ownerId }
     const value = form.id
       ? await api<NodeItem>('PUT', `/nodes/${form.id}`, payload)
-      : await api<NodeItem>('POST', `/projects/${props.projectId}/nodes`, { ...payload, moduleId: location.value > 0 ? location.value : undefined })
+      : await api<NodeItem>('POST', `/projects/${props.projectId}/nodes`, { ...payload, moduleId: location.value > 0 ? location.value : undefined, requirements: requirementLines.value })
     emit('update:modelValue', false)
     ElMessage.success(form.id ? '工作项已更新' : '工作项已创建，可补充交付资料并开始工作')
     emit('saved', value)
@@ -131,6 +138,16 @@ async function save() {
         <el-collapse-item title="更多信息（类型、说明）" name="more">
           <el-form-item label="类型"><el-select v-model="form.type" style="width:100%"><el-option v-for="type in WORK_ITEM_TYPES" :key="type" :label="WORK_ITEM_TYPE_LABELS[type]" :value="type" /></el-select></el-form-item>
           <el-form-item label="说明"><el-input v-model="form.description" type="textarea" :rows="3" placeholder="补充交付范围或验收说明（可选）" /></el-form-item>
+          <el-form-item v-if="!form.id" label="交付要求">
+            <div class="requirement-rows">
+              <div v-for="index in requirements.length" :key="index" class="requirement-row">
+                <el-input v-model="requirements[index - 1]" type="textarea" :rows="2" maxlength="200" placeholder="例如：接口文档 v1、联调记录、测试报告（空行不提交）" />
+                <el-button link type="danger" :disabled="saving" @click="removeRequirement(index - 1)">删除</el-button>
+              </div>
+            </div>
+            <el-button link type="primary" :disabled="saving || requirements.length >= MAX_REQUIREMENTS" @click="addRequirement">添加一条</el-button>
+            <small class="field-hint">发布时约定需要提供的图纸、文档和测试资料；工作项开始后只能更新状态、备注与关联文件。最多 {{ MAX_REQUIREMENTS }} 条，每条 200 字以内。</small>
+          </el-form-item>
         </el-collapse-item>
       </el-collapse>
     </el-form>
@@ -142,5 +159,8 @@ async function save() {
 .form-intro{margin:0 0 20px;color:var(--muted)}
 .field-hint{display:block;width:100%;margin-top:6px;line-height:1.6;color:var(--muted)}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.requirement-rows{display:grid;gap:8px;width:100%}
+.requirement-row{display:flex;align-items:flex-start;gap:8px}
+.requirement-row>.el-button{flex:none}
 @media(max-width:600px){.form-grid{grid-template-columns:1fr;gap:0}}
 </style>

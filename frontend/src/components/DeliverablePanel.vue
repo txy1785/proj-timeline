@@ -3,7 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadFile } from 'element-plus'
 import { api, upload } from '../api/client'
-import type { Attachment, Deliverable, DeliverableFile, DeliverableStatus, User } from '../api/types'
+import type { Attachment, Deliverable, DeliverableFile, DeliverableStatus, NodeStatus, User } from '../api/types'
 import { selectableMembers } from '../utils/member'
 import { MAX_ATTACHMENT_BYTES } from '../utils/attachment'
 
@@ -17,7 +17,7 @@ const props=withDefaults(defineProps<{
   items:Deliverable[]
   members:User[]
   canManage:boolean
-  nodeClosed:boolean
+  nodeStatus:NodeStatus
   archived?:boolean
 }>(),{archived:false})
 const emit=defineEmits<{ (e:'refresh'):void; (e:'files-changed'):void }>()
@@ -33,13 +33,26 @@ const form=reactive({name:'',status:'WANTED' as DeliverableStatus,ownerId:undefi
 const total=computed(()=>props.items.length)
 const provided=computed(()=>props.items.filter(item=>item.status==='PROVIDED').length)
 const providedPercent=computed(()=>total.value?Math.round(provided.value/total.value*100):0)
-const canCreate=computed(()=>props.canManage&&!props.archived&&!props.nodeClosed)
+/** 三档锁：未开始全可改；进行中只能改状态/备注/关联文件；已完成或已取消只能改状态。 */
+const started=computed(()=>props.nodeStatus==='IN_PROGRESS')
+const closed=computed(()=>props.nodeStatus==='DONE'||props.nodeStatus==='CANCELLED')
+const canCreate=computed(()=>props.canManage&&!props.archived&&props.nodeStatus==='NOT_STARTED')
 const canEdit=computed(()=>props.canManage&&!props.archived)
-const canDelete=computed(()=>props.canManage&&!props.archived&&!props.nodeClosed)
+const canDelete=computed(()=>props.canManage&&!props.archived&&props.nodeStatus==='NOT_STARTED')
 const memberOptions=computed(()=>selectableMembers(props.members))
 const editing=computed(()=>props.items.find(item=>item.id===editingId.value))
+/** 名称与负责人是发布时的约定，工作项一开始就锁定；备注在完成后才锁。 */
+const nameLocked=computed(()=>started.value||closed.value)
+const remarkLocked=computed(()=>closed.value)
 /** 已完成/已取消或归档时文件只读，但状态仍可改。 */
-const fileLocked=computed(()=>props.nodeClosed||props.archived)
+const fileLocked=computed(()=>closed.value||props.archived)
+/** 空表文案：归档时先说明只读；否则未开始可直接新增，进行中与已结束都不允许新增，进行中额外说明原因。 */
+const emptyText=computed(()=>{
+  if(props.archived)return '项目已归档，交付要求只读'
+  if(closed.value)return '本工作项没有交付要求'
+  if(started.value)return '本工作项没有交付要求；工作项已开始，不能再新增'
+  return '尚未约定交付资料，可直接在下方上传文件'
+})
 
 function linkedFiles(item:Deliverable):DeliverableFile[]{return item.attachments||[]}
 function shownFiles(item:Deliverable):DeliverableFile[]{return linkedFiles(item).slice(0,SHOWN_FILE_TAGS)}
@@ -149,7 +162,7 @@ async function submit(){
     // 编辑时显式传 null 表示清空负责人；attachmentIds 传空数组即清空关联，不传则保留原有关联
     const payload:{name:string;status:DeliverableStatus;ownerId:number|null;remark:string;attachmentIds?:number[]}={name:form.name.trim(),status:form.status,ownerId:form.ownerId??null,remark:form.remark.trim()}
     // 已完成/已取消的工作项只能改状态，不传文件关联由服务端保留原值
-    if(!props.nodeClosed)payload.attachmentIds=form.attachmentIds
+    if(!closed.value)payload.attachmentIds=form.attachmentIds
     if(editingId.value)await api('PUT',`/deliverables/${editingId.value}`,payload)
     else await api('POST',`/nodes/${props.nodeId}/deliverables`,payload)
     dialog.value=false
@@ -172,7 +185,9 @@ async function remove(item:Deliverable){
     <div class="deliverable-head">
       <div>
         <h2>交付要求</h2>
-        <p class="muted">记录约定需要提供的图纸、文档和测试资料；一条要求可关联本工作项的多个文件，也可在弹窗里直接上传。资料数量不换算成功能进度。</p>
+        <p class="muted">工作项发布时约定的交付内容；工作项开始后只能更新状态、备注与关联文件。一条要求可关联本工作项的多个文件，也可在弹窗里直接上传；资料数量不换算成功能进度。</p>
+        <p v-if="started&&!archived" class="muted lock-hint">工作项进行中：不能新增或删除交付要求，名称与负责人已锁定。</p>
+        <p v-else-if="closed&&!archived" class="muted lock-hint">工作项已完成或已取消：只能更新交付物状态，关联文件只读。</p>
       </div>
       <div class="deliverable-actions">
         <el-tag :type="total&&provided===total?'success':'info'">已提供 {{provided}}/{{total}}</el-tag>
@@ -180,7 +195,7 @@ async function remove(item:Deliverable){
       </div>
     </div>
     <el-progress v-if="total" :percentage="providedPercent" :stroke-width="8" :show-text="false" style="margin:0 0 12px" />
-    <el-table :data="items" empty-text="尚未约定交付资料，可直接在下方上传文件">
+    <el-table :data="items" :empty-text="emptyText">
       <el-table-column prop="name" label="交付要求" min-width="200" />
       <el-table-column label="状态" width="100">
         <template #default="scope">
@@ -212,10 +227,11 @@ async function remove(item:Deliverable){
     </el-table>
 
     <el-dialog v-model="dialog" :title="editingId?'编辑交付物':'新增交付物'" width="560" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
-      <el-alert v-if="nodeClosed" title="工作项已完成或已取消，只能修改交付物状态" type="info" :closable="false" style="margin-bottom:14px" />
+      <el-alert v-if="closed" title="工作项已完成或已取消，只能修改交付物状态" type="info" :closable="false" style="margin-bottom:14px" />
+      <el-alert v-else-if="started" title="工作项进行中：只能修改状态、备注与关联文件，名称与负责人不可改" type="info" :closable="false" style="margin-bottom:14px" />
       <el-form label-position="top">
         <el-form-item label="交付物名称" required>
-          <el-input v-model="form.name" maxlength="200" :disabled="nodeClosed" placeholder="例如：接口文档 v1、联调记录、测试报告" />
+          <el-input v-model="form.name" maxlength="200" :disabled="nameLocked" placeholder="例如：接口文档 v1、联调记录、测试报告" />
         </el-form-item>
         <el-form-item label="状态">
           <el-radio-group v-model="form.status">
@@ -224,7 +240,7 @@ async function remove(item:Deliverable){
           </el-radio-group>
         </el-form-item>
         <el-form-item label="负责人">
-          <el-select v-model="form.ownerId" clearable :disabled="nodeClosed" placeholder="未指定" style="width:100%">
+          <el-select v-model="form.ownerId" clearable :disabled="nameLocked" placeholder="未指定" style="width:100%">
             <el-option v-for="user in memberOptions" :key="user.id" :label="user.name" :value="user.id" />
           </el-select>
         </el-form-item>
@@ -246,7 +262,7 @@ async function remove(item:Deliverable){
           </div>
         </el-form-item>
         <el-form-item label="备注">
-          <el-input v-model="form.remark" type="textarea" maxlength="500" :disabled="nodeClosed" placeholder="资料位置、版本说明或注意事项" />
+          <el-input v-model="form.remark" type="textarea" maxlength="500" :disabled="remarkLocked" placeholder="资料位置、版本说明或注意事项" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -261,6 +277,7 @@ async function remove(item:Deliverable){
 .deliverable-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
 .deliverable-head h2{margin:0 0 4px}
 .deliverable-head p{margin:0 0 14px;font-size:13px}
+.lock-hint{margin-top:-8px}
 .deliverable-actions{display:flex;align-items:center;gap:10px;flex:none}
 .linked-files{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .linked-file{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border:1px solid var(--line);border-radius:6px;background:#f8fafc;font-size:12px;overflow-wrap:anywhere}

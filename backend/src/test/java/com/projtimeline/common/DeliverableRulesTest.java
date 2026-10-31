@@ -75,8 +75,35 @@ class DeliverableRulesTest {
     }
 
     /**
-     * 契约守卫：`onlyStatusChanged` 只比较约定键，两边键名必须与 WorkService 的 UPDATE 可写列一一对应。
-     * 将来给交付物加可写列时，这里和规则方法都要补键，否则「已完成/已取消节点只能改状态」会漏判新增列。
+     * 进行中只允许改状态、备注与关联文件：名称、负责人、排序都算改动（交付要求是开工前的承诺）。
+     * 已结束更严，备注与关联文件同样锁死，见 {@link DeliverableRules#onlyStatusChanged}。
+     */
+    @Test
+    void onlyProgressAllowedLocksNameOwnerAndSortButAllowsRemarkStatusAndFiles() {
+        Map<String, Object> before = row("接口文档 v1", 3L, "备注", List.of(9L), 0);
+        assertTrue(DeliverableRules.onlyProgressAllowed(before, values("接口文档 v1", 3L, "新备注", List.of(9L, 10L), 0, "PROVIDED")));
+        assertFalse(DeliverableRules.onlyProgressAllowed(before, values("接口文档 v2", 3L, "备注", List.of(9L), 0, "WANTED")));
+        assertFalse(DeliverableRules.onlyProgressAllowed(before, values("接口文档 v1", 4L, "备注", List.of(9L), 0, "WANTED")));
+        assertFalse(DeliverableRules.onlyProgressAllowed(before, values("接口文档 v1", 3L, "备注", List.of(9L), 1, "WANTED")));
+        // 未指定负责人的历史记录：两边都为 null 时不算改派
+        Map<String, Object> noOwner = row("联调记录", null, null, List.of(), 0);
+        assertTrue(DeliverableRules.onlyProgressAllowed(noOwner, values("联调记录", null, "新备注", List.of(), 0, "WANTED")));
+        assertFalse(DeliverableRules.onlyProgressAllowed(noOwner, values("联调记录", 5L, "新备注", List.of(), 0, "WANTED")));
+    }
+
+    /** 三档锁是包含关系：进行中放开的备注与关联文件，在已结束上仍然要 409。 */
+    @Test
+    void progressRuleIsStrictlyLooserThanTheClosedRule() {
+        Map<String, Object> before = row("接口文档 v1", 3L, "备注", List.of(9L), 0);
+        assertTrue(DeliverableRules.onlyProgressAllowed(before, values("接口文档 v1", 3L, "新备注", List.of(9L), 0, "PROVIDED")));
+        assertFalse(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 3L, "新备注", List.of(9L), 0, "PROVIDED")));
+        assertTrue(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 3L, "备注", List.of(9L), 0, "PROVIDED")));
+    }
+
+    /**
+     * 人工约定（不是机械绑定）：本用例只锁住本地 row() / values() 的键集合，不会自动发现 WorkService 新增的可写列。
+     * 给交付物加可写列时，必须同时补 row() / values() 夹具与 `onlyStatusChanged` / `onlyProgressAllowed` 的比较键，
+     * 否则「开工后只能改状态/备注/文件」会漏判新增列。
      */
     @Test
     void fixturesCoverEveryManagedKey() {

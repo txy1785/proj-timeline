@@ -44,6 +44,8 @@ public class WorkService {
             """;
     /** 一条交付记录最多关联的文件数，防止误传整目录把清单撑爆。 */
     private static final int MAX_DELIVERABLE_ATTACHMENTS = 20;
+    /** 新建工作项时一次性能约定的交付要求条数，防止把整份需求清单塞进创建接口。 */
+    private static final int MAX_NODE_REQUIREMENTS = 20;
     /** 进展记录列表与单行共用列清单；调用方需保证 n（task_notes）/u（作者）/e（最后编辑人）别名可用。 */
     private static final String NOTE_SELECT = """
             SELECT n.id,n.task_id,n.title,n.author_id,u.name author_name,n.content,n.created_at,
@@ -113,12 +115,21 @@ public class WorkService {
         }
         LocalDate start = requiredDate(body, "planStart"), end = requiredDate(body, "planEnd"); checkRange(start, end);
         permissions.requireAssignable(projectId, owner);
+        // 先校验交付要求再写工作项：被拒的创建不落半个工作项，也不依赖事务回滚
+        List<String> requirements = requirementNames(body);
         Map<String, Object> values = new HashMap<>(); values.put("project", projectId);
         values.put("module", projectLevel ? null : requestedModule); values.put("type", type); values.put("name", nameText(body));
         values.put("description", text(body, "description")); values.put("start", start); values.put("end", end); values.put("owner", owner);
         values.put("sort", Optional.ofNullable(intValue(body, "sortOrder")).orElse(0)); values.put("creator", permissions.current().id());
         long id = db.insert("INSERT INTO nodes(project_id,module_id,type,name,description,plan_start,plan_end,owner_id,sort_order,created_by) VALUES(:project,:module,:type,:name,:description,:start,:end,:owner,:sort,:creator)", values);
-        log(id, "CREATE", projectLevel ? "创建项目级工作项" : "创建工作项", null, map("name", values.get("name"), "type", type));
+        // 交付要求是发布工作时一次性约定的承诺：与工作项同一事务落库，负责人与创建人取工作项
+        for (int index = 0; index < requirements.size(); index++) {
+            db.insert("""
+                    INSERT INTO node_deliverables(node_id,project_id,name,status,owner_id,remark,sort_order,created_by)
+                    VALUES(:node,:project,:name,'WANTED',:owner,NULL,:sort,:creator)
+                    """, map("node", id, "project", projectId, "name", requirements.get(index), "owner", owner, "sort", index, "creator", values.get("creator")));
+        }
+        log(id, "CREATE", projectLevel ? "创建项目级工作项" : "创建工作项", null, map("name", values.get("name"), "type", type, "requirements", requirements.size()));
         notifications.notify(owner, "TASK_ASSIGN", "工作项已指派", "/nodes/"+id);
         return node(id);
     }
@@ -241,11 +252,17 @@ public class WorkService {
     @Transactional
     public Map<String, Object> createDeliverable(long nodeId, Map<String, Object> body) {
         permissions.requireNodeManager(nodeId);
-        // 与新增任务同一锁顺序：先锁工作项行，避免与"完成工作项"并发时给已关闭工作项补清单
+        // 与新增任务同一锁顺序：先锁工作项行，避免与"开始工作项"并发时给已开工工作项补交付要求
         Map<String, Object> node = db.one("SELECT id,project_id,status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "工作项不存在");
-        requireNodeOpen(node, "已完成或已取消的工作项不能新增交付物");
+        requireNodeNotStarted(node, "工作项已开始，不能新增交付要求");
         long projectId = number(node.get("projectId"));
-        Map<String, Object> values = deliverableValues(body, projectId, nodeId, null);
+        // 未指定 sortOrder 时排到末尾：列表按 (sort_order, id) 升序，取当前最大值 +1 才等于创建顺序（与创建工作项时的 0..n-1 同一口径）
+        Map<String, Object> request = body;
+        if (!body.containsKey("sortOrder")) {
+            request = new HashMap<>(body);
+            request.put("sortOrder", nextDeliverableSort(nodeId));
+        }
+        Map<String, Object> values = deliverableValues(request, projectId, nodeId, null);
         values.put("node", nodeId); values.put("project", projectId); values.put("creator", permissions.current().id());
         long id = db.insert("""
                 INSERT INTO node_deliverables(node_id,project_id,name,status,owner_id,remark,sort_order,created_by)
@@ -268,8 +285,13 @@ public class WorkService {
         // 关联文件 id 只参与"是否真的改动"的比较，不属于响应字段，读取时单独挂上来
         before.put("attachmentIds", beforeAttachments);
         Map<String, Object> values = deliverableValues(body, number(node.get("projectId")), nodeId, before);
+        String nodeStatus = Objects.toString(node.get("status"));
+        // 开工后约定已生效：只允许改状态、备注与关联文件，改名、改派、改排序一律拒绝
+        if ("IN_PROGRESS".equals(nodeStatus) && !DeliverableRules.onlyProgressAllowed(before, values)) {
+            throw BusinessException.conflict("工作项已开始，交付要求只能更新状态、备注和关联文件");
+        }
         // 已关闭工作项只允许补标记"已提供"（补资料是常态），改名、改派、换文件一律拒绝，避免事后改写交付事实
-        if (Set.of("DONE", "CANCELLED").contains(Objects.toString(node.get("status"))) && !DeliverableRules.onlyStatusChanged(before, values)) {
+        if (Set.of("DONE", "CANCELLED").contains(nodeStatus) && !DeliverableRules.onlyStatusChanged(before, values)) {
             throw BusinessException.conflict("工作项已完成或已取消，只能更新交付物状态");
         }
         // 整表回传但没有任何变化时不写日志，与任务状态接口的幂等口径一致
@@ -278,7 +300,7 @@ public class WorkService {
             return before;
         }
         values.put("id", id);
-        // 可写列发生变化时，同步更新 DeliverableRules.onlyStatusChanged 的比较键，否则关闭工作项上会漏判新增列
+        // 可写列发生变化时，同步更新 DeliverableRules.onlyProgressAllowed / onlyStatusChanged 的比较键，否则开工或关闭工作项上会漏判新增列
         db.update("UPDATE node_deliverables SET name=:name,status=:status,owner_id=:owner,remark=:remark,sort_order=:sort WHERE id=:id", values);
         List<Long> attachments = asAttachmentIds(values.get("attachments"));
         // 关联集合变了才重写关联行；仅顺序不同不算变化（与 DeliverableRules 同口径），避免无意义删插
@@ -296,7 +318,7 @@ public class WorkService {
         Map<String, Object> node = db.one("SELECT status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "工作项不存在");
         lockDeliverable(id);
         Map<String, Object> before = deliverable(id);
-        requireNodeOpen(node, "已完成或已取消的工作项不能删除交付物");
+        requireNodeNotStarted(node, "工作项已开始，不能删除交付要求");
         // 先删关联行再删主行，同一事务；文件本身保留，交付记录不留孤儿关联
         db.update("DELETE FROM node_deliverable_attachments WHERE deliverable_id=:id", Map.of("id", id));
         if (db.update("DELETE FROM node_deliverables WHERE id=:id", Map.of("id", id)) != 1) throw BusinessException.conflict("交付物已被删除");
@@ -668,6 +690,12 @@ public class WorkService {
         catch (ArithmeticException | NumberFormatException ex) { throw BusinessException.badRequest("attachmentIds 必须是整数数组"); }
     }
 
+    /** 新增清单项未指定排序时取当前最大 sort_order + 1；工作项行已 FOR UPDATE，读最大值与插入在同一事务内完成。 */
+    private int nextDeliverableSort(long nodeId) {
+        Object max = db.scalar("SELECT COALESCE(MAX(sort_order),-1) FROM node_deliverables WHERE node_id=:node", Map.of("node", nodeId));
+        return ((Number) max).intValue() + 1;
+    }
+
     /** 新增（before 为 null）与编辑共用字段口径；编辑未传的字段保留原值，传 null 表示清空负责人或关联文件。 */
     private Map<String, Object> deliverableValues(Map<String, Object> body, long projectId, long nodeId, Map<String, Object> before) {
         String name = before == null || body.containsKey("name") ? requiredText(body, "name") : Objects.toString(before.get("name"));
@@ -705,6 +733,28 @@ public class WorkService {
         return new ArrayList<>(unique);
     }
 
+    /**
+     * 创建工作项时提交的交付要求名称：元素必须是字符串或数字，逐条 trim、忽略空白项，单条 ≤200 字，最多 {@value #MAX_NODE_REQUIREMENTS} 条。
+     * 只做取值与校验，落库由 createNode 在同一事务内完成。
+     */
+    private static List<String> requirementNames(Map<String, Object> body) {
+        Object raw = body.get("requirements");
+        if (raw == null) return List.of();
+        if (!(raw instanceof List<?> items)) throw BusinessException.badRequest("requirements 必须是数组");
+        List<String> names = new ArrayList<>();
+        for (Object item : items) {
+            // 只接受文本与数字：对象、数组、布尔与 null 走 toString() 会落成 "[{a=1}]" 这类脏名称
+            if (!(item instanceof String) && !(item instanceof Number)) throw BusinessException.badRequest("交付要求名称必须是文本");
+            String name = item.toString().trim();
+            if (name.isEmpty()) continue;
+            if (name.length() > 200) throw BusinessException.badRequest("交付要求名称不能超过 200 字");
+            names.add(name);
+        }
+        if (names.size() > MAX_NODE_REQUIREMENTS)
+            throw BusinessException.badRequest("一个工作项最多约定 " + MAX_NODE_REQUIREMENTS + " 条交付要求");
+        return names;
+    }
+
     private void requireNodeAttachment(long nodeId, long attachmentId) {
         Map<String, Object> row = db.optional("SELECT id FROM attachments WHERE id=:id AND owner_type='NODE' AND owner_id=:node AND deleted=0",
                 Map.of("id", attachmentId, "node", nodeId));
@@ -713,6 +763,11 @@ public class WorkService {
 
     private static void requireNodeOpen(Map<String, Object> node, String message) {
         if (Set.of("DONE", "CANCELLED").contains(Objects.toString(node.get("status")))) throw BusinessException.conflict(message);
+    }
+
+    /** 交付要求只在「未开始」时可增删：开工后名单是承诺，不再按草稿处理。 */
+    private static void requireNodeNotStarted(Map<String, Object> node, String message) {
+        if (!"NOT_STARTED".equals(Objects.toString(node.get("status")))) throw BusinessException.conflict(message);
     }
 
     /** 读回数据库整型列：按整数字符串严格解析，避免数值直接取 long 时的静默截断。 */
