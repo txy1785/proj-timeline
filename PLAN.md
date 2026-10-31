@@ -533,3 +533,16 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 已提交 `546bb95`（feat）与 `b5827dc`（docs），以合并提交 `91c6104` 集成本地 develop；`git push origin develop` 前两次因网络中断失败，第三次成功推送（`2058be8..7050b21 develop -> develop`）。
 - 用户确认后由调度方重启本机后端：停掉 IntelliJ 启动的旧进程（PID 27404）→ `mvn -DskipTests package` → 后台 `java -jar` 启动。启动日志 `Successfully applied 1 migration to schema proj_timeline, now at version v16`（0.13s），`/actuator/health` = UP，5173 = 200，库内 `flyway_schema_history` 最新为 16、`node_deliverable_attachments` 已存在。
 - 仍未验证：浏览器里登录后的多文件上传真实往返（需要你的账号会话）；卡片区整卡 `@click` 对键盘用户不可达（真实 `RouterLink` 可 Tab/回车进入详情，整卡点击为鼠标增强，本轮按可接受保留）；`sort_order` 冻结为首次创建顺序（无拖拽排序入口）。
+
+## 2026-10-31 · 交付要求改为发布时约定（三档锁）
+
+- 用户追问「交付要求不应该是发布任务时就规定好的吗」，核对现状确认：新建工作项表单里没有交付要求，`createNode` 只写 `nodes`，清单在交付前可随意增删改，甚至一条都不建也能确认交付 —— 要求能被改成刚好等于交上来的东西。用户选定口径 A：**发布时约定，工作项一开始就冻结**。
+- 从 develop 建立 `feature/deliverable-requirements-at-creation`，两路子代理并行；本轮**零迁移、零表结构变更**（Flyway 仍在 V16）。
+- 后端：`POST /projects/{id}/nodes` 新增可选 `requirements: string[]`（元素须字符串或数字、逐条 trim、空白项忽略、单条 ≤200 字、最多 20 条；校验先于写库，被拒创建不落任何行），与工作项同一事务逐条落库（status=WANTED、owner 取工作项负责人、sort 按提交顺序 0..n-1），CREATE 日志只记条数、不刷 `DELIVERABLE_ADD`；三档锁：未开始自由维护 / 进行中只允许 `status`+`remark`+`attachmentIds`（改名、改派、改排序、新增、删除一律 409）/ 已完成或已取消只允许改 `status`。`DeliverableRules` 里三档写成包含关系（`onlyStatusChanged = onlyProgressAllowed && 备注与文件集合未变`），并有守卫用例钉住方向。
+- 后端顺带修：`createDeliverable` 未传 `sortOrder` 时取 `MAX(sort_order)+1`（此前恒为 0，新建的交付要求会插到列表中间，与「实际等于创建顺序」的文档承诺冲突）；requirements 超限文案改「交付要求名称不能超过 200 字」与表单术语一致；补 CANCELLED 档与项目级工作项（owner 默认 PM）用例。
+- 前端：`WorkItemFormDialog` 在「说明」后新增「交付要求」多行输入（仅新建时出现、最多 20 行、空行不提交）；`DeliverablePanel` 的 prop 由 `nodeClosed:boolean` 改为 `nodeStatus:NodeStatus`，组件内派生 `started/closed/nameLocked/remarkLocked/fileLocked/canCreate/canDelete`（消除「两个布尔值互相矛盾」的隐患），进行中隐藏新增/删除、名称与负责人只读、备注与关联文件仍可改；空态与提示按四档给文案（归档 / 未开始 / 进行中 / 已结束）。
+- 验证：Maven **96 项**通过（`DeliverableAttachmentTest` 17 项，含排序末尾、未开始放行侧、CANCELLED 档、项目级 requirements、非文本元素四条新用例）；前端 `lint`/`typecheck`/`build` 通过；Playwright `task-flow.spec.mjs` **27 项**通过（新增「建项时填的交付要求随发布落库并在开始后锁定」用例，含锁与放行两侧、空行过滤断言）。
+- 独立审核（全新上下文、只读）：结论**可合并、无 P1**；提出 3 条 P2 + 7 条 P3，全部处置 —— P2-1 排序口径（已修 + 用例）、P2-2 `PROJECT_MEMORY` 旧口径（调度方改第 8/83 条）、P2-3 未开始放行侧零覆盖（已补）；P3 收口非文本元素 400、文案统一、空态三档、自指键守卫注释如实化、CANCELLED 与项目级用例、e2e 放行侧与空行断言、§3.8 写明「文件本体不随清单锁定」。审核另确认：状态机单向、无法退回未开始解锁；全仓只有 `WorkService` 一处写 `node_deliverables`，无旁路；夹具补 `AUTO_INCREMENT`/`status` 默认值是消除偏差而非掩盖。
+- 已提交 `4a96cad`（feat）以合并提交 `81ca12d` 集成 develop 并推送（`31e83d4..81ca12d`）；功能分支保留未删。
+- 已由调度方重启本机 58080 后端（`mvn -DskipTests package` + 后台 `java -jar`）：启动日志 `Schema proj_timeline is up to date. No migration necessary`，`/actuator/health` UP、5173 = 200。
+- 仍未验证：登录后在浏览器里完整走一遍「新建工作项填交付要求 → 开始 → 只能改状态/备注/文件」（需要你的账号会话）；历史工作项里已存在的清单若有多个 `sort_order=0`，仍是老顺序（新增条目现在会排到末尾，不重排历史）。
