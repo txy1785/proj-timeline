@@ -322,9 +322,9 @@ CREATE TABLE node_notes (
 ) ENGINE=InnoDB COMMENT='工作项进展记录（命名的 Markdown 文件，可再编辑）';
 
 -- ------------------------------------------------------------
--- 13. 工作项交付物清单（Flyway V9）
+-- 13. 工作项交付物清单（Flyway V9，V16 起支持关联多个文件）
 --     回答"这个工作项要交什么、还缺什么、文件在哪"；文件复用 attachments 的工作项级文件，
---     清单项只可选关联一个同工作项附件，不新建文件体系、不做跨工作项依赖。
+--     一条清单项可关联多个同工作项附件（关联关系见 13a），不新建文件体系、不做跨工作项依赖。
 -- ------------------------------------------------------------
 CREATE TABLE node_deliverables (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -334,7 +334,7 @@ CREATE TABLE node_deliverables (
   status        ENUM('WANTED','PROVIDED') NOT NULL DEFAULT 'WANTED' COMMENT 'WANTED 待提供 / PROVIDED 已提供',
   owner_id      BIGINT UNSIGNED NULL COMMENT '负责人，为空表示未指定',
   remark        VARCHAR(500) NULL COMMENT '备注，如资料在外部系统的位置',
-  attachment_id BIGINT UNSIGNED NULL COMMENT '可选关联文件，必须是同一工作项下的附件',
+  attachment_id BIGINT UNSIGNED NULL COMMENT '已弃用（V16 起）：交付物可关联多个文件，改用 node_deliverable_attachments；新代码不读不写',
   sort_order    INT NOT NULL DEFAULT 0,
   created_by    BIGINT UNSIGNED NULL,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -349,6 +349,24 @@ CREATE TABLE node_deliverables (
   CONSTRAINT fk_deliverable_attachment FOREIGN KEY (attachment_id) REFERENCES attachments(id),
   CONSTRAINT fk_deliverable_creator FOREIGN KEY (created_by) REFERENCES users(id)
 ) ENGINE=InnoDB COMMENT='工作项交付物清单';
+
+-- ------------------------------------------------------------
+-- 13a. 交付物关联文件（Flyway V16）
+--      一条交付记录可关联多个工作项文件；sort_order 取提交顺序，读取按 (sort_order, id) 升序。
+--      交付物删除时关联行同一事务删除；附件软删除后关联保留，读取时 deleted=1。
+-- ------------------------------------------------------------
+CREATE TABLE node_deliverable_attachments (
+  id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  deliverable_id BIGINT UNSIGNED NOT NULL,
+  attachment_id  BIGINT UNSIGNED NOT NULL,
+  sort_order     INT NOT NULL DEFAULT 0,
+  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_deliverable_attachment (deliverable_id, attachment_id),
+  KEY idx_deliverable_attachment_ref (attachment_id),
+  CONSTRAINT fk_dda_deliverable FOREIGN KEY (deliverable_id) REFERENCES node_deliverables(id),
+  CONSTRAINT fk_dda_attachment FOREIGN KEY (attachment_id) REFERENCES attachments(id)
+) ENGINE=InnoDB COMMENT='交付物关联文件（一条交付记录可关联多个工作项文件）';
 
 -- ------------------------------------------------------------
 -- 14. 模块变更申请（Flyway V11）

@@ -436,12 +436,19 @@ test('members report a Bug directly against a delivered function with no repair 
 
 test('delivery requirements and actual files share the materials tab', async ({ page }) => {
   const state=await prepare(page,'USER',2)
-  state.deliverables.push({id:1,nodeId:106,projectId:1,name:'接口设计说明',status:'PROVIDED',attachmentId:50,attachmentTitle:'接口文档'})
+  // 4 个关联文件：只展示前 3 个并折成 +1，其中一个快照已标记删除
+  state.deliverables.push({id:1,nodeId:106,projectId:1,name:'接口设计说明',status:'PROVIDED',attachments:[{id:50,title:'接口文档',originalName:'api.txt',sizeBytes:50,version:1,deleted:0},{id:51,title:'联调记录',originalName:'jitiao.txt',sizeBytes:60,version:2,deleted:0},{id:52,title:'测试报告',originalName:'report.txt',sizeBytes:70,version:1,deleted:1},{id:53,title:'验收单',originalName:'accept.txt',sizeBytes:80,version:1,deleted:0}]})
   state.files.push({id:50,projectId:1,ownerType:'NODE',ownerId:106,category:'NODE_DESIGN',categoryName:'功能设计说明',title:'接口文档',originalName:'api.txt',sizeBytes:50,version:1,uploaderId:4,createdAt:'2026-10-27T09:00:00'})
   await page.goto('/nodes/106')
   await page.getByRole('tab',{name:'交付资料',exact:true}).click()
   await expect(page.getByRole('heading',{name:'交付要求',exact:true})).toBeVisible()
   await expect(page.getByText('接口设计说明',{exact:true})).toBeVisible()
+  // 关联文件列展示的是交付记录快照里的文件名；缩到交付面板内，避免与下方文件表格的同名列冲突
+  const linked=page.locator('.deliverable-panel .linked-file')
+  await expect(linked).toHaveCount(3)
+  await expect(linked.first()).toHaveText('接口文档')
+  await expect(linked.nth(2)).toContainText('已删除')
+  await expect(page.locator('.deliverable-panel').getByText('+1',{exact:true})).toBeVisible()
   await expect(page.getByRole('heading',{name:'图纸、文档与实际文件',exact:true})).toBeVisible()
   await expect(page.getByText('api.txt',{exact:true})).toBeVisible()
   await expect(page.getByRole('tab',{name:'文件',exact:true})).toHaveCount(0)

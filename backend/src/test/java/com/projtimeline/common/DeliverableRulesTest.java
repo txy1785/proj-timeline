@@ -3,6 +3,7 @@ package com.projtimeline.common;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -34,28 +35,43 @@ class DeliverableRulesTest {
 
     @Test
     void onlyStatusChangedIgnoresStatusButDetectsOtherEdits() {
-        Map<String, Object> before = row("接口文档 v1", 3L, "备注", 9L, 0);
-        assertTrue(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 3L, "备注", 9L, 0, "PROVIDED")));
+        Map<String, Object> before = row("接口文档 v1", 3L, "备注", List.of(9L), 0);
+        assertTrue(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 3L, "备注", List.of(9L), 0, "PROVIDED")));
 
-        assertFalse(DeliverableRules.onlyStatusChanged(before, values("接口文档 v2", 3L, "备注", 9L, 0, "PROVIDED")));
-        assertFalse(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 4L, "备注", 9L, 0, "PROVIDED")));
-        assertFalse(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 3L, "新备注", 9L, 0, "PROVIDED")));
-        assertFalse(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 3L, "备注", null, 0, "PROVIDED")));
-        assertFalse(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 3L, "备注", 9L, 1, "PROVIDED")));
+        assertFalse(DeliverableRules.onlyStatusChanged(before, values("接口文档 v2", 3L, "备注", List.of(9L), 0, "PROVIDED")));
+        assertFalse(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 4L, "备注", List.of(9L), 0, "PROVIDED")));
+        assertFalse(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 3L, "新备注", List.of(9L), 0, "PROVIDED")));
+        assertFalse(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 3L, "备注", List.of(), 0, "PROVIDED")));
+        assertFalse(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 3L, "备注", List.of(9L), 1, "PROVIDED")));
     }
 
     @Test
-    void onlyStatusChangedHandlesNullOwnerAndAttachment() {
-        Map<String, Object> before = row("联调记录", null, null, null, 0);
-        assertTrue(DeliverableRules.onlyStatusChanged(before, values("联调记录", null, null, null, 0, "PROVIDED")));
-        assertFalse(DeliverableRules.onlyStatusChanged(before, values("联调记录", 5L, null, null, 0, "PROVIDED")));
+    void onlyStatusChangedHandlesNullOwnerAndEmptyAttachments() {
+        Map<String, Object> before = row("联调记录", null, null, List.of(), 0);
+        assertTrue(DeliverableRules.onlyStatusChanged(before, values("联调记录", null, null, List.of(), 0, "PROVIDED")));
+        assertFalse(DeliverableRules.onlyStatusChanged(before, values("联调记录", 5L, null, List.of(), 0, "PROVIDED")));
+        // before 侧没有关联文件（null）与空集合等价
+        Map<String, Object> legacy = row("历史清单", null, null, null, 0);
+        assertTrue(DeliverableRules.onlyStatusChanged(legacy, values("历史清单", null, null, List.of(), 0, "PROVIDED")));
+    }
+
+    /** 一条交付记录可关联多个文件：新增、删除、换任一元素都算改动，仅顺序不同不算。 */
+    @Test
+    void onlyStatusChangedComparesAttachmentSetInsteadOfSingleFile() {
+        Map<String, Object> before = row("接口文档 v1", 3L, "备注", List.of(9L, 10L), 0);
+        assertTrue(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 3L, "备注", List.of(10L, 9L), 0, "PROVIDED")));
+        assertFalse(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 3L, "备注", List.of(9L), 0, "PROVIDED")));
+        assertFalse(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 3L, "备注", List.of(9L, 10L, 11L), 0, "PROVIDED")));
+        assertFalse(DeliverableRules.onlyStatusChanged(before, values("接口文档 v1", 3L, "备注", List.of(9L, 11L), 0, "PROVIDED")));
+        assertTrue(DeliverableRules.unchanged(before, values("接口文档 v1", 3L, "备注", List.of(10L, 9L), 0, "WANTED")));
+        assertFalse(DeliverableRules.unchanged(before, values("接口文档 v1", 3L, "备注", List.of(9L, 10L, 11L), 0, "WANTED")));
     }
 
     @Test
     void unchangedAlsoComparesStatus() {
-        Map<String, Object> before = row("接口文档 v1", 3L, "备注", 9L, 0);
-        assertTrue(DeliverableRules.unchanged(before, values("接口文档 v1", 3L, "备注", 9L, 0, "WANTED")));
-        assertFalse(DeliverableRules.unchanged(before, values("接口文档 v1", 3L, "备注", 9L, 0, "PROVIDED")));
+        Map<String, Object> before = row("接口文档 v1", 3L, "备注", List.of(9L), 0);
+        assertTrue(DeliverableRules.unchanged(before, values("接口文档 v1", 3L, "备注", List.of(9L), 0, "WANTED")));
+        assertFalse(DeliverableRules.unchanged(before, values("接口文档 v1", 3L, "备注", List.of(9L), 0, "PROVIDED")));
     }
 
     /**
@@ -64,29 +80,29 @@ class DeliverableRulesTest {
      */
     @Test
     void fixturesCoverEveryManagedKey() {
-        assertEquals(Set.of("name", "ownerId", "remark", "attachmentId", "sortOrder", "status"), row("n", 1L, "r", 2L, 0).keySet());
-        assertEquals(Set.of("name", "owner", "remark", "attachment", "sort", "status"), values("n", 1L, "r", 2L, 0, "WANTED").keySet());
+        assertEquals(Set.of("name", "ownerId", "remark", "attachmentIds", "sortOrder", "status"), row("n", 1L, "r", List.of(2L), 0).keySet());
+        assertEquals(Set.of("name", "owner", "remark", "attachments", "sort", "status"), values("n", 1L, "r", List.of(2L), 0, "WANTED").keySet());
     }
 
-    /** before 侧模拟 DataAccess 返回的行：驼峰列名、Long/Integer 混用。 */
-    private static Map<String, Object> row(String name, Long ownerId, String remark, Long attachmentId, Integer sortOrder) {
+    /** before 侧模拟 DataAccess 返回的行：驼峰列名、Long/Integer 混用；关联文件是 id 列表。 */
+    private static Map<String, Object> row(String name, Long ownerId, String remark, List<Long> attachmentIds, Integer sortOrder) {
         Map<String, Object> before = new HashMap<>();
         before.put("name", name);
         before.put("ownerId", ownerId);
         before.put("remark", remark);
-        before.put("attachmentId", attachmentId);
+        before.put("attachmentIds", attachmentIds);
         before.put("sortOrder", sortOrder);
         before.put("status", "WANTED");
         return before;
     }
 
     /** values 侧模拟写库参数名；sort 用 Integer，便于覆盖 Number 之间的比较。 */
-    private static Map<String, Object> values(String name, Long owner, String remark, Long attachment, Integer sort, String status) {
+    private static Map<String, Object> values(String name, Long owner, String remark, List<Long> attachments, Integer sort, String status) {
         Map<String, Object> values = new HashMap<>();
         values.put("name", name);
         values.put("owner", owner);
         values.put("remark", remark);
-        values.put("attachment", attachment);
+        values.put("attachments", attachments);
         values.put("sort", sort);
         values.put("status", status);
         return values;
