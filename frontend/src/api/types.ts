@@ -27,8 +27,10 @@ export interface Task { id: number; nodeId: number; name: string; description?: 
 export interface NoteRecord { id: number; title: string; authorId: number; authorName: string; content: string; createdAt: string; updatedBy?: number; updatedByName?: string; updatedAt?: string }
 export interface TaskNote extends NoteRecord { taskId: number }
 export interface NodeNote extends NoteRecord { nodeId: number }
-/** 工作项交付物清单项：文件复用工作项附件，attachmentId 可选。 */
-export interface Deliverable { id: number; nodeId: number; projectId: number; name: string; status: DeliverableStatus; ownerId?: number; ownerName?: string; remark?: string; attachmentId?: number; attachmentTitle?: string; attachmentOriginalName?: string; attachmentDeleted?: number; sortOrder?: number; createdAt?: string; updatedAt?: string }
+/** 交付记录关联的工作项文件快照；`deleted` 为 1 表示文件已软删除，保留标题供回看。 */
+export interface DeliverableFile { id: number; title: string; originalName: string; contentType?: string; sizeBytes: number; version: number; deleted: number }
+/** 工作项交付物清单项：一条记录可关联同一工作项的多个文件，提交时传 `attachmentIds`。 */
+export interface Deliverable { id: number; nodeId: number; projectId: number; name: string; status: DeliverableStatus; ownerId?: number; ownerName?: string; remark?: string; attachments: DeliverableFile[]; sortOrder?: number; createdAt?: string; updatedAt?: string }
 export interface WorkLog { id: number; taskId: number; userId: number; userName: string; workDate: string; days: number; note?: string }
 export interface Notification { id: number; type: string; title: string; content?: string; link?: string; readAt?: string; createdAt: string }
 export interface Report { id?: number; projectId: number; weekStart: string; weekEnd: string; note?: string; status: ReportStatus; content: Record<string, unknown> & { actualDays?: number; plannedDays?: number; completedNodes?: Record<string, unknown>[]; exceptionNodes?: Record<string, unknown>[]; nextWeekDueNodes?: Record<string, unknown>[] } }

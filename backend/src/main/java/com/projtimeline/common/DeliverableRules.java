@@ -1,5 +1,7 @@
 package com.projtimeline.common;
 
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -9,8 +11,9 @@ import java.util.Set;
  * 工作项交付物的纯规则：状态归一化，以及「除状态外是否真的改动」的判定。
  * <p>
  * 放在 common 是因为它不依赖数据库、需要单测覆盖；WorkService 只负责取数与落库。
- * before 使用 DataAccess 的驼峰列名（name/ownerId/remark/attachmentId/sortOrder），
- * values 使用写库参数名（name/owner/remark/attachment/sort），两套键名在此集中对齐。
+ * before 使用 DataAccess 的驼峰列名（name/ownerId/remark/attachmentIds/sortOrder），
+ * values 使用写库参数名（name/owner/remark/attachments/sort），两套键名在此集中对齐。
+ * 关联文件按集合比较：一条交付记录可关联多个文件，新增/删除/换才算变化，仅顺序不同不算。
  */
 public final class DeliverableRules {
     public static final String WANTED = "WANTED";
@@ -33,7 +36,7 @@ public final class DeliverableRules {
         return Objects.equals(before.get("name"), values.get("name"))
                 && sameNumber(before.get("ownerId"), values.get("owner"))
                 && Objects.equals(before.get("remark"), values.get("remark"))
-                && sameNumber(before.get("attachmentId"), values.get("attachment"))
+                && sameIds(before.get("attachmentIds"), values.get("attachments"))
                 && sameNumber(before.get("sortOrder"), values.get("sort"));
     }
 
@@ -46,6 +49,21 @@ public final class DeliverableRules {
         Long a = number(left);
         Long b = number(right);
         return Objects.equals(a, b);
+    }
+
+    /** 关联文件 id 集合比较：忽略顺序与重复，新增/删除/换任一元素即为变化。 */
+    private static boolean sameIds(Object left, Object right) {
+        return ids(left).equals(ids(right));
+    }
+
+    private static Set<Long> ids(Object value) {
+        if (!(value instanceof Collection<?> items)) return Set.of();
+        Set<Long> result = new HashSet<>();
+        for (Object item : items) {
+            Long id = number(item);
+            if (id != null) result.add(id);
+        }
+        return result;
     }
 
     private static Long number(Object value) {

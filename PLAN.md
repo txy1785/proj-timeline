@@ -519,3 +519,12 @@ otifications.type 的 ENUM 改回 V1 的 5 个值，最后 DROP TABLE module_cha
 - 独立审核首轮“不可合并”（P1：抽取后草稿在组件内，任务页重新加载失败时草稿与离开提示丢失；P2：工作项页每次重新加载卸载编辑器导致上传计数卡死、出错时草稿丢失）。修复：新增 `composables/useNoteDraft.ts` 由页面持有草稿与离开确认，出错页显示只读草稿；工作项页记录可写不依赖 loading，记录忙碌时禁用状态操作；补 onBeforeRouteUpdate、切页签刷新附件等。新增 2 条“重新加载失败仍保留草稿”e2e，并做变异验证确认能捕获回归。复审“可合并”，按 P3 让状态按钮在记录忙碌时置灰；项目上下文刷新失败导致的草稿丢失作为已知限制记录。
 - 验证：Maven 76 项通过；前端 lint/typecheck/build 通过；Playwright 全量 **58 项**通过。在明确命名的本机隔离库 `proj_timeline_v15_check` 执行 V1–V15 迁移并跑真实 HTTP（负责人新建、PM 再编辑、普通成员 403、VIEWER 只读、非法名称 400、`NODE_RECORD` 附件上传、删除与 404），验证后删除测试库并停止临时服务。
 - 提交 `5af2208`、`d3825c7`、`01a5746` 以合并提交 `86b568b` 集成本地 develop，功能分支已删除。用户本机库尚未升级到 V15，需重启 58080 后端执行迁移（待用户确认）。
+
+## 2026-10-31 · 模块工作项卡片化 + 交付记录一条多文件
+
+- 用户要求：模块里的工作项现在以标题形式展示，改成卡片；交付记录设置一次可以上传多个文件。范围经一次性确认：卡片化只改模块详情页；交付记录 = 一条记录可关联/上传多个文件（含数据库迁移）。
+- 从 develop 建立 `feature/module-work-item-cards-deliverable-multi-files`，两路子代理并行（后端 / 前端）；接口契约由调度方先写死再分发：响应 `attachments[{id,title,originalName,contentType?,sizeBytes,version,deleted}]`，请求 `attachmentIds:number[]`（不传保留原有全部关联、`null`/`[]` 清空、去重后上限 20）。
+- 后端：Flyway V16 建 `node_deliverable_attachments`（唯一键 `(deliverable_id,attachment_id)`、指向交付物与附件的双外键），把历史 `node_deliverables.attachment_id` 回填成关联行后按 V7 先例只标注弃用、不删列；`WorkService` 去掉单文件列与附件 JOIN，改为一次额外查询后在 Java 按 `(sort_order,id)` 装配（避免 JOIN 放大行数）；`DeliverableRules.onlyStatusChanged` 改为关联集合比较（顺序不敏感）；`docs/database.sql`（13a 节）、`docs/接口设计.md`（#60–#63、3.8）同步；新增 `DeliverableAttachmentTest` 6 项，`UxDatabaseFixture` 补关联表与 `node_deliverables.created_by` 列（此前无交付物集成用例，缺列一直未暴露）。
+- 前端：`ModuleDetailView.vue` 的「模块工作项」`el-table` 换成 `.surface` 卡片网格（名称是真实 `RouterLink`、整卡可点击，展示类型/状态/负责人/计划区间/`x/y 已提供`，0 条走空态）；`DeliverablePanel.vue` 改为多选已关联文件 + 弹窗内一次选多个本地文件批量上传（`正在上传 n/m`，全部成功后才提交交付物，失败中止并保留已上传成功的 id 与待上传列表），列表列改成多文件标签（前 3 个 + `+N`，软删除标“已删除”），新增 `@files-changed` 让下方附件面板重建；`api/types.ts` 换成 `DeliverableFile[]`；`docs/复用方法与设计模式.md` 两行同步；e2e mock 改为新契约并加了一条关联文件断言。
+- 验证：Maven 83 项通过；前端 `lint`/`typecheck`/`build` 通过；Playwright 单跑「交付资料」用例通过；本机隔离库 `proj_timeline_v16_verify` 重放 V1–V16，验证回填、唯一键、弃用注释与历史值保留后删库。
+- 未验证/待办：V16 尚未应用到用户本机 `proj_timeline`（当前 V15，`node_deliverables` 无数据，回填为空操作），需重启 58080 后端；浏览器端多文件上传的真实往返未在运行实例上走查（前端已热更新，运行中的旧后端仍返回旧字段，重启前后交付面板会显示“未关联”）。

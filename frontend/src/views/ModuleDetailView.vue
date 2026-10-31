@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../api/client'
-import type { ChangeRequest, NodeItem, NodeStatus, WorkItemType } from '../api/types'
+import type { ChangeRequest, NodeItem } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import { useProjectContext } from '../composables/useProjectContext'
 import { canEditModule } from '../utils/permissions'
@@ -57,9 +57,20 @@ async function removeModule() {
       <el-alert v-if="!active" title="项目已归档，模块和文件只读。" type="info" :closable="false" class="section-gap" />
       <el-alert v-else-if="auth.isViewer" title="当前为只读观察账号，可查看工作项和下载文件。" type="info" :closable="false" class="section-gap" />
       <div v-else-if="canRequest" class="surface request-entry section-gap"><div><strong>{{ pendingRequest ? '变更申请待审批' : '需要调整这个模块？' }}</strong><p>{{ pendingRequest ? '申请通过前，模块内容保持原样。' : '可申请修改名称、描述或负责人，由项目经理审批。' }}</p></div><el-button v-if="pendingRequest" @click="router.push(`/projects/${projectId}/settings?tab=requests&requestId=${pendingRequest.id}`)">查看我的申请</el-button><el-button v-else @click="requestDialog = true">申请变更模块</el-button></div>
-      <section class="surface section-gap"><div class="section-heading"><div><h2>模块工作项</h2><p class="muted">已交付 {{ deliveryCounts.done }}/{{ deliveryCounts.total }} 项功能；每项有自己的负责人和计划日期。</p></div><el-button v-if="canManage" type="primary" @click="workItemDialog = true">新建工作项</el-button></div>
-        <el-table :data="module.nodes || []" empty-text="本模块还没有工作项" @row-click="openNode"><el-table-column prop="name" label="工作项" min-width="180"><template #default="scope"><el-button link type="primary" @click.stop="openNode(scope.row)">{{ scope.row.name }}</el-button><small class="row-type">{{ WORK_ITEM_TYPE_LABELS[scope.row.type as WorkItemType] }}</small></template></el-table-column><el-table-column prop="ownerName" label="负责人" width="110" /><el-table-column prop="planStart" label="计划开始" width="125" /><el-table-column prop="planEnd" label="计划结束" width="125" /><el-table-column label="状态" width="105"><template #default="scope"><el-tag size="small" :type="NODE_STATUS_TYPES[scope.row.status as NodeStatus]">{{ NODE_STATUS_LABELS[scope.row.status as NodeStatus] }}</el-tag></template></el-table-column><el-table-column label="交付资料" width="130"><template #default="scope"><span v-if="scope.row.deliverableTotal">{{ scope.row.deliverableProvided || 0 }}/{{ scope.row.deliverableTotal }} 已提供</span><span v-else class="muted">未设交付要求</span></template></el-table-column></el-table>
-        <div v-if="!module.nodes?.length && canManage" class="empty module-empty"><p>建立本模块的第一个小功能，明确交付内容与负责人。</p><el-button type="primary" @click="workItemDialog = true">建立首个工作项</el-button></div>
+      <section class="section-gap">
+        <div class="section-heading"><div><h2>模块工作项</h2><p class="muted">已交付 {{ deliveryCounts.done }}/{{ deliveryCounts.total }} 项功能；每项有自己的负责人和计划日期。</p></div><el-button v-if="canManage" type="primary" @click="workItemDialog = true">新建工作项</el-button></div>
+        <div v-if="module.nodes?.length" class="work-item-grid">
+          <section v-for="item in module.nodes || []" :key="item.id" class="surface work-item-card" @click="openNode(item)">
+            <div class="work-item-head"><h3><RouterLink :to="`/nodes/${item.id}`" @click.stop>{{ item.name }}</RouterLink></h3><el-tag size="small" :type="NODE_STATUS_TYPES[item.status]">{{ NODE_STATUS_LABELS[item.status] }}</el-tag></div>
+            <p class="work-item-type">{{ WORK_ITEM_TYPE_LABELS[item.type] }}</p>
+            <dl class="work-item-meta">
+              <div><dt>负责人</dt><dd>{{ item.ownerName }}</dd></div>
+              <div><dt>计划</dt><dd>{{ item.planStart }} ~ {{ item.planEnd || '未定' }}</dd></div>
+              <div><dt>交付资料</dt><dd>{{ item.deliverableTotal ? `${item.deliverableProvided || 0}/${item.deliverableTotal} 已提供` : '未设交付要求' }}</dd></div>
+            </dl>
+          </section>
+        </div>
+        <div v-else class="surface empty module-empty"><h2>本模块还没有工作项</h2><p>建立本模块的第一个小功能，明确交付内容与负责人。</p><el-button v-if="canManage" type="primary" @click="workItemDialog = true">建立首个工作项</el-button></div>
       </section>
       <section class="surface"><AttachmentPanel owner-type="MODULE" :owner-id="moduleId" :can-manage="canManage" :archived="!active" :show-category-nav="false" hint="本模块的设计、流程与开发过程文件。" /></section>
       <ModuleFormDialog v-model="moduleDialog" :project-id="projectId" :module="module" :members="members" @saved="refresh" />
@@ -70,6 +81,17 @@ async function removeModule() {
 </template>
 
 <style scoped>
-.module-title{margin-top:15px!important}.section-gap{margin-bottom:22px}.section-heading,.request-entry{display:flex;justify-content:space-between;align-items:center;gap:18px}.section-heading h2{margin:0}.section-heading p,.request-entry p{color:var(--muted);line-height:1.7}.request-entry p{margin:8px 0 0}.row-type{display:block;color:var(--muted);margin-top:5px}.module-empty{padding:22px}.section-heading{margin-bottom:18px}
+.module-title{margin-top:15px!important}.section-gap{margin-bottom:22px}.section-heading,.request-entry{display:flex;justify-content:space-between;align-items:center;gap:18px}.section-heading h2{margin:0;font-size:19px}.section-heading p,.request-entry p{color:var(--muted);line-height:1.7}.request-entry p{margin:8px 0 0}.module-empty{padding:30px}.section-heading{margin-bottom:18px}
+.work-item-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:18px}
+.work-item-card{display:flex;flex-direction:column;gap:10px;min-height:172px;cursor:pointer;overflow-wrap:anywhere;transition:border-color .2s ease,box-shadow .2s ease}
+.work-item-card:hover,.work-item-card:focus-within{border-color:var(--blue);box-shadow:0 10px 26px rgba(23,43,77,.08)}
+.work-item-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.work-item-head h3{margin:0;font-size:17px;line-height:1.5}
+.work-item-head h3 a{color:var(--blue)}
+.work-item-type{margin:0;color:var(--muted);font-size:13px}
+.work-item-meta{display:grid;gap:6px;margin:auto 0 0;padding-top:12px;border-top:1px solid var(--line);font-size:13px}
+.work-item-meta div{display:flex;gap:10px}
+.work-item-meta dt{width:66px;flex:none;color:var(--muted)}
+.work-item-meta dd{margin:0}
 @media(max-width:600px){.section-heading,.request-entry{align-items:flex-start;flex-direction:column}}
 </style>

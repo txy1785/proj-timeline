@@ -59,7 +59,8 @@ public final class UxDatabaseFixture {
                 "CREATE TABLE task_notes(id BIGINT AUTO_INCREMENT PRIMARY KEY,task_id BIGINT,title VARCHAR(200),content MEDIUMTEXT,author_id BIGINT,updated_by BIGINT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP)",
                 "CREATE TABLE node_notes(id BIGINT AUTO_INCREMENT PRIMARY KEY,node_id BIGINT,title VARCHAR(200),content MEDIUMTEXT,author_id BIGINT,updated_by BIGINT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP)",
                 "CREATE TABLE task_work_logs(id BIGINT AUTO_INCREMENT PRIMARY KEY,task_id BIGINT,days DECIMAL(8,2))",
-                "CREATE TABLE node_deliverables(id BIGINT AUTO_INCREMENT PRIMARY KEY,node_id BIGINT,status VARCHAR(20),project_id BIGINT,name VARCHAR(200),owner_id BIGINT,remark VARCHAR(500),attachment_id BIGINT,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+                "CREATE TABLE node_deliverables(id BIGINT AUTO_INCREMENT PRIMARY KEY,node_id BIGINT,status VARCHAR(20),project_id BIGINT,name VARCHAR(200),owner_id BIGINT,remark VARCHAR(500),attachment_id BIGINT,sort_order INT DEFAULT 0,created_by BIGINT,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+                "CREATE TABLE node_deliverable_attachments(id BIGINT AUTO_INCREMENT PRIMARY KEY,deliverable_id BIGINT,attachment_id BIGINT,sort_order INT DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,UNIQUE(deliverable_id,attachment_id))",
                 "CREATE TABLE node_logs(id BIGINT AUTO_INCREMENT PRIMARY KEY,node_id BIGINT,user_id BIGINT,action VARCHAR(40),detail VARCHAR(1000),before_value VARCHAR(4000),after_value VARCHAR(4000),created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
                 "CREATE TABLE module_change_requests(id BIGINT PRIMARY KEY,project_id BIGINT,module_id BIGINT,requested_by BIGINT,name VARCHAR(100),owner_id BIGINT,status VARCHAR(20),created_at TIMESTAMP)",
                 "CREATE TABLE attachments(id BIGINT AUTO_INCREMENT PRIMARY KEY,project_id BIGINT,owner_type VARCHAR(20),owner_id BIGINT,category VARCHAR(40),title VARCHAR(200),original_name VARCHAR(200),content_type VARCHAR(100),size_bytes BIGINT,sha256 VARCHAR(64),version INT,remark VARCHAR(1000),uploader_id BIGINT,created_at TIMESTAMP,deleted BOOLEAN DEFAULT FALSE)",
@@ -102,6 +103,12 @@ public final class UxDatabaseFixture {
     }
     public void task(long id,long node,long owner,String status,String due,String name) {
         jdbc.update("INSERT INTO tasks(id,node_id,name,assignee_id,status,due_date) VALUES(?,?,?,?,?,?)",id,node,name,owner,status,due==null?null:java.sql.Date.valueOf(due));
+    }
+    /** 插入一条工作项级附件（owner_type='NODE'），返回新 id；交付物多文件关联用例用。 */
+    public long nodeAttachment(long node,long project,String title,String originalName) {
+        jdbc.update("INSERT INTO attachments(project_id,owner_type,owner_id,category,title,original_name,content_type,size_bytes,version,deleted) VALUES(?,?,?,?,?,?,'application/pdf',2048,1,FALSE)",
+                project,"NODE",node,"NODE_DELIVERABLE",title,originalName);
+        return jdbc.queryForObject("SELECT MAX(id) FROM attachments",Long.class);
     }
     public void login(long id,String role) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(new CurrentUser(id,"test","Test",role),null,List.of()));
