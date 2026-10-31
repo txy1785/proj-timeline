@@ -454,6 +454,56 @@ test('delivery requirements and actual files share the materials tab', async ({ 
   await expect(page.getByRole('tab',{name:'文件',exact:true})).toHaveCount(0)
 })
 
+test('delivery requirements entered when publishing stay locked to status once the work item starts', async ({ page }) => {
+  const state=await prepare(page,'USER',2)
+  state.deliverables.push({id:1,nodeId:106,projectId:1,name:'接口设计说明',status:'PROVIDED',attachments:[]})
+  let createdBody, createdNode
+  await page.route('**/api/projects/1/nodes',route=>{
+    createdBody=route.request().postDataJSON()
+    // 模拟后端：发布时填的交付要求随工作项一起落库，创建后即为「待提供」
+    const requirements=(createdBody.requirements||[]).map((name,index)=>({id:300+index,nodeId:200,projectId:1,name,status:'WANTED',attachments:[]}))
+    createdNode={id:200,projectId:1,projectStatus:'ACTIVE',moduleId:2,moduleName:'订单与支付',moduleOwnerId:4,name:createdBody.name,type:createdBody.type,ownerId:createdBody.ownerId,ownerName:'赵工',status:'NOT_STARTED',planStart:createdBody.planStart,planEnd:createdBody.planEnd,progress:0,flags:{overdue:false,blocked:false,near:false},deliverableTotal:requirements.length,deliverableProvided:0,deliverables:requirements,tasks:[],bugs:[],logs:[]}
+    return route.fulfill({json:{code:0,msg:'ok',data:createdNode}})
+  })
+  await page.route('**/api/nodes/200',route=>route.fulfill({json:{code:0,msg:'ok',data:createdNode}}))
+  await page.goto('/projects/1/work-items')
+  await page.locator('.work-group').filter({has:page.getByRole('link',{name:'订单与支付',exact:true})}).getByRole('button',{name:'新建工作项',exact:true}).click()
+  const form=page.getByRole('dialog',{name:'新建工作项',exact:true})
+  await form.locator('.el-form-item').filter({hasText:'工作项名称'}).locator('input').fill('库存预警接口')
+  await form.getByText('更多信息（类型、说明）').click()
+  const planEnd=form.locator('.el-form-item').filter({hasText:'计划结束日期'}).locator('input')
+  await planEnd.fill('2026-10-30'); await planEnd.press('Enter')
+  await form.locator('.requirement-row textarea').first().fill('接口文档 v1')
+  await form.getByRole('button',{name:'添加一条',exact:true}).click()
+  await form.locator('.requirement-row textarea').nth(1).fill('联调记录')
+  // 多行输入里夹一个空行：空行不提交，接口只带非空行
+  await form.getByRole('button',{name:'添加一条',exact:true}).click()
+  await form.locator('.requirement-row textarea').nth(2).fill('')
+  await expect(form.locator('.requirement-row textarea')).toHaveCount(3)
+  await form.getByRole('button',{name:'创建并查看详情',exact:true}).click()
+  await expect(page).toHaveURL('/nodes/200')
+  expect(createdBody.requirements).toEqual(['接口文档 v1','联调记录'])
+  await page.getByRole('tab',{name:'交付资料',exact:true}).click()
+  const panel=page.locator('.deliverable-panel')
+  await expect(panel.getByRole('heading',{name:'交付要求',exact:true})).toBeVisible()
+  await expect(panel.getByText('接口文档 v1',{exact:true})).toBeVisible()
+  await expect(panel.getByText('联调记录',{exact:true})).toBeVisible()
+  await expect(panel.getByRole('button',{name:'新增交付要求',exact:true})).toBeVisible()
+  // 未开始的三档锁起点：可新增；工作项一开始就只能改状态/备注/关联文件
+  await page.goto('/nodes/106')
+  await page.getByRole('tab',{name:'交付资料',exact:true}).click()
+  await expect(panel.getByRole('button',{name:'新增交付要求',exact:true})).toHaveCount(0)
+  await expect(panel.getByRole('button',{name:'删除',exact:true})).toHaveCount(0)
+  await expect(panel.getByText('工作项进行中：不能新增或删除交付要求，名称与负责人已锁定。',{exact:true})).toBeVisible()
+  await panel.getByRole('button',{name:'编辑',exact:true}).click()
+  const dialog=page.getByRole('dialog',{name:'编辑交付物',exact:true})
+  await expect(dialog.locator('.el-form-item').filter({hasText:'交付物名称'}).locator('input')).toBeDisabled()
+  expect(await dialog.locator('.el-form-item').filter({hasText:'负责人'}).locator('.el-select').evaluate(el=>el.className.includes('is-disabled')||!!el.querySelector('[disabled],[aria-disabled="true"]'))).toBe(true)
+  // 放行侧：进行中只锁名称与负责人，备注与关联文件仍可改
+  await expect(dialog.locator('.el-form-item').filter({hasText:'备注'}).locator('textarea')).toBeEnabled()
+  await expect(dialog.locator('.el-form-item').filter({hasText:'关联本工作项文件'}).getByRole('combobox')).toBeEnabled()
+})
+
 test('legacy routed Bug uses its source function manager for editing capability', async ({ page }) => {
   await prepare(page,'USER',6,{routedBug:true})
   await page.goto('/nodes/106?task=11')

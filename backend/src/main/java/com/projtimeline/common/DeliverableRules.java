@@ -33,10 +33,20 @@ public final class DeliverableRules {
 
     /** 除 status 外的字段是否完全未变：用于拒绝「已完成/已取消工作项」上的改名、改派、换文件、改备注与改排序。 */
     public static boolean onlyStatusChanged(Map<String, Object> before, Map<String, Object> values) {
+        // 已结束 = 进行中允许集（状态/备注/关联文件）里的备注与文件也没变，比进行中更严
+        return onlyProgressAllowed(before, values)
+                && Objects.equals(before.get("remark"), values.get("remark"))
+                && sameIds(before.get("attachmentIds"), values.get("attachments"));
+    }
+
+    /**
+     * 工作项进行中时是否只动了允许的字段：status / remark / attachmentIds。
+     * 名称、负责人与排序是"开工前约定好的交付要求"，开工后不再允许调整；
+     * 更严的"已结束只允许改状态"见 {@link #onlyStatusChanged}。
+     */
+    public static boolean onlyProgressAllowed(Map<String, Object> before, Map<String, Object> values) {
         return Objects.equals(before.get("name"), values.get("name"))
                 && sameNumber(before.get("ownerId"), values.get("owner"))
-                && Objects.equals(before.get("remark"), values.get("remark"))
-                && sameIds(before.get("attachmentIds"), values.get("attachments"))
                 && sameNumber(before.get("sortOrder"), values.get("sort"));
     }
 
