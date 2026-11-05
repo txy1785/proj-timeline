@@ -2,6 +2,8 @@
 
 ## 2026-11-05 UX报告最终验收
 
+- 功能提交58c2bc6，独立审核后以f1563bc（--no-ff）合入本地develop；主目录复验Maven135项及前端lint/typecheck/build通过，产品树与验收分支相同。远程同步与分支清理以最终交付结果为准。
+
 - 按用户指定chatgpt-claude-delivery技能真实调用Claude实现，Codex独立审查及验收。功能从develop4219bb5建立feature/ux-review-20261105，前端两隔离工作区只按文件集成，未覆盖主目录用户修改。
 - 完成待排期/历史日期/草稿/纠错移动/要求修订、批量与紧凑列表、文档版本与预览、通知/统计、导航首屏及移动适配；OpenAPI83操作已重新生成。
 - Maven135项、Playwright70项、lint/typecheck/build通过。测试库V16→V17保留数据，真实HTTP13组和MySQL锁等待并发2组通过；浏览器文档v1/v2、安全渲染、目标新建、重开审计、历史批量通过。
