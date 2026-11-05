@@ -57,9 +57,8 @@ public class PermissionService {
         long projectId = number(node.get("projectId"));
         requireProjectActive(projectId);
         long userId = current().id();
-        if (current().isAdmin() || isPm(projectId) || number(node.get("ownerId")) == userId) return;
-        Object moduleOwner = node.get("moduleOwnerId");
-        if (moduleOwner != null && number(moduleOwner) == userId) return;
+        if (current().isAdmin() || isPm(projectId) || isUser(node.get("ownerId"), userId)) return;
+        if (isUser(node.get("moduleOwnerId"), userId)) return;
         throw BusinessException.forbidden("无权管理工作项");
     }
 
@@ -73,10 +72,9 @@ public class PermissionService {
         requireProjectActive(projectId);
         if("ARCHIVED".equals(task.get("projectStatus"))) throw BusinessException.conflict("项目已归档");
         long userId = current().id();
-        if (current().isAdmin() || isPm(projectId) || number(task.get("nodeOwnerId")) == userId
-                || (allowAssignee && number(task.get("assigneeId")) == userId)) return;
-        Object moduleOwner = task.get("moduleOwnerId");
-        if (moduleOwner != null && number(moduleOwner) == userId) return;
+        if (current().isAdmin() || isPm(projectId) || isUser(task.get("nodeOwnerId"), userId)
+                || (allowAssignee && isUser(task.get("assigneeId"), userId))) return;
+        if (isUser(task.get("moduleOwnerId"), userId)) return;
         throw BusinessException.forbidden("无权管理该任务");
     }
 
@@ -125,5 +123,7 @@ public class PermissionService {
     }
 
     public static long number(Object value) { return ((Number) value).longValue(); }
+    /** 负责人列可为空（未指派工作项），空值不匹配任何用户。 */
+    private static boolean isUser(Object value, long userId) { return value != null && number(value) == userId; }
     private static boolean truthy(Object value) { return value instanceof Boolean b ? b : ((Number) value).intValue() != 0; }
 }

@@ -56,7 +56,7 @@ public class ReportingService {
                 +"COALESCE(SUM(CASE WHEN n.status='IN_PROGRESS' THEN 1 ELSE 0 END),0) delivery_doing_count,"
                 +"COALESCE(SUM(CASE WHEN n.plan_end<:today THEN 1 ELSE 0 END),0) delivery_overdue_count,"
                 +"COALESCE(SUM(CASE WHEN n.plan_end BETWEEN :start AND :end THEN 1 ELSE 0 END),0) delivery_week_due_count"
-                +" FROM nodes n JOIN projects p ON p.id=n.project_id WHERE p.status='ACTIVE' AND n.status IN('NOT_STARTED','IN_PROGRESS')"
+                +" FROM nodes n JOIN projects p ON p.id=n.project_id WHERE p.status='ACTIVE' AND n.status IN('NOT_STARTED','IN_PROGRESS') AND n.owner_id IS NOT NULL"
                 +projectFilter+" GROUP BY n.owner_id",params)) deliveryByOwner.put(number(row.get("id")),row);
         for(Map<String,Object> row:db.list("SELECT t.assignee_id id,COUNT(*) open_bug_count,"
                 +"COALESCE(SUM(CASE WHEN t.due_date<:today THEN 1 ELSE 0 END),0) overdue_bug_count"

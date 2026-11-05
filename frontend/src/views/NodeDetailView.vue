@@ -6,7 +6,8 @@ import { api } from '../api/client'
 import type { Attachment, NodeItem, NodeLog, NodeStatus, NoteRecord, Task, TaskStatus } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import { useProjectStore } from '../stores/project'
-import { canManageNode, canChangeTaskStatus, isNodeClosed } from '../utils/permissions'
+import { useAppStore } from '../stores/app'
+import { canManageNode, canChangeTaskStatus, isNodeClosed, isProjectManager } from '../utils/permissions'
 import { TASK_NEXT_ACTION, TASK_STATUSES, TASK_STATUS_LABELS, TASK_STATUS_TYPES } from '../utils/task'
 import { NODE_STATUS_LABELS, NODE_STATUS_TYPES, WORK_ITEM_TYPE_LABELS } from '../utils/workItem'
 import { BUG_NEXT_ACTION, BUG_STATUS_LABELS } from '../utils/bug'
@@ -16,13 +17,23 @@ import DeliverablePanel from '../components/DeliverablePanel.vue'
 import WorkItemFormDialog from '../components/WorkItemFormDialog.vue'
 import BugReportDialog from '../components/BugReportDialog.vue'
 import NoteRecords from '../components/NoteRecords.vue'
+import WorkItemCorrectionDialog from '../components/WorkItemCorrectionDialog.vue'
 import { useNoteDraft } from '../composables/useNoteDraft'
+
+type CorrectionMode = 'reopen' | 'dates' | 'move'
+const UNDO_WINDOW_MS = 60_000
+const LOG_FIELD_LABELS: Record<string, string> = {
+  status: '状态', actualStart: '实际开始', actualEnd: '实际完成', moduleId: '模块', moduleName: '模块',
+  ownerId: '负责人', ownerName: '负责人', name: '名称', reason: '原因',
+  deliverables: '交付要求快照', requirements: '交付要求快照', requirementSnapshot: '交付要求快照'
+}
 
 const props = withDefaults(defineProps<{ initialView?: 'list' | 'kanban' }>(), { initialView: 'list' })
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const context = useProjectStore()
+const app = useAppStore()
 const id = computed(() => Number(route.params.id))
 const node = ref<NodeItem>()
 const loading = ref(true)
@@ -44,6 +55,10 @@ const noteCount = ref(0)
 const noteDraft = useNoteDraft()
 const noteFiles = ref<Attachment[]>([])
 const filesVersion = ref(0)
+const correctionDialog = ref(false)
+const correctionMode = ref<CorrectionMode>('reopen')
+const undoNodeId = ref(0)
+let undoTimer: ReturnType<typeof setTimeout> | undefined
 let generation = 0
 
 const project = computed(() => context.project?.id === node.value?.projectId ? context.project : undefined)
@@ -52,6 +67,16 @@ const archived = computed(() => node.value?.projectStatus === 'ARCHIVED')
 const closed = computed(() => isNodeClosed(node.value))
 const manager = computed(() => !loading.value && !error.value && canManageNode(auth.user, members.value, node.value))
 const canMutateNode = computed(() => manager.value && !closed.value)
+const activeProject = computed(() => !archived.value && node.value?.projectStatus === 'ACTIVE')
+const pm = computed(() => !loading.value && !error.value && isProjectManager(auth.user, members.value))
+const canReopen = computed(() => pm.value && activeProject.value && node.value?.status === 'DONE')
+const canCorrectDates = computed(() => pm.value && activeProject.value && ['IN_PROGRESS', 'DONE'].includes(node.value?.status || ''))
+const canMove = computed(() => manager.value && activeProject.value && node.value?.status !== 'CANCELLED')
+const canEditDoneInfo = computed(() => manager.value && !archived.value && node.value?.status === 'DONE')
+const nodeActionsBusy = computed(() => busyNode.value || !!busyTaskId.value || notesBusy.value)
+const canUndoDone = computed(() => canReopen.value && undoNodeId.value === node.value?.id)
+const businessDate = computed(() => app.businessDate)
+const modules = computed(() => project.value?.modules || [])
 /** 记录可写不随重新加载闪断，避免编辑器在上传中被卸载；只在出错或失去权限时收起。 */
 const canWriteNotes = computed(() => !error.value && !archived.value && canManageNode(auth.user, members.value, node.value))
 const notesBusy = computed(() => !!records.value && (records.value.saving || records.value.deleting > 0 || records.value.uploading > 0))
@@ -63,7 +88,7 @@ const filteredTasks = computed(() => legacyTasks.value.filter(task => statusFilt
 const filteredBugs = computed(() => bugs.value.filter(task => bugStatus.value === 'ALL' || task.status === bugStatus.value))
 const columns = computed(() => TASK_STATUSES.map(status => ({ status, label: TASK_STATUS_LABELS[status], tasks: filteredTasks.value.filter(task => task.status === status) })))
 const canReportBug = computed(() => !loading.value && !error.value && !auth.isViewer && node.value?.projectStatus === 'ACTIVE' && node.value.status !== 'CANCELLED')
-const logs = computed(() => (node.value?.logs || []) as (NodeLog & { detail?: string })[])
+const logs = computed(() => node.value?.logs || [])
 
 async function load(refreshContext = false) {
   const current = ++generation
@@ -95,7 +120,7 @@ watch(() => [route.query.tab, route.query.kind, route.query.status], () => {
   statusFilter.value = status === 'OPEN' || TASK_STATUSES.includes(status as TaskStatus) ? status : 'ALL'
 }, { immediate: true })
 watch(activeTab, tab => { if (tab === 'records') void loadNoteFiles() })
-onBeforeUnmount(() => { generation++; window.removeEventListener('beforeunload', beforeUnload) })
+onBeforeUnmount(() => { generation++; clearUndo(); window.removeEventListener('beforeunload', beforeUnload) })
 onMounted(() => window.addEventListener('beforeunload', beforeUnload))
 function beforeUnload(event: BeforeUnloadEvent) {
   if (noteDraft.hasDraft.value) { event.preventDefault(); event.returnValue = '' }
@@ -149,9 +174,36 @@ async function setNodeStatus(status: NodeStatus) {
     } catch { return }
   }
   busyNode.value = true
-  try { await api('POST', '/nodes/' + id.value + '/status', { status, expectedStatus: node.value?.status }); await load(true); ElMessage.success('工作项已设为' + NODE_STATUS_LABELS[status]) }
+  try {
+    await api('POST', '/nodes/' + id.value + '/status', { status, expectedStatus: node.value?.status })
+    if (status === 'DONE' && pm.value) startUndo(id.value)
+    await load(true); ElMessage.success('工作项已设为' + NODE_STATUS_LABELS[status])
+  }
   catch (e) { ElMessage.error((e as Error).message); await load(true) }
   finally { busyNode.value = false }
+}
+function startUndo(nodeId: number) {
+  clearUndo()
+  undoNodeId.value = nodeId
+  undoTimer = setTimeout(clearUndo, UNDO_WINDOW_MS)
+}
+function clearUndo() {
+  if (undoTimer) clearTimeout(undoTimer)
+  undoTimer = undefined; undoNodeId.value = 0
+}
+/** 撤销复用重新打开对话框，仍须填写明确原因。 */
+function undoDone() {
+  if (!canUndoDone.value) return
+  openCorrection('reopen')
+}
+function openCorrection(mode: CorrectionMode) {
+  if (nodeActionsBusy.value) return
+  correctionMode.value = mode; correctionDialog.value = true
+}
+function onCorrectionSaved() { clearUndo(); void load(true) }
+function onMoreCommand(command: 'dates' | 'move' | 'cancel') {
+  if (command === 'cancel') void setNodeStatus('CANCELLED')
+  else openCorrection(command)
 }
 function openRisk(mode: 'block' | 'overdue') {
   if (!canMutateNode.value) return
@@ -195,10 +247,40 @@ async function unblock() {
   catch (e) { ElMessage.error((e as Error).message); await load(true) }
   finally { busyNode.value = false }
 }
-function logDetail(log: NodeLog & { detail?: string }) {
+function logDetail(log: NodeLog) {
   let text = log.detail || log.summary || log.description || '工作项信息已更新'
   for (const [status, label] of Object.entries({ ...NODE_STATUS_LABELS, ...TASK_STATUS_LABELS })) text = text.replaceAll(status, label)
   return text
+}
+function parseLogValue(value: unknown): unknown {
+  if (typeof value !== 'string') return value
+  try { return JSON.parse(value) } catch { return value }
+}
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+function formatLogValue(key: string, value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—'
+  if (key === 'status' && typeof value === 'string') return NODE_STATUS_LABELS[value as NodeStatus] || value
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return JSON.stringify(value, null, 2)
+}
+/** 已知字段按中文标签逐项列出；无法识别的结构保留原文，避免丢失审计信息。 */
+function logChanges(log: NodeLog) {
+  const before = parseLogValue(log.beforeValue)
+  const after = parseLogValue(log.afterValue)
+  if (before === undefined && after === undefined) return { rows: [], raw: '' }
+  if (!isPlainObject(before ?? {}) || !isPlainObject(after ?? {})) return { rows: [], raw: JSON.stringify({ before, after }, null, 2) }
+  const from = (before || {}) as Record<string, unknown>
+  const to = (after || {}) as Record<string, unknown>
+  const keys = [...new Set([...Object.keys(from), ...Object.keys(to)])]
+  const rows = keys.filter(key => LOG_FIELD_LABELS[key]).map(key => ({ key, label: LOG_FIELD_LABELS[key], before: formatLogValue(key, from[key]), after: formatLogValue(key, to[key]) }))
+  const unknown = keys.filter(key => !LOG_FIELD_LABELS[key])
+  const raw = unknown.length ? JSON.stringify({ before: pick(from, unknown), after: pick(to, unknown) }, null, 2) : ''
+  return { rows, raw }
+}
+function pick(source: Record<string, unknown>, keys: string[]) {
+  return Object.fromEntries(keys.filter(key => key in source).map(key => [key, source[key]]))
 }
 </script>
 
@@ -207,27 +289,28 @@ function logDetail(log: NodeLog & { detail?: string }) {
     <section v-if="error" class="surface node-error" role="alert"><h1>工作项暂时不可用</h1><p>{{ error }}</p><template v-if="noteDraft.state.text.trim()"><p class="muted">未保存的记录草稿，可复制后保留：</p><el-input :model-value="noteDraft.state.text" type="textarea" :rows="4" readonly aria-label="未保存的记录草稿" /></template><div class="page-actions"><el-button @click="load(true)">重新加载</el-button><el-button @click="router.push('/projects')">返回项目</el-button></div></section>
     <template v-else-if="node">
       <header class="page-head node-page-head">
-        <div><el-breadcrumb separator="/"><el-breadcrumb-item :to="'/projects/' + node.projectId + '/overview'">{{ project?.name || '所属项目' }}</el-breadcrumb-item><el-breadcrumb-item :to="'/projects/' + node.projectId + '/work-items'">工作项</el-breadcrumb-item><el-breadcrumb-item>{{ node.name }}</el-breadcrumb-item></el-breadcrumb><div class="node-title"><h1>{{ node.name }}</h1><el-tag :type="NODE_STATUS_TYPES[node.status]">{{ node.status === 'DONE' ? '已交付' : NODE_STATUS_LABELS[node.status] }}</el-tag><el-tag v-if="node.flags.overdue" type="danger">已延期</el-tag><el-tag v-if="node.flags.blocked && !closed" type="warning">受阻</el-tag></div><p><RouterLink v-if="node.moduleId" :to="'/projects/' + node.projectId + '/modules/' + node.moduleId">{{ node.moduleName }}</RouterLink><span v-else>项目级工作项</span> · 负责人 {{ node.ownerName }} · 计划 {{ node.planStart }}—{{ node.planEnd }}</p></div>
-        <div class="page-actions"><el-button v-if="canReportBug" @click="bugDialog = true">报告 Bug</el-button><el-button v-if="canMutateNode" @click="workItemDialog = true">编辑工作项</el-button><el-button v-if="canMutateNode && node.status === 'NOT_STARTED'" type="primary" :loading="busyNode" :disabled="notesBusy" @click="setNodeStatus('IN_PROGRESS')">开始工作</el-button><el-button v-else-if="canMutateNode && node.status === 'IN_PROGRESS'" type="primary" :loading="busyNode" :disabled="notesBusy" @click="setNodeStatus('DONE')">确认交付</el-button><el-dropdown v-if="canMutateNode" :disabled="busyNode || !!busyTaskId" @command="setNodeStatus('CANCELLED')"><el-button :disabled="busyNode || !!busyTaskId">更多</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="cancel">取消工作项</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div>
+        <div><el-breadcrumb separator="/"><el-breadcrumb-item :to="'/projects/' + node.projectId + '/overview'">{{ project?.name || '所属项目' }}</el-breadcrumb-item><el-breadcrumb-item :to="'/projects/' + node.projectId + '/work-items'">工作项</el-breadcrumb-item><el-breadcrumb-item>{{ node.name }}</el-breadcrumb-item></el-breadcrumb><div class="node-title"><h1>{{ node.name }}</h1><el-tag :type="NODE_STATUS_TYPES[node.status]">{{ node.status === 'DONE' ? '已交付' : NODE_STATUS_LABELS[node.status] }}</el-tag><el-tag v-if="node.flags.overdue" type="danger">已延期</el-tag><el-tag v-if="node.flags.blocked && !closed" type="warning">受阻</el-tag></div><p><RouterLink v-if="node.moduleId" :to="'/projects/' + node.projectId + '/modules/' + node.moduleId">{{ node.moduleName }}</RouterLink><span v-else>项目级工作项</span> · 负责人 {{ node.ownerName || '未分配' }} · 计划 {{ node.planEnd ? `${node.planStart || '开始未定'}—${node.planEnd}` : '待排期' }}</p></div>
+        <div class="page-actions"><el-button v-if="canReportBug" @click="bugDialog = true">报告 Bug</el-button><el-button v-if="canUndoDone" type="warning" plain :disabled="nodeActionsBusy" @click="undoDone">撤销交付</el-button><el-button v-if="canMutateNode || canEditDoneInfo" :disabled="nodeActionsBusy" @click="workItemDialog = true">{{ canEditDoneInfo ? '编辑信息' : '编辑工作项' }}</el-button><el-button v-if="canMutateNode && node.status === 'NOT_STARTED'" type="primary" :loading="busyNode" :disabled="notesBusy" @click="setNodeStatus('IN_PROGRESS')">开始工作</el-button><el-button v-else-if="canMutateNode && node.status === 'IN_PROGRESS'" type="primary" :loading="busyNode" :disabled="notesBusy" @click="setNodeStatus('DONE')">确认交付</el-button><el-button v-else-if="canReopen" :disabled="nodeActionsBusy" @click="openCorrection('reopen')">重新打开</el-button><el-dropdown v-if="canMutateNode || canCorrectDates || canMove" :disabled="nodeActionsBusy" @command="onMoreCommand"><el-button :disabled="nodeActionsBusy">更多</el-button><template #dropdown><el-dropdown-menu><el-dropdown-item v-if="canCorrectDates" command="dates">纠正实际日期</el-dropdown-item><el-dropdown-item v-if="canMove" command="move">移动</el-dropdown-item><el-dropdown-item v-if="canMutateNode" command="cancel" :divided="canCorrectDates || canMove">取消工作项</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div>
       </header>
       <el-alert v-if="archived" title="项目已归档，功能、Bug、资料与历史记录只读" type="info" :closable="false" />
-      <el-alert v-else-if="node.status === 'DONE'" title="功能已交付，后续问题可继续报告和修复，无需重开功能。" type="success" :closable="false" />
+      <el-alert v-else-if="node.status === 'DONE'" title="功能已交付，后续问题可继续报告和修复。" type="success" :closable="false" />
       <el-alert v-else-if="node.status === 'CANCELLED'" title="工作项已取消，保留资料与历史，不再接收新Bug。" type="info" :closable="false" />
-      <section class="surface node-facts"><span>实际开始 <strong>{{ node.actualStart || '未开始' }}</strong></span><span>交付日期 <strong>{{ node.actualEnd || '尚未交付' }}</strong></span><button @click="activeTab = 'materials'">交付要求 {{ node.deliverableProvided || 0 }}/{{ node.deliverableTotal || 0 }} 已提供</button><button @click="activeTab = 'bugs'">待处理 Bug {{ openBugs }}</button></section>
+      <section class="surface node-facts"><span>实际开始 <strong>{{ node.actualStart || (node.status === 'DONE' || node.status === 'IN_PROGRESS' ? '未记录' : '未开始') }}</strong></span><span>交付日期 <strong>{{ node.actualEnd || '尚未交付' }}</strong></span><button @click="activeTab = 'materials'">交付要求 {{ node.deliverableProvided || 0 }}/{{ node.deliverableTotal || 0 }} 已提供</button><button @click="activeTab = 'bugs'">待处理 Bug {{ openBugs }}</button></section>
       <section v-if="node.flags.overdue" class="node-risk node-risk-overdue"><div><strong>交付已延期</strong><p>{{ node.overdueReason || '负责人尚未填写延期说明' }}</p><small>计划结束 {{ node.planEnd }}；说明不会自动延长计划日期。</small></div><div v-if="canMutateNode" class="page-actions"><el-button @click="openRisk('overdue')">{{ node.overdueReason ? '更新延期说明' : '填写延期说明' }}</el-button><el-button @click="workItemDialog = true">调整计划</el-button></div></section>
       <section v-if="node.flags.blocked && !closed" class="node-risk node-risk-blocked"><div><strong>工作受阻</strong><p>{{ node.blockedReason || '尚未填写受阻原因' }}</p></div><div v-if="canMutateNode" class="page-actions"><el-button @click="openRisk('block')">更新原因</el-button><el-button @click="unblock">解除受阻</el-button></div></section>
       <section class="surface node-body">
         <el-tabs v-model="activeTab">
-          <el-tab-pane label="功能说明" name="description"><div class="feature-description"><h2>这项功能要交付什么</h2><p>{{ node.description || '尚未填写功能说明，可补充功能范围、预期效果和验收要求。' }}</p><p class="muted">{{ WORK_ITEM_TYPE_LABELS[node.type] }} · 由 {{ node.ownerName }} 负责交付</p><el-button v-if="canMutateNode" @click="workItemDialog = true">完善功能说明</el-button></div><div v-if="canMutateNode && !node.flags.blocked" class="section-actions"><el-button @click="openRisk('block')">标记受阻</el-button></div></el-tab-pane>
+          <el-tab-pane label="功能说明" name="description"><div class="feature-description"><h2>这项功能要交付什么</h2><p>{{ node.description || '尚未填写功能说明，可补充功能范围、预期效果和验收要求。' }}</p><p class="muted">{{ WORK_ITEM_TYPE_LABELS[node.type] }} · {{ node.ownerName ? `由 ${node.ownerName} 负责交付` : '尚未分配负责人' }}</p><el-button v-if="canMutateNode" @click="workItemDialog = true">完善功能说明</el-button></div><div v-if="canMutateNode && !node.flags.blocked" class="section-actions"><el-button @click="openRisk('block')">标记受阻</el-button></div></el-tab-pane>
           <el-tab-pane :label="'进展记录 ' + noteCount" name="records"><NoteRecords ref="records" owner-type="NODE" :owner-id="id" :list-path="`/nodes/${id}/notes`" item-path="/node-notes" category="NODE_RECORD" title-prefix="进展记录" :attachments="noteFiles" :draft="noteDraft" :busy="busyNode || savingRisk" :can-write="canWriteNotes" :can-upload="canWriteNotes" :can-manage="canManageNote" read-only-hint="当前工作项不可写入。" @uploaded="onNoteUploaded" @removed="onNoteFileRemoved" @count="noteCount = $event" /></el-tab-pane>
-          <el-tab-pane label="交付资料" name="materials" lazy><DeliverablePanel :node-id="id" :items="node.deliverables || []" :members="members" :can-manage="manager" :node-status="node.status" :archived="archived" @refresh="load(true)" @files-changed="filesVersion++" /><div class="material-files"><h2>图纸、文档与实际文件</h2><AttachmentPanel :key="`${id}-${filesVersion}`" owner-type="NODE" :owner-id="id" :can-manage="manager" :archived="archived" :show-category-nav="false" hint="上传本功能的图纸、接口说明、测试截图和其他资料；可在上方交付要求中关联文件。" /></div></el-tab-pane>
+          <el-tab-pane label="交付资料" name="materials" lazy><DeliverablePanel :node-id="id" :items="node.deliverables || []" :members="members" :can-manage="manager" :node-status="node.status" :archived="archived" @refresh="load(true)" @files-changed="filesVersion++" /><div class="material-files"><AttachmentPanel :key="`${id}-${filesVersion}`" owner-type="NODE" :owner-id="id" :can-manage="manager" :archived="archived" :show-category-nav="false" title="附件" /></div></el-tab-pane>
           <el-tab-pane :label="'Bug ' + bugs.length" name="bugs"><div class="section-heading"><div><h2>功能问题与修复</h2><p class="muted">已交付的功能仍可独立跟踪Bug，保留原交付记录。</p></div><el-button v-if="canReportBug" type="primary" @click="bugDialog = true">报告 Bug</el-button></div><el-select v-model="bugStatus" class="status-filter" aria-label="Bug状态筛选"><el-option label="全部Bug" value="ALL"/><el-option v-for="status in TASK_STATUSES" :key="status" :label="BUG_STATUS_LABELS[status]" :value="status" /></el-select><div v-if="!filteredBugs.length" class="empty">{{ bugs.length ? '当前筛选下没有Bug' : '当前没有报告Bug' }}</div><article v-for="bug in filteredBugs" :key="bug.id" class="issue-row"><div><el-button link type="primary" class="issue-title" @click="openTask(bug)">{{ bug.name }}</el-button><p class="muted">负责人 {{ bug.assigneeName }} · 截止 {{ bug.dueDate || '未设置' }}</p></div><div class="page-actions"><el-tag :type="TASK_STATUS_TYPES[bug.status]">{{ BUG_STATUS_LABELS[bug.status] }}</el-tag><el-button v-if="canChangeTask(bug)" :loading="busyTaskId === bug.id" :disabled="!!busyTaskId || busyNode || notesBusy" @click="quickStatus(bug)">{{ BUG_NEXT_ACTION[bug.status].label }}</el-button><el-button @click="openTask(bug)">查看详情</el-button></div></article></el-tab-pane>
-          <el-tab-pane :label="'活动记录 ' + logs.length" name="activity"><div v-if="!logs.length" class="empty">暂无活动记录</div><article v-for="log in logs" :key="log.id" class="node-log"><strong>{{ logDetail(log) }}</strong><p class="muted">{{ log.userName || '系统' }} · {{ formatDateTime(log.createdAt) }}</p></article></el-tab-pane>
+          <el-tab-pane :label="'活动记录 ' + logs.length" name="activity"><div v-if="!logs.length" class="empty">暂无活动记录</div><article v-for="log in logs" :key="log.id" class="node-log"><strong>{{ logDetail(log) }}</strong><p class="muted">{{ log.userName || '系统' }} · {{ formatDateTime(log.createdAt) }}</p><details v-if="logChanges(log).rows.length || logChanges(log).raw" class="log-changes"><summary>查看变更前后</summary><dl v-for="row in logChanges(log).rows" :key="row.key"><dt>{{ row.label }}</dt><dd><span class="log-before">{{ row.before }}</span><span aria-hidden="true"> → </span><span class="sr-only">变更为</span><span>{{ row.after }}</span></dd></dl><pre v-if="logChanges(log).raw">{{ logChanges(log).raw }}</pre></details></article></el-tab-pane>
           <el-tab-pane v-if="legacyTasks.length" :label="'历史任务 ' + legacyTasks.length" name="history"><el-alert title="保留此前创建的任务、记录与附件。功能交付由负责人确认，不再按历史任务完成率计算。" type="info" :closable="false" /><div class="section-heading"><h2>历史任务</h2><el-button-group><el-button :type="mode === 'list' ? 'primary' : 'default'" plain @click="goView('list')">列表</el-button><el-button :type="mode === 'kanban' ? 'primary' : 'default'" plain @click="goView('kanban')">看板</el-button></el-button-group></div><el-select v-model="statusFilter" class="status-filter" aria-label="历史任务状态筛选" @change="updateFilters"><el-option label="全部状态" value="ALL"/><el-option label="未完成任务" value="OPEN"/><el-option v-for="status in TASK_STATUSES" :key="status" :label="TASK_STATUS_LABELS[status]" :value="status"/></el-select><template v-if="mode === 'list'"><article v-for="task in filteredTasks" :key="task.id" class="issue-row"><div><el-button link type="primary" class="issue-title" @click="openTask(task)">{{ task.name }}</el-button><p class="muted">{{ task.assigneeName }} · {{ task.dueDate || '未设截止日' }} · {{ task.noteCount || 0 }} 条记录</p></div><div class="page-actions"><el-tag :type="TASK_STATUS_TYPES[task.status]">{{ TASK_STATUS_LABELS[task.status] }}</el-tag><el-button v-if="canChangeTask(task)" :loading="busyTaskId === task.id" :disabled="!!busyTaskId || notesBusy" @click="quickStatus(task)">{{ TASK_NEXT_ACTION[task.status].label }}</el-button><el-button @click="openTask(task)">查看详情</el-button></div></article><div v-if="!filteredTasks.length" class="empty">当前筛选下没有历史任务</div></template><div v-else class="node-kanban"><section v-for="column in columns" :key="column.status" class="node-kanban-column"><h3>{{ column.label }} · {{ column.tasks.length }}</h3><article v-for="task in column.tasks" :key="task.id" class="node-kanban-card"><el-button link type="primary" class="issue-title" @click="openTask(task)">{{ task.name }}</el-button><p class="muted">{{ task.assigneeName }}</p><el-button v-if="canChangeTask(task)" :loading="busyTaskId === task.id" :disabled="!!busyTaskId || notesBusy" @click="quickStatus(task)">{{ TASK_NEXT_ACTION[task.status].label }}</el-button></article></section></div></el-tab-pane>
         </el-tabs>
       </section>
       <WorkItemFormDialog v-model="workItemDialog" :project-id="node.projectId" :work-item="node" :members="members" @saved="load(true)" />
       <BugReportDialog v-model="bugDialog" :project-id="node.projectId" :node-id="node.id" @saved="load(true)" />
+      <WorkItemCorrectionDialog v-model="correctionDialog" :node="node" :members="members" :modules="modules" :business-date="businessDate" :mode="correctionMode" @saved="onCorrectionSaved" @refresh="load(true)" />
       <el-dialog :model-value="riskDialog" :title="riskMode === 'block' ? '标记工作项受阻' : '更新延期说明'" width="min(560px, calc(100vw - 28px))" :close-on-click-modal="false" :before-close="closeRisk" @update:model-value="riskDialog = $event"><el-form label-position="top" :disabled="savingRisk"><el-form-item :label="riskMode === 'block' ? '受阻原因' : '延期说明'" required><el-input v-model="riskReason" type="textarea" :rows="5" /></el-form-item><p v-if="riskMode === 'overdue'" class="muted">更新说明不会自动调整计划日期。</p></el-form><template #footer><el-button :disabled="savingRisk" @click="closeRisk()">取消</el-button><el-button type="primary" :loading="savingRisk" :disabled="!canMutateNode || (riskMode === 'overdue' && !node.flags.overdue)" @click="saveRisk">{{ riskMode === 'block' ? '保存并标记受阻' : '保存说明' }}</el-button></template></el-dialog>
     </template>
     <div v-else-if="loading" class="surface empty">正在加载工作项…</div>
@@ -235,6 +318,6 @@ function logDetail(log: NodeLog & { detail?: string }) {
 </template>
 
 <style scoped>
-.node-page{min-height:240px}.node-page-head{align-items:flex-start}.node-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:16px 0 8px}.node-title h1{margin:0;overflow-wrap:anywhere}.node-page-head p{line-height:1.7}.node-facts{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:20px;color:var(--muted)}.node-facts strong{color:var(--navy);margin-left:6px}.node-facts button{font:inherit;padding:0;border:0;background:none;color:var(--blue);cursor:pointer}.feature-description{padding:18px 0 26px}.feature-description>p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8}.section-actions{padding-top:18px;border-top:1px solid var(--line)}.material-files{padding-top:28px;margin-top:28px;border-top:1px solid var(--line)}.section-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:14px 0 20px}.section-heading h2,.section-heading p{margin:0 0 8px}.status-filter{width:160px;margin-bottom:15px}.issue-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 0;border-bottom:1px solid var(--line)}.issue-row p{font-size:13px;margin:7px 0 0}.issue-title{height:auto;font-size:15px;white-space:normal;line-height:1.7;text-align:left}.issue-title :deep(span){white-space:normal;overflow-wrap:anywhere}.node-risk{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 22px;border:1px solid var(--line);border-radius:10px;margin-bottom:18px}.node-risk-overdue{background:#fff5f5;border-color:#f6d6da}.node-risk-blocked{background:#f7f3fd;border-color:#e2d7f3}.node-risk strong{font-size:16px}.node-risk p{margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65}.node-risk small{color:var(--muted)}.node-log{padding:18px 0;border-bottom:1px solid var(--line)}.node-log p{font-size:13px}.node-kanban{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.node-kanban-column{padding:16px;background:#f1f4f9;border-radius:10px;min-height:200px}.node-kanban-card{background:#fff;padding:16px;border:1px solid var(--line);border-radius:8px;margin-top:12px}
+.node-page{min-height:240px}.node-page-head{align-items:flex-start}.node-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:16px 0 8px}.node-title h1{margin:0;overflow-wrap:anywhere}.node-page-head p{line-height:1.7}.node-facts{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:20px;color:var(--muted)}.node-facts strong{color:var(--navy);margin-left:6px}.node-facts button{font:inherit;padding:0;border:0;background:none;color:var(--blue);cursor:pointer}.feature-description{padding:18px 0 26px}.feature-description>p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8}.section-actions{padding-top:18px;border-top:1px solid var(--line)}.material-files{padding-top:28px;margin-top:28px;border-top:1px solid var(--line)}.section-heading{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:14px 0 20px}.section-heading h2,.section-heading p{margin:0 0 8px}.status-filter{width:160px;margin-bottom:15px}.issue-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 0;border-bottom:1px solid var(--line)}.issue-row p{font-size:13px;margin:7px 0 0}.issue-title{height:auto;font-size:15px;white-space:normal;line-height:1.7;text-align:left}.issue-title :deep(span){white-space:normal;overflow-wrap:anywhere}.node-risk{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 22px;border:1px solid var(--line);border-radius:10px;margin-bottom:18px}.node-risk-overdue{background:#fff5f5;border-color:#f6d6da}.node-risk-blocked{background:#f7f3fd;border-color:#e2d7f3}.node-risk strong{font-size:16px}.node-risk p{margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65}.node-risk small{color:var(--muted)}.node-log{padding:18px 0;border-bottom:1px solid var(--line)}.node-log p{font-size:13px}.log-changes{margin-top:8px;font-size:13px}.log-changes summary{cursor:pointer;color:var(--blue)}.log-changes dl{display:grid;grid-template-columns:7em minmax(0,1fr);gap:8px;margin:8px 0}.log-changes dt{color:var(--muted)}.log-changes dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}.log-before{color:var(--muted);text-decoration:line-through}.log-changes pre{margin:8px 0 0;padding:10px;background:#f6f8fb;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}.node-kanban{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.node-kanban-column{padding:16px;background:#f1f4f9;border-radius:10px;min-height:200px}.node-kanban-card{background:#fff;padding:16px;border:1px solid var(--line);border-radius:8px;margin-top:12px}
 @media(max-width:900px){.node-page-head,.node-risk,.section-heading,.issue-row{align-items:flex-start;flex-wrap:wrap}.issue-row>div:first-child{width:100%}.node-kanban{grid-template-columns:1fr}.node-title h1{font-size:25px}}
 </style>

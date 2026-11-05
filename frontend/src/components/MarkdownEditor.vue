@@ -27,6 +27,8 @@ const props = withDefaults(defineProps<{
   rows?: number
   /** 已保存记录引用的任务附件；用于解析正文里已有的图片与文件链接。 */
   attachments?: Attachment[]
+  /** 紧凑模式：格式工具默认收起、编辑区更矮，适合一句话式的进展更新。 */
+  compact?: boolean
 }>(), {
   ownerType: 'TASK',
   ownerId: 0,
@@ -36,7 +38,8 @@ const props = withDefaults(defineProps<{
   placeholder: '记录本次进展、问题或结果，支持 Markdown',
   ariaLabel: 'Markdown 内容',
   rows: 9,
-  attachments: () => []
+  attachments: () => [],
+  compact: false
 })
 
 const emit = defineEmits<{
@@ -52,6 +55,7 @@ const surfaceRef = ref<HTMLDivElement>()
 const sourceRef = ref<HTMLTextAreaElement>()
 const fileInputRef = ref<HTMLInputElement>()
 const sourceMode = ref(false)
+const toolsOpen = ref(!props.compact)
 const uploading = ref(0)
 const uploaded = ref<Attachment[]>([])
 const removing = ref<number[]>([])
@@ -552,9 +556,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="md-editor" :class="{ 'is-disabled': disabled }" @paste="onPaste" @dragover="onDragOver" @drop="onDrop" @click="onClick">
+  <div class="md-editor" :class="{ 'is-disabled': disabled, 'is-compact': compact }" @paste="onPaste" @dragover="onDragOver" @drop="onDrop" @click="onClick">
     <div class="md-editor-bar">
       <div class="md-tools" role="toolbar" aria-label="Markdown 工具栏">
+        <button v-if="compact" type="button" class="md-tool md-tool-toggle" :class="{ active: toolsOpen }" :aria-expanded="toolsOpen" title="显示/收起格式工具" @mousedown.prevent="saveSelection" @click="toolsOpen = !toolsOpen">格式</button>
+        <template v-if="toolsOpen">
         <button type="button" class="md-tool" title="二级标题" aria-label="二级标题" :disabled="disabled || sourceMode" @mousedown.prevent="saveSelection" @click="toggleHeading">H</button>
         <button type="button" class="md-tool" title="加粗" aria-label="加粗" :disabled="disabled || sourceMode" @mousedown.prevent="saveSelection" @click="applyInline('strong')">B</button>
         <button type="button" class="md-tool" title="斜体" aria-label="斜体" :disabled="disabled || sourceMode" @mousedown.prevent="saveSelection" @click="applyInline('em')">I</button>
@@ -566,6 +572,7 @@ onBeforeUnmount(() => {
         <button type="button" class="md-tool" title="代码块" aria-label="代码块" :disabled="disabled || sourceMode" @mousedown.prevent="saveSelection" @click="codeBlock">&lt;/&gt;</button>
         <button type="button" class="md-tool" title="插入链接" aria-label="插入链接" :disabled="disabled || sourceMode" @mousedown.prevent="saveSelection" @click="insertLink">链接</button>
         <button type="button" class="md-tool" title="插入表格" aria-label="插入表格" :disabled="disabled || sourceMode" @mousedown.prevent="saveSelection" @click="insertTable">表格</button>
+        </template>
         <button type="button" class="md-tool md-tool-file" :disabled="disabled || !canUpload || sourceMode" :title="canUpload ? '插入附件（也可直接粘贴）' : '当前没有上传附件的权限'" aria-label="插入附件" @mousedown.prevent="saveSelection" @click="openFilePicker">附件</button>
       </div>
       <div class="md-modes">
@@ -610,7 +617,9 @@ onBeforeUnmount(() => {
       </span>
     </div>
 
-    <p class="md-editor-hint">
+    <p v-if="!canUpload" class="md-editor-hint">{{ compact ? '需要排版时点「格式」；' : '选中文字可用工具栏排版；' }}需要手写 Markdown 时可切到「源码」。</p>
+    <p v-else-if="compact" class="md-editor-hint">可直接 Ctrl+V 粘贴截图或文件；需要排版时点「格式」。</p>
+    <p v-else class="md-editor-hint">
       选中文字可用工具栏排版；直接 <strong>Ctrl+V 粘贴截图或文件</strong> 会自动上传并插入正文。需要手写 Markdown 时可切到「源码」。
     </p>
     <p v-if="uploading" class="md-editor-uploading" role="status">正在上传 {{ uploading }} 个文件…</p>
@@ -630,6 +639,9 @@ onBeforeUnmount(() => {
 .md-tool:hover:not(:disabled) { background:#e8eef9; color:var(--blue); }
 .md-tool:disabled { opacity:.45; cursor:not-allowed; }
 .md-tool-file { margin-left:5px; border-left:1px solid var(--line); border-radius:0 5px 5px 0; padding-left:8px; }
+.md-tool-toggle.active { background:#e8eef9; color:var(--blue); }
+.is-compact .md-surface { min-height:120px; max-height:40vh; }
+.is-compact .md-source-area { min-height:120px; max-height:40vh; }
 .md-modes { display:flex; gap:2px; }
 .md-mode { border:0; background:transparent; padding:4px 10px; border-radius:5px; font-size:12px; color:var(--muted); cursor:pointer; }
 .md-mode.active { background:#e8eef9; color:var(--blue); font-weight:600; }

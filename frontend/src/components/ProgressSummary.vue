@@ -5,6 +5,8 @@ import { scheduleVerdict } from '../utils/progress'
 
 const props = defineProps<{ progress: ScheduleProgress; projectId: number; today: string }>()
 const verdict = computed(() => scheduleVerdict(props.progress))
+// 判定已显示待排期时不再重复；延期优先时待排期只在明细里出现一次。
+const extraUnscheduled = computed(() => props.progress.behind ? props.progress.unscheduled || 0 : 0)
 </script>
 
 <template>
@@ -14,16 +16,16 @@ const verdict = computed(() => scheduleVerdict(props.progress))
       <p v-if="!progress.total" class="muted">现有工作项均已取消，新建工作项后这里会对照计划显示进度。</p>
       <template v-else>
         <p v-if="today && progress.due">
-          已过计划完成日 <strong>{{ progress.due }}</strong> 项：已交付 <strong>{{ progress.dueDone }}</strong> 项<template v-if="progress.behind">，延期 <strong class="danger">{{ progress.behind }}</strong> 项</template>
+          已过计划完成日 <strong>{{ progress.due }}</strong> 项，其中已交付 <strong>{{ progress.dueDone }}</strong> 项
         </p>
         <p v-else-if="today">还没有过计划完成日的工作项。</p>
-        <p class="muted">全部 {{ progress.total }} 项已交付 {{ progress.done }} 项
+        <p class="muted">已登记工作项 {{ progress.total }} 项，已交付 {{ progress.done }} 项<template v-if="extraUnscheduled">，另有 {{ extraUnscheduled }} 项待排期</template>
           <RouterLink v-if="progress.behind" class="danger" :to="`/projects/${projectId}/work-items?risk=overdue`">查看延期 →</RouterLink>
         </p>
       </template>
     </div>
     <div v-if="progress.total" class="progress-bars">
-      <div><span>交付进度</span><el-progress :percentage="progress.donePercent" :stroke-width="10" color="#218262" aria-label="交付进度" /></div>
+      <div><span>交付进度</span><el-progress :percentage="progress.donePercent" :stroke-width="10" color="#218262" aria-label="已登记工作项交付比例" /></div>
       <div v-if="progress.timePercent !== undefined"><span>时间进度</span><el-progress :percentage="progress.timePercent" :stroke-width="10" color="#8c9bb3" aria-label="时间进度" /></div>
     </div>
   </section>

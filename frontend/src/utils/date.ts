@@ -21,3 +21,9 @@ export function weekStart(value: string): string {
 export function shortDate(value?: string | null): string {
   return value ? value.slice(5).replace('-', '/') : '未设置'
 }
+
+/** 升序比较，缺失日期（待排期）排在最后。 */
+export function compareOptionalDates(left?: string | null, right?: string | null): number {
+  if (!left || !right) return left ? -1 : right ? 1 : 0
+  return left.localeCompare(right)
+}

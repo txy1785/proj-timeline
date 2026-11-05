@@ -12,7 +12,7 @@ import { scheduleVerdict } from '../utils/progress'
 const router=useRouter()
 const auth=useAuthStore()
 const app=useAppStore()
-function cardVerdict(project:Project){return scheduleVerdict({...project.stats,behind:project.stats.overdue})}
+function cardVerdict(project:Project){const stats=project.stats;return scheduleVerdict({total:stats.total,done:stats.done,behind:stats.overdue,unscheduled:stats.unscheduled})}
 const data=ref<PageResponse<Project>>()
 const loading=ref(true)
 const error=ref('')
@@ -72,7 +72,7 @@ onMounted(load)
         <p class="project-description">{{project.description||'尚未填写项目说明'}}</p>
         <div class="project-fact"><span>项目经理</span><strong>{{project.pmName||'进入项目查看'}}</strong></div>
         <div class="project-fact"><span>计划完成</span><strong>{{project.planEnd||'完成日期未定'}}</strong></div>
-        <div v-if="project.stats.total" class="project-progress"><el-progress :percentage="project.progress" :stroke-width="6" :show-text="false"/><span class="muted">{{project.stats.done}} / {{project.stats.total}} 项功能已交付</span><el-tag :type="cardVerdict(project).tone" size="small">{{cardVerdict(project).label}}</el-tag></div>
+        <div v-if="project.stats.total" class="project-progress"><el-progress :percentage="project.progress" :stroke-width="6" :show-text="false"/><span class="muted">已登记{{project.stats.total}}项，已交付{{project.stats.done}}项</span><el-tag :type="cardVerdict(project).tone" size="small">{{cardVerdict(project).label}}</el-tag></div>
         <p v-else class="muted">尚未建立工作项</p>
         <div class="project-risks"><RouterLink v-if="project.stats.overdue" class="danger" :to="'/projects/'+project.id+'/work-items?risk=overdue'">{{project.stats.overdue}} 项延期 ›</RouterLink><RouterLink v-if="project.stats.blocked" class="purple" :to="'/projects/'+project.id+'/work-items?risk=blocked'">{{project.stats.blocked}} 项受阻 ›</RouterLink><RouterLink v-if="project.stats.near" class="warning" :to="'/projects/'+project.id+'/work-items?risk=near'">{{project.stats.near}} 项临近 ›</RouterLink><span v-if="!project.stats.overdue&&!project.stats.blocked&&!project.stats.near" class="muted">{{project.stats.total?'当前没有延期、受阻或临近项':'从首个工作项开始安排交付'}}</span></div>
         <RouterLink class="project-enter" :to="'/projects/'+project.id+'/overview'">进入项目 <span aria-hidden="true">→</span></RouterLink>

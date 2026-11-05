@@ -193,7 +193,7 @@ async function openWorkItem() {
           <el-tab-pane label="附件" name="files" lazy><AttachmentPanel :key="`${task.id}-${filesVersion}`" owner-type="TASK" :owner-id="task.id" :can-manage="canAct" :archived="archived" :show-category-nav="false" :hint="isBug ? '上传复现截图、修复说明与验证资料；进展记录里粘贴的文件也会出现在这里。' : '历史任务的交付物与参考资料；进展记录里粘贴的文件也会出现在这里。'" /></el-tab-pane>
         </el-tabs>
         <div class="task-detail-parent"><span class="muted">{{ isBug ? '关联功能' : '所属工作项' }}</span><el-button link type="primary" @click="openWorkItem">{{ origin?.name || node.name }} →</el-button></div>
-        <TaskFormDialog v-model="editing" :node-id="node.id" :task="task" :members="members" :default-owner-id="node.ownerId" :work-items="relatedWorkItems" @saved="afterEdit" />
+        <TaskFormDialog v-model="editing" :node-id="node.id" :task="task" :members="members" :default-owner-id="node.ownerId || undefined" :work-items="relatedWorkItems" @saved="afterEdit" />
       </template>
     </div>
   </section>

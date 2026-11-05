@@ -4,7 +4,8 @@ import { prepare } from './helpers/task-fixture.mjs'
 test('delivered features retain blocked history without current risk badges in lists, timeline or my work', async ({ page }) => {
   await prepare(page, 'USER', 2, { closed:true, blocked:true })
   await page.goto('/projects/1/work-items')
-  const row = page.getByRole('row').filter({ has:page.getByRole('button',{name:'订单接口开发',exact:true}) })
+  await page.getByRole('button',{name:'展开全部',exact:true}).click()
+  const row = page.locator('.work-table tr.node-row').filter({ has:page.getByRole('button',{name:'订单接口开发',exact:true}) })
   await expect(row).toBeVisible()
   await expect(row.getByText('受阻',{exact:true})).toHaveCount(0)
   await page.goto('/projects/1/timeline')

@@ -10,6 +10,7 @@ import com.projtimeline.notification.NotificationService;
 import com.projtimeline.project.ProjectService;
 import com.projtimeline.security.PermissionService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -46,6 +47,7 @@ public class WorkService {
     private static final int MAX_DELIVERABLE_ATTACHMENTS = 20;
     /** 新建工作项时一次性能约定的交付要求条数，防止把整份需求清单塞进创建接口。 */
     private static final int MAX_NODE_REQUIREMENTS = 20;
+    private static final String UNASSIGNED_BUG_TARGET = "关联工作项未指派负责人，请指定Bug接收人，或联系项目经理先指派负责人";
     /** 进展记录列表与单行共用列清单；调用方需保证 n（task_notes）/u（作者）/e（最后编辑人）别名可用。 */
     private static final String NOTE_SELECT = """
             SELECT n.id,n.task_id,n.title,n.author_id,u.name author_name,n.content,n.created_at,
@@ -74,7 +76,7 @@ public class WorkService {
                        (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id AND t.status='DONE') done_tasks,
                        (SELECT COUNT(*) FROM node_deliverables d WHERE d.node_id=n.id) deliverable_total,
                        (SELECT COUNT(*) FROM node_deliverables d WHERE d.node_id=n.id AND d.status='PROVIDED') deliverable_provided
-                FROM nodes n JOIN users u ON u.id=n.owner_id LEFT JOIN modules m ON m.id=n.module_id
+                FROM nodes n LEFT JOIN users u ON u.id=n.owner_id LEFT JOIN modules m ON m.id=n.module_id
                 JOIN projects p ON p.id=n.project_id
                 WHERE n.id=:id
                 """, Map.of("id", id), "工作项不存在");
@@ -91,37 +93,36 @@ public class WorkService {
         return node;
     }
 
-    @Transactional
+    /** 工作项写入口用 READ_COMMITTED：MySQL 默认 RR 下锁前普通读会建快照，锁后复核权限/基线/最大排序会读到旧值。 */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public Map<String, Object> createNode(long projectId, Map<String, Object> body) {
         Long requestedModule = longValue(body, "moduleId");
         boolean projectLevel = requestedModule == null || requestedModule == 0;
-        Long requestedOwner = positiveLong(body, "ownerId");
-        long owner;
         String type = workItemType(body, "FEATURE");
+        Long moduleOwner = null;
         if (projectLevel) {
             permissions.requireProjectManager(projectId);
-            if (requestedOwner != null) {
-                owner = requestedOwner;
-            } else {
-                // ADMIN 不一定是项目成员，默认负责人取当前 PM，避免 requireAssignable 失败
-                Map<String, Object> pm = db.optional("SELECT user_id FROM project_members WHERE project_id=:project AND project_role='PM' LIMIT 1", Map.of("project", projectId));
-                owner = pm == null ? permissions.current().id() : number(pm.get("userId"));
-            }
         } else {
             Map<String, Object> module = db.one("SELECT id,project_id,owner_id FROM modules WHERE id=:id", Map.of("id", requestedModule), "模块不存在");
             if (number(module.get("projectId")) != projectId) throw BusinessException.badRequest("模块不属于该项目");
             permissions.requireModuleManager(requestedModule);
-            owner = requestedOwner == null ? number(module.get("ownerId")) : requestedOwner;
+            moduleOwner = longOrNull(module.get("ownerId"));
         }
-        LocalDate start = requiredDate(body, "planStart"), end = requiredDate(body, "planEnd"); checkRange(start, end);
-        permissions.requireAssignable(projectId, owner);
+        // 显式装箱：long/Long 混合三元会把 null 的模块负责人拆箱成 NPE
+        Long owner = ownerValue(body, projectLevel ? Long.valueOf(projectDefaultOwner(projectId)) : moduleOwner);
+        LocalDate start = date(body, "planStart"), end = date(body, "planEnd"); checkOptionalRange(start, end);
+        if (owner != null) permissions.requireAssignable(projectId, owner);
+        Map<String, Object> state = initialState(body, projectId, owner);
         // 先校验交付要求再写工作项：被拒的创建不落半个工作项，也不依赖事务回滚
         List<String> requirements = requirementNames(body);
-        Map<String, Object> values = new HashMap<>(); values.put("project", projectId);
+        Map<String, Object> values = new HashMap<>(state); values.put("project", projectId);
         values.put("module", projectLevel ? null : requestedModule); values.put("type", type); values.put("name", nameText(body));
         values.put("description", text(body, "description")); values.put("start", start); values.put("end", end); values.put("owner", owner);
         values.put("sort", Optional.ofNullable(intValue(body, "sortOrder")).orElse(0)); values.put("creator", permissions.current().id());
-        long id = db.insert("INSERT INTO nodes(project_id,module_id,type,name,description,plan_start,plan_end,owner_id,sort_order,created_by) VALUES(:project,:module,:type,:name,:description,:start,:end,:owner,:sort,:creator)", values);
+        long id = db.insert("""
+                INSERT INTO nodes(project_id,module_id,type,name,description,plan_start,plan_end,owner_id,status,historical,actual_start,actual_end,sort_order,created_by)
+                VALUES(:project,:module,:type,:name,:description,:start,:end,:owner,:status,:historical,:actualStart,:actualEnd,:sort,:creator)
+                """, values);
         // 交付要求是发布工作时一次性约定的承诺：与工作项同一事务落库，负责人与创建人取工作项
         for (int index = 0; index < requirements.size(); index++) {
             db.insert("""
@@ -129,32 +130,180 @@ public class WorkService {
                     VALUES(:node,:project,:name,'WANTED',:owner,NULL,:sort,:creator)
                     """, map("node", id, "project", projectId, "name", requirements.get(index), "owner", owner, "sort", index, "creator", values.get("creator")));
         }
-        log(id, "CREATE", projectLevel ? "创建项目级工作项" : "创建工作项", null, map("name", values.get("name"), "type", type, "requirements", requirements.size()));
-        notifications.notify(owner, "TASK_ASSIGN", "工作项已指派", "/nodes/"+id);
+        Map<String, Object> created = map("name", values.get("name"), "type", type, "requirements", requirements.size(),
+                "historical", state.get("historical"), "status", state.get("status"),
+                "actualStart", Objects.toString(state.get("actualStart"), null), "actualEnd", Objects.toString(state.get("actualEnd"), null));
+        // 补录项创建即越过开工点，不会再经 changeNodeStatus 写基线，因此由创建日志承载完整约定基线
+        if (flag(state.get("historical")))
+            created.put("requirementBaseline", listDeliverables(id).stream().map(WorkService::requirementSnapshot).toList());
+        log(id, "CREATE", projectLevel ? "创建项目级工作项" : "创建工作项", null, created);
+        if (owner != null) notifications.notify(owner, "TASK_ASSIGN", "工作项已指派", "/nodes/"+id);
         return node(id);
     }
 
-    @Transactional
+    /** ADMIN 不一定是项目成员，默认负责人取当前 PM，避免 requireAssignable 失败。 */
+    private long projectDefaultOwner(long projectId) {
+        Map<String, Object> pm = db.optional("SELECT user_id FROM project_members WHERE project_id=:project AND project_role='PM' LIMIT 1", Map.of("project", projectId));
+        return pm == null ? permissions.current().id() : number(pm.get("userId"));
+    }
+
+    /** 负责人三态：未传取 fallback，显式 null 表示未指派；0/空串沿用旧客户端口径视为未传。 */
+    private static Long ownerValue(Map<String, Object> body, Long fallback) {
+        if (!body.containsKey("ownerId")) return fallback;
+        if (body.get("ownerId") == null) return null;
+        Long value = positiveLong(body, "ownerId");
+        return value == null ? fallback : value;
+    }
+
+    /** 普通创建只能从未开始起步；historical=true 供 PM/ADMIN 补录已在进行或已完成的工作项。 */
+    private Map<String, Object> initialState(Map<String, Object> body, long projectId, Long owner) {
+        boolean historical = Boolean.TRUE.equals(bool(body, "historical"));
+        String status = text(body, "status");
+        LocalDate actualStart = date(body, "actualStart"), actualEnd = date(body, "actualEnd");
+        if (!historical) {
+            if ((status != null && !"NOT_STARTED".equals(status)) || actualStart != null || actualEnd != null)
+                throw BusinessException.badRequest("普通创建只能是未开始状态，补录历史工作项请使用 historical=true");
+            return map("status", "NOT_STARTED", "historical", false, "actualStart", null, "actualEnd", null);
+        }
+        permissions.requireProjectManager(projectId);
+        if ("IN_PROGRESS".equals(status)) {
+            if (actualStart == null) throw BusinessException.badRequest("actualStart 不能为空");
+            if (actualEnd != null) throw BusinessException.badRequest("进行中的历史工作项不能填写 actualEnd");
+            if (owner == null) throw BusinessException.badRequest("进行中的工作项必须指派负责人");
+        } else if ("DONE".equals(status)) {
+            if (actualEnd == null) throw BusinessException.badRequest("actualEnd 不能为空");
+        } else throw BusinessException.badRequest("历史工作项状态只能是 IN_PROGRESS 或 DONE");
+        LocalDate today = LocalDate.now(clock);
+        if ((actualStart != null && actualStart.isAfter(today)) || (actualEnd != null && actualEnd.isAfter(today)))
+            throw BusinessException.badRequest("实际日期不能晚于今天");
+        if (actualStart != null && actualEnd != null && actualStart.isAfter(actualEnd))
+            throw BusinessException.badRequest("实际开始日期不能晚于实际完成日期");
+        return map("status", status, "historical", true, "actualStart", actualStart, "actualEnd", actualEnd);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public Map<String, Object> updateNode(long id, Map<String, Object> body) {
         permissions.requireNodeManager(id);
+        Map<String, Object> state = db.one("SELECT status,module_id,actual_start,actual_end,historical FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", id), "工作项不存在");
+        // 锁内复核：等锁期间负责人或模块可能已变，授权以锁后状态为准
+        permissions.requireNodeManager(id);
+        requireLockedFieldsUnchanged(body, state);
         // 只取业务字段：progress 列已弃用，不应再进入变更日志的 before_value
         Map<String, Object> before = db.one("SELECT name,description,type,plan_start,plan_end,owner_id,sort_order,project_id FROM nodes WHERE id=:id", Map.of("id", id), "工作项不存在");
-        LocalDate start = requiredDate(body, "planStart"), end = requiredDate(body, "planEnd"); checkRange(start, end);
-        long owner = Optional.ofNullable(positiveLong(body, "ownerId")).orElse(number(before.get("ownerId")));
-        permissions.requireAssignable(number(before.get("projectId")), owner);
-        String type = workItemType(body, Objects.toString(before.get("type")));
-        Map<String, Object> values = new HashMap<>(); values.put("id", id); values.put("name", nameText(body)); values.put("description", text(body, "description"));
-        values.put("type", type); values.put("start", start); values.put("end", end); values.put("owner", owner); values.put("sort", Optional.ofNullable(intValue(body, "sortOrder")).orElse(((Number) before.get("sortOrder")).intValue()));
+        Long beforeOwner = longOrNull(before.get("ownerId"));
+        Long owner = ownerValue(body, beforeOwner);
+        if (owner == null && "IN_PROGRESS".equals(Objects.toString(state.get("status"))))
+            throw BusinessException.badRequest("进行中的工作项不能清空负责人");
+        if (owner != null) permissions.requireAssignable(number(before.get("projectId")), owner);
+        Map<String, Object> values = nodeUpdateValues(id, body, before, owner);
         db.update("UPDATE nodes SET name=:name,description=:description,type=:type,plan_start=:start,plan_end=:end,owner_id=:owner,sort_order=:sort WHERE id=:id", values);
         log(id, "RESCHEDULE", "更新工作项", before, values);
-        if(owner!=number(before.get("ownerId"))) notifications.notify(owner,"TASK_ASSIGN","工作项已改派","/nodes/"+id);
+        if (owner != null && !owner.equals(beforeOwner)) notifications.notify(owner, "TASK_ASSIGN", "工作项已改派", "/nodes/" + id);
         return node(id);
     }
 
-    @Transactional
+    /** 部分更新：未传字段沿用原值，显式 null 清空计划日期；名称一旦传入就不能为空。 */
+    private static Map<String, Object> nodeUpdateValues(long id, Map<String, Object> body, Map<String, Object> before, Long owner) {
+        LocalDate start = body.containsKey("planStart") ? date(body, "planStart") : (LocalDate) before.get("planStart");
+        LocalDate end = body.containsKey("planEnd") ? date(body, "planEnd") : (LocalDate) before.get("planEnd");
+        checkOptionalRange(start, end);
+        Map<String, Object> values = new HashMap<>(); values.put("id", id);
+        values.put("name", body.containsKey("name") ? nameText(body) : before.get("name"));
+        values.put("description", body.containsKey("description") ? text(body, "description") : before.get("description"));
+        values.put("type", workItemType(body, Objects.toString(before.get("type"))));
+        values.put("start", start); values.put("end", end); values.put("owner", owner);
+        values.put("sort", Optional.ofNullable(intValue(body, "sortOrder")).orElse(((Number) before.get("sortOrder")).intValue()));
+        return values;
+    }
+
+    /** 模块、状态、实际日期与补录标记各有专门入口；通用更新只容忍原样回传。 */
+    private static void requireLockedFieldsUnchanged(Map<String, Object> body, Map<String, Object> state) {
+        if (body.containsKey("moduleId") && !Objects.equals(positiveLong(body, "moduleId"), longOrNull(state.get("moduleId"))))
+            throw BusinessException.badRequest("不能通过更新工作项修改所属模块");
+        if (body.containsKey("status") && !Objects.equals(text(body, "status"), Objects.toString(state.get("status"))))
+            throw BusinessException.badRequest("不能通过更新工作项修改状态");
+        if ((body.containsKey("actualStart") && !Objects.equals(date(body, "actualStart"), state.get("actualStart")))
+                || (body.containsKey("actualEnd") && !Objects.equals(date(body, "actualEnd"), state.get("actualEnd"))))
+            throw BusinessException.badRequest("不能通过更新工作项修改实际日期");
+        if (body.containsKey("historical") && Boolean.TRUE.equals(bool(body, "historical")) != flag(state.get("historical")))
+            throw BusinessException.badRequest("不能通过更新工作项修改历史补录标记");
+    }
+
+    private static String correctionReason(Map<String, Object> body) {
+        String reason = requiredText(body, "reason");
+        if (reason.length() > 500) throw BusinessException.badRequest("reason 不能超过 500 字");
+        return reason;
+    }
+
+    /** 更正类操作的锁后状态快照；historical 归一成布尔，日志前后值同一口径。 */
+    private Map<String, Object> lockNodeState(long id) {
+        Map<String, Object> state = db.one("SELECT id,project_id,module_id,owner_id,status,actual_start,actual_end,historical FROM nodes WHERE id=:id FOR UPDATE",
+                Map.of("id", id), "工作项不存在");
+        state.put("historical", flag(state.get("historical")));
+        return state;
+    }
+
+    private Map<String, Object> lockCorrection(long id, long projectId, String expectedStatus) {
+        Map<String, Object> state = lockNodeState(id);
+        permissions.requireProjectManager(projectId);
+        if (!expectedStatus.equals(Objects.toString(state.get("status")))) throw BusinessException.conflict("工作项状态已变化，请刷新后重试");
+        return state;
+    }
+
+    private void checkActualDates(String status, LocalDate start, LocalDate end) {
+        if ("IN_PROGRESS".equals(status)) {
+            if (start == null) throw BusinessException.badRequest("actualStart 不能为空");
+            if (end != null) throw BusinessException.badRequest("进行中的工作项不能填写 actualEnd");
+        } else if ("DONE".equals(status)) {
+            if (end == null) throw BusinessException.badRequest("actualEnd 不能为空");
+        } else throw BusinessException.badRequest("只能更正进行中或已完成工作项的实际日期");
+        LocalDate today = LocalDate.now(clock);
+        if ((start != null && start.isAfter(today)) || (end != null && end.isAfter(today)))
+            throw BusinessException.badRequest("实际日期不能晚于今天");
+        if (start != null && end != null && start.isAfter(end))
+            throw BusinessException.badRequest("实际开始日期不能晚于实际完成日期");
+    }
+
+    /** 模块引用必须显式传入：null 表示项目级，否则为正整数。 */
+    private static Long moduleRef(Map<String, Object> body, String key) {
+        if (!body.containsKey(key)) throw BusinessException.badRequest(key + " 必须显式传入");
+        Long value = longValue(body, key);
+        if (value != null && value <= 0) throw BusinessException.badRequest(key + " 必须为 null 或正整数");
+        return value;
+    }
+
+    private void requireMoveTarget(long projectId, Long moduleId) {
+        if (moduleId == null) { permissions.requireProjectManager(projectId); return; }
+        Map<String, Object> module = db.one("SELECT id,project_id FROM modules WHERE id=:id", Map.of("id", moduleId), "模块不存在");
+        if (number(module.get("projectId")) != projectId) throw BusinessException.badRequest("目标模块不属于该项目");
+        permissions.requireModuleManager(moduleId);
+    }
+
+    private void updateOne(String sql, Map<String, Object> params) {
+        if (db.update(sql, params) != 1) throw BusinessException.conflict("工作项已变化，请刷新后重试");
+    }
+
+    private void logCorrection(long id, String action, String detail, Map<String, Object> before, String reason, Object... changes) {
+        Map<String, Object> after = new HashMap<>(before);
+        after.putAll(map(changes));
+        after.put("reason", reason);
+        log(id, action, detail, new HashMap<>(before), after);
+    }
+
+    /** 布尔列在不同驱动下可能读回 Boolean 或 0/1 数字。 */
+    private static boolean flag(Object value) { return value instanceof Boolean b ? b : value instanceof Number n && n.intValue() != 0; }
+
+    /** 开始工作只要求有可指派的负责人，计划日期允许留空。 */
+    private void requireStartOwner(Map<String, Object> node) {
+        Long owner = longOrNull(node.get("ownerId"));
+        if (owner == null) throw BusinessException.badRequest("工作项未指派负责人，不能开始");
+        permissions.requireAssignable(number(node.get("projectId")), owner);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public Map<String,Object> changeNodeStatus(long id,String target) { return changeNodeStatus(id,target,null); }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public Map<String, Object> changeNodeStatus(long id, String target, String expectedStatus) {
         permissions.requireNodeManager(id);
         Map<String, Object> before = db.one("SELECT * FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", id), "工作项不存在");
@@ -168,13 +317,18 @@ public class WorkService {
             default -> Set.of();
         };
         if (!allowed.contains(target)) throw BusinessException.conflict("非法工作项状态流转");
+        if ("IN_PROGRESS".equals(target)) requireStartOwner(before);
         LocalDate today = LocalDate.now(clock);
         Map<String, Object> values = new HashMap<>(); values.put("id", id); values.put("status", target);
         values.put("actualStart", "IN_PROGRESS".equals(target) && before.get("actualStart") == null ? today : before.get("actualStart"));
         values.put("actualEnd", "DONE".equals(target) ? today : null);
         db.update("UPDATE nodes SET status=:status,actual_start=:actualStart,actual_end=:actualEnd WHERE id=:id", values);
         String action = "DONE".equals(target) ? "COMPLETE" : "CANCELLED".equals(target) ? "CANCEL" : "STATUS_CHANGE";
-        log(id, action, "工作项状态变更为 " + target, Map.of("status", current), Map.of("status", target));
+        Map<String, Object> after = new HashMap<>(Map.of("status", target));
+        // 开工即约定生效：把此刻的交付要求整份留作基线，之后的修订日志都能对照它
+        if ("IN_PROGRESS".equals(target))
+            after.put("requirements", listDeliverables(id).stream().map(WorkService::requirementSnapshot).toList());
+        log(id, action, "工作项状态变更为 " + target, Map.of("status", current), after);
         if ("DONE".equals(target)) notifyPm(number(before.get("projectId")), "NODE_DONE", "工作项已完成", "/nodes/" + id);
         return node(id);
     }
@@ -201,11 +355,51 @@ public class WorkService {
         permissions.requireNodeManager(id); if (reason == null || reason.isBlank()) throw BusinessException.badRequest("reason 不能为空");
         Map<String, Object> before = db.one("SELECT project_id,module_id,status,plan_end,overdue_reason FROM nodes WHERE id=:id", Map.of("id", id), "工作项不存在");
         LocalDate end = (LocalDate) before.get("planEnd"); String status = Objects.toString(before.get("status"));
-        if (!(Set.of("NOT_STARTED", "IN_PROGRESS").contains(status) && end.isBefore(LocalDate.now(clock)))) throw BusinessException.badRequest("工作项当前未延期");
+        if (!(Set.of("NOT_STARTED", "IN_PROGRESS").contains(status) && end != null && end.isBefore(LocalDate.now(clock)))) throw BusinessException.badRequest("工作项当前未延期");
         if (reason.trim().equals(before.get("overdueReason"))) return node(id);
         db.update("UPDATE nodes SET overdue_reason=:reason WHERE id=:id", Map.of("id", id, "reason", reason.trim()));
         log(id, "OVERDUE_REASON", "提交延期原因", map("reason", before.get("overdueReason")), Map.of("reason", reason.trim()));
         notifyManagers(number(before.get("projectId")), longOrNull(before.get("moduleId")), "OVERDUE_ALERT", "工作项延期说明已更新", "/nodes/" + id);
+        return node(id);
+    }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Map<String, Object> reopenNode(long id, Map<String, Object> body) {
+        long projectId = permissions.projectForNode(id); permissions.requireProjectManager(projectId);
+        if (!"DONE".equals(requiredText(body, "expectedStatus"))) throw BusinessException.badRequest("expectedStatus 必须是 DONE");
+        String reason = correctionReason(body); Map<String, Object> before = lockCorrection(id, projectId, "DONE");
+        Long owner = longOrNull(before.get("ownerId"));
+        if (owner == null) throw BusinessException.badRequest("工作项未指派负责人，不能重新打开");
+        permissions.requireAssignable(projectId, owner);
+        updateOne("UPDATE nodes SET status='IN_PROGRESS',actual_end=NULL WHERE id=:id", Map.of("id", id));
+        logCorrection(id, "STATUS_CHANGE", "重新打开工作项", before, reason, "status", "IN_PROGRESS", "actualEnd", null);
+        return node(id);
+    }
+
+    /** 更正后的实际日期视为补录事实，historical 置 1。 */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Map<String, Object> correctActualDates(long id, Map<String, Object> body) {
+        long projectId = permissions.projectForNode(id); permissions.requireProjectManager(projectId);
+        String expected = requiredText(body, "expectedStatus"), reason = correctionReason(body);
+        LocalDate start = date(body, "actualStart"), end = date(body, "actualEnd"); checkActualDates(expected, start, end);
+        Map<String, Object> before = lockCorrection(id, projectId, expected);
+        if (Objects.equals(start, before.get("actualStart")) && Objects.equals(end, before.get("actualEnd"))) return node(id);
+        updateOne("UPDATE nodes SET actual_start=:start,actual_end=:end,historical=1 WHERE id=:id", map("id", id, "start", start, "end", end));
+        logCorrection(id, "RESCHEDULE", "更正实际日期", before, reason, "actualStart", start, "actualEnd", end, "historical", true);
+        return node(id);
+    }
+
+    /** 只改 module_id：负责人、附件、Bug 与记录都挂在工作项 id 上，随之保留。 */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Map<String, Object> moveNode(long id, Map<String, Object> body) {
+        Long target = moduleRef(body, "moduleId"), expected = moduleRef(body, "expectedModuleId");
+        String reason = correctionReason(body);
+        permissions.requireNodeManager(id); Map<String, Object> before = lockNodeState(id); permissions.requireNodeManager(id);
+        if (!Objects.equals(expected, longOrNull(before.get("moduleId")))) throw BusinessException.conflict("工作项所属模块已变化，请刷新后重试");
+        requireMoveTarget(number(before.get("projectId")), target);
+        if (Objects.equals(target, expected)) return node(id);
+        updateOne("UPDATE nodes SET module_id=:module WHERE id=:id", map("id", id, "module", target));
+        logCorrection(id, "RESCHEDULE", "移动工作项", before, reason, "moduleId", target);
         return node(id);
     }
 
@@ -249,12 +443,15 @@ public class WorkService {
         return rows;
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public Map<String, Object> createDeliverable(long nodeId, Map<String, Object> body) {
         permissions.requireNodeManager(nodeId);
-        // 与新增任务同一锁顺序：先锁工作项行，避免与"开始工作项"并发时给已开工工作项补交付要求
+        // 与新增任务同一锁顺序：先锁工作项行，避免与"开始工作项"并发时绕过开工后的原因校验
         Map<String, Object> node = db.one("SELECT id,project_id,status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "工作项不存在");
-        requireNodeNotStarted(node, "工作项已开始，不能新增交付要求");
+        // 锁内复核：等锁期间负责人或模块可能已变，授权以锁后状态为准
+        permissions.requireNodeManager(nodeId);
+        requireNodeOpen(node, "工作项已完成或已取消，不能新增交付要求");
+        String reason = revisionReason(text(body, "changeReason"), "IN_PROGRESS".equals(Objects.toString(node.get("status"))));
         long projectId = number(node.get("projectId"));
         // 未指定 sortOrder 时排到末尾：列表按 (sort_order, id) 升序，取当前最大值 +1 才等于创建顺序（与创建工作项时的 0..n-1 同一口径）
         Map<String, Object> request = body;
@@ -269,16 +466,18 @@ public class WorkService {
                 VALUES(:node,:project,:name,:status,:owner,:remark,:sort,:creator)
                 """, values);
         replaceAttachments(id, asAttachmentIds(values.get("attachments")));
-        log(nodeId, "DELIVERABLE_ADD", "新增交付物", null, map("deliverableId", id, "name", values.get("name"), "attachmentIds", values.get("attachments")));
-        return deliverable(id);
+        Map<String, Object> created = deliverable(id);
+        logRequirementRevision(nodeId, "DELIVERABLE_ADD", "新增交付物", null, requirementSnapshot(created), reason);
+        return created;
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public Map<String, Object> updateDeliverable(long id, Map<String, Object> body) {
         // 先按 id 取所属工作项做授权，再锁工作项与交付物行：避免用锁前快照判断"关闭工作项只允许改状态"
         long nodeId = nodeOfDeliverable(id);
         permissions.requireNodeManager(nodeId);
         Map<String, Object> node = db.one("SELECT id,project_id,status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "工作项不存在");
+        permissions.requireNodeManager(nodeId);
         lockDeliverable(id);
         Map<String, Object> before = deliverable(id);
         List<Long> beforeAttachments = linkedAttachmentIds(before);
@@ -286,14 +485,13 @@ public class WorkService {
         before.put("attachmentIds", beforeAttachments);
         Map<String, Object> values = deliverableValues(body, number(node.get("projectId")), nodeId, before);
         String nodeStatus = Objects.toString(node.get("status"));
-        // 开工后约定已生效：只允许改状态、备注与关联文件，改名、改派、改排序一律拒绝
-        if ("IN_PROGRESS".equals(nodeStatus) && !DeliverableRules.onlyProgressAllowed(before, values)) {
-            throw BusinessException.conflict("工作项已开始，交付要求只能更新状态、备注和关联文件");
-        }
         // 已关闭工作项只允许补标记"已提供"（补资料是常态），改名、改派、换文件一律拒绝，避免事后改写交付事实
         if (Set.of("DONE", "CANCELLED").contains(nodeStatus) && !DeliverableRules.onlyStatusChanged(before, values)) {
             throw BusinessException.conflict("工作项已完成或已取消，只能更新交付物状态");
         }
+        // 开工后改名、改派、改排序是修订已生效的约定，必须留下原因；状态、备注与关联文件照常可改
+        String reason = revisionReason(text(body, "changeReason"),
+                "IN_PROGRESS".equals(nodeStatus) && !DeliverableRules.onlyProgressAllowed(before, values));
         // 整表回传但没有任何变化时不写日志，与任务状态接口的幂等口径一致
         if (DeliverableRules.unchanged(before, values)) {
             before.remove("attachmentIds");
@@ -305,24 +503,53 @@ public class WorkService {
         List<Long> attachments = asAttachmentIds(values.get("attachments"));
         // 关联集合变了才重写关联行；仅顺序不同不算变化（与 DeliverableRules 同口径），避免无意义删插
         if (!new HashSet<>(beforeAttachments).equals(new HashSet<>(attachments))) replaceAttachments(id, attachments);
-        log(nodeId, "DELIVERABLE_UPDATE", "更新交付物",
-                map("deliverableId", id, "name", before.get("name"), "status", before.get("status"), "attachmentIds", beforeAttachments),
-                map("deliverableId", id, "name", values.get("name"), "status", values.get("status"), "attachmentIds", attachments));
-        return deliverable(id);
+        Map<String, Object> after = deliverable(id);
+        logRequirementRevision(nodeId, "DELIVERABLE_UPDATE", "更新交付物", requirementSnapshot(before), requirementSnapshot(after), reason);
+        return after;
     }
 
-    @Transactional
-    public void deleteDeliverable(long id) {
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public void deleteDeliverable(long id) { deleteDeliverable(id, null); }
+
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public void deleteDeliverable(long id, String changeReason) {
         long nodeId = nodeOfDeliverable(id);
         permissions.requireNodeManager(nodeId);
         Map<String, Object> node = db.one("SELECT status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "工作项不存在");
+        permissions.requireNodeManager(nodeId);
         lockDeliverable(id);
         Map<String, Object> before = deliverable(id);
-        requireNodeNotStarted(node, "工作项已开始，不能删除交付要求");
+        requireNodeOpen(node, "工作项已完成或已取消，不能删除交付要求");
+        String reason = revisionReason(changeReason, "IN_PROGRESS".equals(Objects.toString(node.get("status"))));
         // 先删关联行再删主行，同一事务；文件本身保留，交付记录不留孤儿关联
         db.update("DELETE FROM node_deliverable_attachments WHERE deliverable_id=:id", Map.of("id", id));
         if (db.update("DELETE FROM node_deliverables WHERE id=:id", Map.of("id", id)) != 1) throw BusinessException.conflict("交付物已被删除");
-        log(nodeId, "DELIVERABLE_DELETE", "删除交付物", Map.of("deliverableId", id, "name", before.get("name")), null);
+        logRequirementRevision(nodeId, "DELIVERABLE_DELETE", "删除交付物", requirementSnapshot(before), null, reason);
+    }
+
+    /** 交付要求修订原因：required 时缺失按 409（约定已生效），提供了就校验长度并记入日志。 */
+    private static String revisionReason(String raw, boolean required) {
+        String reason = raw == null || raw.isBlank() ? null : raw.trim();
+        if (reason == null && required) throw BusinessException.conflict("工作项已开始，调整交付要求必须填写变更原因");
+        if (reason != null && reason.length() > 500) throw BusinessException.badRequest("变更原因不能超过 500 字");
+        return reason;
+    }
+
+    /** 交付要求的完整审计快照：日志里能还原修订前后的约定，而不只是名称。 */
+    private static Map<String, Object> requirementSnapshot(Map<String, Object> deliverable) {
+        return map("deliverableId", deliverable.get("id"), "name", deliverable.get("name"), "status", deliverable.get("status"),
+                "ownerId", deliverable.get("ownerId"), "remark", deliverable.get("remark"), "sortOrder", deliverable.get("sortOrder"),
+                "attachmentIds", linkedAttachmentIds(deliverable));
+    }
+
+    /** 有原因时挂在 afterValue（删除没有 after，则单独成一个只含 id 与原因的 after）。 */
+    private void logRequirementRevision(long nodeId, String action, String detail, Map<String, Object> before, Map<String, Object> after, String reason) {
+        Map<String, Object> recorded = after;
+        if (reason != null) {
+            recorded = after == null ? map("deliverableId", before.get("deliverableId")) : new HashMap<>(after);
+            recorded.put("reason", reason);
+        }
+        log(nodeId, action, detail, before, recorded);
     }
 
     @Transactional
@@ -338,7 +565,10 @@ public class WorkService {
         // 锁工作项行，和完成工作项、任务状态变更串行，避免并发下给已完成工作项插入任务
         Map<String, Object> node = db.one("SELECT id,project_id,owner_id,status FROM nodes WHERE id=:id FOR UPDATE", Map.of("id", nodeId), "工作项不存在");
         requireNodeOpen(node, "已完成或已取消的工作项不能新增任务");
-        long assignee = Optional.ofNullable(positiveLong(body, "assigneeId")).orElse(number(node.get("ownerId"))); permissions.requireAssignable(number(node.get("projectId")), assignee);
+        // 工作项可未指派：回退值必须惰性取，否则显式传了执行人也会因空负责人 NPE
+        Long assigneeValue = Optional.ofNullable(positiveLong(body, "assigneeId")).orElseGet(() -> longOrNull(node.get("ownerId")));
+        if (assigneeValue == null) throw BusinessException.badRequest("工作项未指派负责人，请指定任务执行人");
+        long assignee = assigneeValue; permissions.requireAssignable(number(node.get("projectId")), assignee);
         BigDecimal estimate = decimal(body, "estimateDays"); validateDays(estimate, true);
         long projectId = number(node.get("projectId"));
         Long related = relatedNodeValue(body, projectId, null);
@@ -407,7 +637,7 @@ public class WorkService {
         Map<String, Object> target = resolveBugTarget(projectId, relatedRequested, true);
         if (target == null) throw BusinessException.badRequest("请选择关联的功能工作项");
         long nodeId = number(target.get("id"));
-        long assignee = number(target.get("ownerId"));
+        long assignee = bugAssignee(target, body);
         permissions.requireAssignable(projectId, assignee);
         Map<String, Object> values = new HashMap<>();
         values.put("node", nodeId); values.put("name", name); values.put("description", description);
@@ -431,7 +661,10 @@ public class WorkService {
         permissions.requireProjectActive(projectId);
         Map<String, Object> target = resolveBugTarget(projectId, relatedNodeId, false);
         if (target == null) return Map.of("canSubmit", false, "message", "请选择关联的功能工作项");
-        long owner = number(target.get("ownerId"));
+        Long ownerId = longOrNull(target.get("ownerId"));
+        if (ownerId == null) return Map.of("canSubmit", false, "nodeId", target.get("id"), "nodeName", target.get("name"),
+                "message", UNASSIGNED_BUG_TARGET);
+        long owner = ownerId;
         try { permissions.requireAssignable(projectId, owner); }
         catch (BusinessException ex) {
             if (ex.code() != 4000) throw ex;
@@ -440,6 +673,15 @@ public class WorkService {
         String ownerName = Objects.toString(db.one("SELECT name FROM users WHERE id=:id", Map.of("id", owner), "负责人不存在").get("name"), "");
         return Map.of("canSubmit", true, "nodeId", target.get("id"), "nodeName", target.get("name"),
                 "ownerId", owner, "ownerName", ownerName, "message", "将提交给" + ownerName + " · " + target.get("name"));
+    }
+
+    /** 有负责人时始终路由给负责人；负责人未指派时才采用显式指定的正整数 assigneeId。 */
+    private static long bugAssignee(Map<String, Object> target, Map<String, Object> body) {
+        Long owner = longOrNull(target.get("ownerId"));
+        if (owner != null) return owner;
+        Long requested = longValue(body, "assigneeId");
+        if (requested == null || requested <= 0) throw BusinessException.badRequest(UNASSIGNED_BUG_TARGET);
+        return requested;
     }
 
     /** Single routing rule shared by preflight and submission; false must never acquire write locks. */
@@ -765,11 +1007,6 @@ public class WorkService {
         if (Set.of("DONE", "CANCELLED").contains(Objects.toString(node.get("status")))) throw BusinessException.conflict(message);
     }
 
-    /** 交付要求只在「未开始」时可增删：开工后名单是承诺，不再按草稿处理。 */
-    private static void requireNodeNotStarted(Map<String, Object> node, String message) {
-        if (!"NOT_STARTED".equals(Objects.toString(node.get("status")))) throw BusinessException.conflict(message);
-    }
-
     /** 读回数据库整型列：按整数字符串严格解析，避免数值直接取 long 时的静默截断。 */
     private static Long longOrNull(Object value) { return value == null ? null : Long.valueOf(value.toString()); }
 
@@ -853,6 +1090,7 @@ public class WorkService {
 
     private static LocalDate requiredDate(Map<String, Object> body, String key) { LocalDate value = date(body, key); if (value == null) throw BusinessException.badRequest(key + " 不能为空"); return value; }
     private static void checkRange(LocalDate start, LocalDate end) { if (start.isAfter(end)) throw BusinessException.badRequest("计划开始日期不能晚于结束日期"); }
+    private static void checkOptionalRange(LocalDate start, LocalDate end) { if (start != null && end != null) checkRange(start, end); }
     private static void validateDays(BigDecimal value, boolean allowZero) {
         if (value == null) return; int cmp = value.compareTo(BigDecimal.ZERO); if ((allowZero && cmp < 0) || (!allowZero && cmp <= 0) || value.scale() > 1) throw BusinessException.badRequest("人天必须为 0.1 精度的有效数值");
     }

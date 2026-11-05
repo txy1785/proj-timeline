@@ -2,7 +2,8 @@ import { test, expect } from '@playwright/test'
 import { prepare } from './helpers/task-fixture.mjs'
 
 const emptyModule = { id: 3, projectId: 1, name: '新建报表模块', ownerId: 2, ownerName: '李经理', nodes: [] }
-function moduleGroup(page) { return page.locator('.work-group').filter({ has: page.getByRole('link', { name: emptyModule.name, exact: true }) }) }
+function moduleGroup(page) { return page.locator('.work-table tbody').filter({ has: page.locator('.group-row').getByRole('link', { name: emptyModule.name, exact: true }) }) }
+function workTab(page) { return page.getByRole('navigation', { name: '当前项目' }).getByRole('link', { name: '工作', exact: true }) }
 function moduleCard(page) { return page.locator('.module-card').filter({ has: page.getByRole('link', { name: emptyModule.name, exact: true }) }) }
 
 test('a newly created empty module appears immediately, survives reload and opens its work page', async ({ page }) => {
@@ -14,7 +15,7 @@ test('a newly created empty module appears immediately, survives reload and open
     return route.fulfill({ json: { code: 0, msg: 'ok', data: module } })
   })
   await page.goto('/projects/1/modules')
-  await expect(page.getByRole('navigation', { name: '当前项目' }).getByRole('link', { name: '模块', exact: true })).toHaveAttribute('aria-current', 'page')
+  await expect(workTab(page)).toHaveAttribute('aria-current', 'page')
   await page.getByRole('button', { name: '新建模块', exact: true }).click()
   const form = page.getByRole('dialog', { name: '新建模块', exact: true })
   await form.getByRole('textbox', { name: '模块名称' }).fill(emptyModule.name)
@@ -24,7 +25,12 @@ test('a newly created empty module appears immediately, survives reload and open
   await page.getByRole('button', { name: '查看全部工作项', exact: true }).click()
   await expect(page).toHaveURL('/projects/1/work-items')
   await expect(moduleGroup(page)).toBeVisible()
-  await expect(moduleGroup(page).getByText('本模块还没有工作项', { exact: true })).toBeVisible()
+  await expect(moduleGroup(page).locator('.group-row').getByRole('button', { name: '新建工作项', exact: true })).toBeVisible()
+  const toggle = moduleGroup(page).locator('.group-toggle')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  await expect(moduleGroup(page).getByText('本模块尚未拆分工作项', { exact: true })).toBeVisible()
   await moduleGroup(page).getByRole('button', { name: '新建工作项', exact: true }).click()
   const workForm = page.getByRole('dialog', { name: '新建工作项', exact: true })
   await expect(workForm.getByRole('textbox', { name: '所属位置' })).toHaveValue(emptyModule.name)
@@ -33,14 +39,14 @@ test('a newly created empty module appears immediately, survives reload and open
   await expect(moduleGroup(page)).toBeVisible()
   await moduleGroup(page).getByRole('link', { name: emptyModule.name, exact: true }).click()
   await expect(page).toHaveURL('/projects/1/modules/3')
-  await expect(page.getByRole('navigation', { name: '当前项目' }).getByRole('link', { name: '模块', exact: true })).toHaveAttribute('aria-current', 'page')
+  await expect(workTab(page)).toHaveAttribute('aria-current', 'page')
   await expect(page.getByRole('heading', { name: emptyModule.name, exact: true })).toBeVisible()
   await page.getByRole('button', { name: '返回模块列表', exact: true }).click()
   await expect(page).toHaveURL('/projects/1/modules')
   await expect(moduleCard(page)).toBeVisible()
 })
 
-test('the project overview shows modules before work items', async ({ page }) => {
+test('the project overview module region links an empty module to its module page', async ({ page }) => {
   const state = await prepare(page, 'USER', 2)
   state.extraModules.push(emptyModule)
   await page.goto('/projects/1/overview')
@@ -70,11 +76,11 @@ test('empty modules respect location, risk and search filters', async ({ page })
   await expect(moduleGroup(page)).toBeVisible()
   await page.locator('.el-select').filter({ has: page.getByRole('combobox', { name: '所属位置', exact: true }) }).click()
   await page.getByRole('option', { name: emptyModule.name, exact: true }).click()
-  await expect(page.locator('.work-group')).toHaveCount(1)
+  await expect(page.locator('.work-table tbody')).toHaveCount(1)
   await expect(moduleGroup(page)).toBeVisible()
   await expect(page.getByRole('heading', { name: '当前筛选下没有工作项', exact: true })).toHaveCount(0)
   await page.getByRole('textbox', { name: '搜索工作项', exact: true }).fill('不匹配的工作项')
-  await expect(page.locator('.work-group')).toHaveCount(0)
+  await expect(page.locator('.work-table tbody')).toHaveCount(0)
   await expect(page.getByRole('heading', { name: '当前筛选下没有工作项', exact: true })).toBeVisible()
 })
 

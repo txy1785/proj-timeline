@@ -10,11 +10,15 @@ import { scheduleProgress } from '../utils/progress'
 import ProgressSummary from '../components/ProgressSummary.vue'
 import BugReportDialog from '../components/BugReportDialog.vue'
 import WorkItemFormDialog from '../components/WorkItemFormDialog.vue'
+import StageTargetsPanel from '../components/StageTargetsPanel.vue'
 
-const id=Number(useRoute().params.id)
+const route=useRoute()
+const id=Number(route.params.id)
 const router=useRouter()
 const auth=useAuthStore()
 const {project,members,businessDate,isPm,canCreateWorkItem,refresh}=useProjectContext(id)
+const targetsOpen=ref(route.query.targets==='open')
+const canManageTargets=computed(()=>isPm.value&&project.value?.status==='ACTIVE')
 const range=ref('ALL')
 const zoom=ref('WEEK')
 const scroll=ref<HTMLElement>()
@@ -34,7 +38,7 @@ const bounds=computed(()=>{
   const today=businessDate.value
   if(range.value==='MONTH'&&today){const start=today.slice(0,7)+'-01';return{start,end:addDays(monthNext(start),-1)}}
   if(range.value==='FOUR'&&today){const start=weekStart(addDays(today,-7));return{start,end:addDays(start,27)}}
-  const values=[...nodes.value.flatMap(node=>[node.planStart,node.planEnd]),...(project.value?.stageTargets.map(target=>target.targetDate)||[])].filter(value=>Number.isFinite(dateValue(value))).sort()
+  const values=[...nodes.value.flatMap(node=>[node.planStart,node.planEnd]),...(project.value?.stageTargets.map(target=>target.targetDate)||[])].filter((value):value is string=>!!value&&Number.isFinite(dateValue(value))).sort()
   const first=values[0]||project.value?.planStart||today
   const last=values.at(-1)||first
   return{start:weekStart(first),end:addDays(weekStart(last),6)}
@@ -61,12 +65,21 @@ const periods=computed(()=>{
 const visibleGoals=computed(()=>(project.value?.stageTargets||[]).filter(target=>target.targetDate>=bounds.value.start&&target.targetDate<=bounds.value.end))
 const todayVisible=computed(()=>!!businessDate.value&&businessDate.value>=bounds.value.start&&businessDate.value<=bounds.value.end)
 function bar(node:NodeItem){
+  if(!node.planStart||!node.planEnd)return undefined
   if(node.planEnd<bounds.value.start||node.planStart>bounds.value.end)return undefined
   const start=node.planStart<bounds.value.start?bounds.value.start:node.planStart
   const end=node.planEnd>bounds.value.end?bounds.value.end:node.planEnd
   return{left:left(start)+'px',width:(daysBetween(start,end)+1)*dayWidth.value+'px'}
 }
-function hint(node:NodeItem){return node.name+' · '+node.ownerName+' · '+node.planStart+' 至 '+node.planEnd+' · '+NODE_STATUS_LABELS[node.status]+(hasWorkItemRisk(node, 'overdue')?' · 已延期':'')+(hasWorkItemRisk(node, 'blocked')?' · 受阻':'')}
+function scheduleText(node:NodeItem){
+  if(!node.planEnd&&node.status==='DONE')return '原计划未记录'+(node.actualEnd?' · 实际交付 '+node.actualEnd:'')
+  if(!node.planEnd&&node.status==='CANCELLED')return '计划未记录'
+  if(!node.planEnd)return node.planStart?'待排期 · 计划开始 '+node.planStart:'待排期'
+  if(!node.planStart)return '计划完成 '+node.planEnd+' · 开始日期未定'
+  return node.planStart+'—'+node.planEnd+' · 在当前范围之外'
+}
+function overdueLabel(node:NodeItem){return businessDate.value&&node.planEnd?'延期 '+daysBetween(node.planEnd,businessDate.value)+' 天':'延期'}
+function hint(node:NodeItem){return node.name+' · '+(node.ownerName||'未分配')+' · '+node.planStart+' 至 '+node.planEnd+' · '+NODE_STATUS_LABELS[node.status]+(hasWorkItemRisk(node, 'overdue')?' · 已延期':'')+(hasWorkItemRisk(node, 'blocked')?' · 受阻':'')}
 async function locateToday(){
   if(!businessDate.value)return
   range.value='FOUR'
@@ -80,12 +93,13 @@ watch(()=>[scroll.value,businessDate.value],async()=>{
   await nextTick()
   if(scroll.value)scroll.value.scrollLeft=Math.max(0,left(businessDate.value)-180)
 },{immediate:true})
-async function saved(node?:NodeItem){await refresh();if(node?.id)void router.push('/nodes/'+node.id)}
+async function saved(node?:NodeItem,options?:{continue?:boolean}){await refresh();if(!options?.continue&&node?.id)void router.push('/nodes/'+node.id)}
 </script>
 
 <template>
   <div>
-    <header class="page-head"><div><h1>交付排期</h1><p>对照今天的位置，看每个模块是否按计划交付。</p></div><div class="page-actions"><el-button v-if="!auth.isViewer&&project?.status==='ACTIVE'&&nodes.some(node=>node.status!=='CANCELLED')" @click="bugDialog=true">报告 Bug</el-button><el-button v-if="canCreateWorkItem" type="primary" @click="workDialog=true">新建工作项</el-button></div></header>
+    <header class="page-head"><div><h1>交付排期</h1><p>对照今天的位置，看每个模块是否按计划交付。</p></div><div class="page-actions"><el-button v-if="project" :aria-expanded="targetsOpen" @click="targetsOpen=!targetsOpen">{{targetsOpen?'收起阶段目标':canManageTargets?'管理阶段目标':'查看阶段目标'}}</el-button><el-button v-if="!auth.isViewer&&project?.status==='ACTIVE'&&nodes.some(node=>node.status!=='CANCELLED')" @click="bugDialog=true">报告 Bug</el-button><el-button v-if="canCreateWorkItem" type="primary" @click="workDialog=true">新建工作项</el-button></div></header>
+    <div v-if="targetsOpen&&project" class="section-gap"><StageTargetsPanel :project="project" :can-manage="canManageTargets" @saved="refresh"/></div>
     <ProgressSummary v-if="nodes.length" class="section-gap" :progress="progress" :project-id="id" :today="businessDate"/>
     <section class="surface schedule-surface">
       <div class="section-head"><div class="page-actions"><el-select v-model="range" aria-label="排期范围" style="width:130px"><el-option label="全部排期" value="ALL"/><el-option label="本月" value="MONTH"/><el-option label="近四周" value="FOUR"/></el-select><el-select v-model="zoom" aria-label="时间线刻度" style="width:120px"><el-option label="按周" value="WEEK"/><el-option label="按月" value="MONTH"/></el-select><el-button :disabled="!businessDate" @click="locateToday">定位今天</el-button></div><div class="schedule-legend"><span><i class="not-started"/>未开始</span><span><i class="in-progress"/>进行中</span><span><i class="done"/>已交付</span><span><i class="overdue"/>已延期</span><span class="warning">临近</span><span class="purple">受阻</span></div></div>
@@ -95,8 +109,8 @@ async function saved(node?:NodeItem){await refresh();if(node?.id)void router.pus
           <div class="schedule-line schedule-header"><div class="schedule-fixed schedule-column-head"><strong>工作项</strong><span>负责人</span><span>状态</span></div><div class="schedule-track"><div v-for="period in periods" :key="period.start" class="schedule-period" :style="{left:period.x+'px',width:period.width+'px'}">{{period.label}}</div></div></div>
           <div class="schedule-line schedule-goals" :style="{height:Math.max(70,visibleGoals.length*34+18)+'px'}"><div class="schedule-fixed"><strong>项目阶段目标</strong><small>{{bounds.start}} 至 {{bounds.end}}</small></div><div class="schedule-track"><div v-if="todayVisible" class="today-line" :style="{left:left(businessDate)+'px'}"><span>今天 {{shortDate(businessDate)}}</span></div><div v-for="(goal,index) in visibleGoals" :key="goal.id" class="goal-marker" :style="{left:left(goal.targetDate)+'px',top:(index*34+22)+'px'}"><span class="goal-symbol" aria-hidden="true">◆</span><el-tooltip :content="goal.targetDate+' · '+goal.name+(goal.progress!=null?' · 达成'+goal.progress+'%':'')"><span class="goal-caption" :class="{before:left(goal.targetDate)>plotWidth-240}">{{goal.name}} · {{shortDate(goal.targetDate)}}<template v-if="goal.progress!=null"> · {{goal.progress}}%</template></span></el-tooltip></div><span v-if="!visibleGoals.length" class="outside-range">此范围内没有阶段目标</span></div></div>
           <template v-for="group in groups" :key="group.id">
-            <div class="schedule-group"><div class="schedule-fixed"><RouterLink v-if="group.id" :to="'/projects/'+id+'/modules/'+group.id">{{group.name}}</RouterLink><strong v-else>{{group.name}}</strong><small class="group-progress">已交付 {{workItemCounts(group.nodes).done}}/{{workItemCounts(group.nodes).total}}<b v-if="groupBehind(group.nodes)" class="danger"> · 延期 {{groupBehind(group.nodes)}}</b></small></div></div>
-            <div v-for="node in group.nodes" :key="node.id" class="schedule-line schedule-work-item"><div class="schedule-fixed schedule-node-label"><RouterLink :to="'/nodes/'+node.id">{{node.name}}<small v-if="node.deliverableTotal">资料 {{node.deliverableProvided||0}}/{{node.deliverableTotal}}</small></RouterLink><span>{{node.ownerName}}</span><span>{{NODE_STATUS_LABELS[node.status]}}</span></div><div class="schedule-track"><div v-if="todayVisible" class="today-line" :style="{left:left(businessDate)+'px'}"/><el-tooltip v-if="bar(node)" :content="hint(node)" placement="top"><button class="date-bar" :class="[node.status.toLowerCase().replaceAll('_','-'),{overdue:hasWorkItemRisk(node,'overdue')}]" :style="bar(node)" :aria-label="hint(node)" @click="router.push('/nodes/'+node.id)"><span>{{shortDate(node.planStart)}}—{{shortDate(node.planEnd)}}</span><span v-if="hasWorkItemRisk(node, 'overdue')" class="bar-risk">{{businessDate?'延期 '+daysBetween(node.planEnd,businessDate)+' 天':'延期'}}</span><span v-if="hasWorkItemRisk(node, 'near')" class="bar-risk">临近</span><span v-if="hasWorkItemRisk(node, 'blocked')" class="bar-risk">受阻</span></button></el-tooltip><RouterLink v-else class="outside-range" :to="'/nodes/'+node.id">{{node.planStart}}—{{node.planEnd}} · 在当前范围之外</RouterLink></div></div>
+            <div class="schedule-group"><div class="schedule-fixed"><RouterLink v-if="group.id" :to="'/projects/'+id+'/modules/'+group.id">{{group.name}}</RouterLink><strong v-else>{{group.name}}</strong><small class="group-progress"><template v-if="group.nodes.length">已交付 {{workItemCounts(group.nodes).done}}/{{workItemCounts(group.nodes).total}}</template><template v-else>尚未拆分</template><b v-if="groupBehind(group.nodes)" class="danger"> · 延期 {{groupBehind(group.nodes)}}</b></small></div></div>
+            <div v-for="node in group.nodes" :key="node.id" class="schedule-line schedule-work-item"><div class="schedule-fixed schedule-node-label"><RouterLink :to="'/nodes/'+node.id">{{node.name}}<small v-if="node.deliverableTotal">资料 {{node.deliverableProvided||0}}/{{node.deliverableTotal}}</small></RouterLink><span>{{node.ownerName||'未分配'}}</span><span>{{NODE_STATUS_LABELS[node.status]}}</span></div><div class="schedule-track"><div v-if="todayVisible" class="today-line" :style="{left:left(businessDate)+'px'}"/><el-tooltip v-if="bar(node)" :content="hint(node)" placement="top"><button class="date-bar" :class="[node.status.toLowerCase().replaceAll('_','-'),{overdue:hasWorkItemRisk(node,'overdue')}]" :style="bar(node)" :aria-label="hint(node)" @click="router.push('/nodes/'+node.id)"><span>{{shortDate(node.planStart)}}—{{shortDate(node.planEnd)}}</span><span v-if="hasWorkItemRisk(node, 'overdue')" class="bar-risk">{{overdueLabel(node)}}</span><span v-if="hasWorkItemRisk(node, 'near')" class="bar-risk">临近</span><span v-if="hasWorkItemRisk(node, 'blocked')" class="bar-risk">受阻</span></button></el-tooltip><RouterLink v-else class="outside-range" :to="'/nodes/'+node.id">{{scheduleText(node)}}</RouterLink></div></div>
             <div v-if="!group.nodes.length" class="schedule-line"><div class="schedule-fixed muted">尚无工作项</div><div class="schedule-track"><span class="outside-range">在该功能模块中建立首项交付</span></div></div>
           </template>
         </div>

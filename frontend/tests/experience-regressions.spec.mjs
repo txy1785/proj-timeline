@@ -5,11 +5,11 @@ test('a preserved note remains readable after the project becomes archived', asy
   const state = await prepare(page)
   await page.goto('/nodes/106?task=11')
   await page.getByRole('tab', { name: /进展记录/ }).click()
-  await page.getByRole('textbox', { name: '进展记录内容' }).fill('需要保留的草稿')
+  await page.getByRole('textbox', { name: '进展内容' }).fill('需要保留的草稿')
   state.projectStatus = 'ARCHIVED'
   await page.locator('.task-detail-page').getByRole('button', { name: /标记完成|标记已解决/, exact: true }).click()
   await expect(page.getByRole('textbox', { name: '未保存的记录草稿' })).toHaveValue('需要保留的草稿')
-  await expect(page.getByRole('button', { name: '保存记录', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '更新进展', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: '返回工作项', exact: true }).click()
   await expect(page.getByRole('button', { name: '保存并关闭', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: '返回保留草稿', exact: true }).click()
