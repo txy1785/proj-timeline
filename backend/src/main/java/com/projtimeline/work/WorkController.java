@@ -55,6 +55,15 @@ public class WorkController {
     @PutMapping("/nodes/{id}/overdue-reason")
     ApiResponse<Map<String, Object>> overdueReason(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.overdueReason(id, RequestValues.text(body, "reason"))); }
 
+    @PostMapping("/nodes/{id}/reopen")
+    ApiResponse<Map<String, Object>> reopenNode(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.reopenNode(id, body)); }
+
+    @PutMapping("/nodes/{id}/actual-dates")
+    ApiResponse<Map<String, Object>> actualDates(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.correctActualDates(id, body)); }
+
+    @PostMapping("/nodes/{id}/move")
+    ApiResponse<Map<String, Object>> moveNode(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.moveNode(id, body)); }
+
     @GetMapping("/nodes/{id}/logs")
     ApiResponse<List<Map<String, Object>>> logs(@PathVariable long id) { return ApiResponse.ok(service.logs(id)); }
 
@@ -74,7 +83,9 @@ public class WorkController {
     ApiResponse<Map<String, Object>> updateDeliverable(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.updateDeliverable(id, body)); }
 
     @DeleteMapping("/deliverables/{id}")
-    ApiResponse<Void> deleteDeliverable(@PathVariable long id) { service.deleteDeliverable(id); return ApiResponse.ok(null); }
+    ApiResponse<Void> deleteDeliverable(@PathVariable long id, @RequestParam(required = false) String reason) {
+        service.deleteDeliverable(id, reason); return ApiResponse.ok(null);
+    }
 
     @PutMapping("/tasks/{id}")
     ApiResponse<Map<String, Object>> updateTask(@PathVariable long id, @RequestBody Map<String, Object> body) { return ApiResponse.ok(service.updateTask(id, body)); }

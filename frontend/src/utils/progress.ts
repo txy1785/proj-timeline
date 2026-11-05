@@ -12,6 +12,8 @@ export interface ScheduleProgress {
   dueDone: number
   /** 未关闭且已延期的项，与风险列表同口径。 */
   behind: number
+  /** 未关闭且没有计划完成日的项；来源未提供时为 undefined。 */
+  unscheduled?: number
   donePercent: number
   /** 项目计划时间已过去的比例；完成日期未定或业务日期未知时为 undefined。 */
   timePercent?: number
@@ -20,17 +22,24 @@ export interface ScheduleProgress {
 /** 进度对照计划：已过计划完成日的项拆成已交付与延期，进行中不估算完成量。 */
 export function scheduleProgress(nodes: ScheduleNode[], today: string, plan?: { planStart: string; planEnd?: string }): ScheduleProgress {
   const { total, done } = workItemCounts(nodes)
-  const dueNodes = today ? nodes.filter(node => node.status !== 'CANCELLED' && node.planEnd < today) : []
+  const dueNodes = today ? nodes.filter(node => node.status !== 'CANCELLED' && !!node.planEnd && node.planEnd < today) : []
   const dueDone = dueNodes.filter(node => node.status === 'DONE').length
   const behind = nodes.filter(node => hasWorkItemRisk(node, 'overdue')).length
-  return { total, done, due: dueNodes.length, dueDone, behind, donePercent: deliveredPercent(done, total), timePercent: timeElapsed(plan, today) }
+  const unscheduled = nodes.filter(node => isOpen(node) && !node.planEnd).length
+  return { total, done, due: dueNodes.length, dueDone, behind, unscheduled, donePercent: deliveredPercent(done, total), timePercent: timeElapsed(plan, today) }
 }
 
-export function scheduleVerdict(progress: Pick<ScheduleProgress, 'total' | 'done' | 'behind'>): { label: string; tone: 'success' | 'danger' | 'info' } {
+/** 判定优先级：延期 > 待排期 > 按计划；有待排期项时不能宣称按计划。 */
+export function scheduleVerdict(progress: Pick<ScheduleProgress, 'total' | 'done' | 'behind' | 'unscheduled'>): { label: string; tone: 'success' | 'danger' | 'info' } {
   if (!progress.total) return { label: '尚无有效工作项', tone: 'info' }
-  if (progress.done === progress.total) return { label: '全部已交付', tone: 'success' }
+  if (progress.done === progress.total) return { label: '已登记工作项全部交付', tone: 'success' }
   if (progress.behind) return { label: `落后 ${progress.behind} 项`, tone: 'danger' }
+  if (progress.unscheduled) return { label: `待排期 ${progress.unscheduled} 项`, tone: 'info' }
   return { label: '按计划进行', tone: 'success' }
+}
+
+function isOpen(node: Pick<NodeItem, 'status'>): boolean {
+  return node.status === 'NOT_STARTED' || node.status === 'IN_PROGRESS'
 }
 
 /** 与后端 ProgressRules.aggregate 一致：未全部交付时最多 99%。 */

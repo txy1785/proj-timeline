@@ -39,7 +39,7 @@ watch([() => module.value?.id, canRequest], async () => {
   } catch (e) { if (current === requestVersion) ElMessage.error((e as Error).message) }
 }, { immediate: true })
 function openNode(node: NodeItem) { router.push(`/nodes/${node.id}`) }
-function created(node: NodeItem) { void refresh(); router.push(`/nodes/${node.id}`) }
+function created(node: NodeItem, options?: { continue?: boolean }) { void refresh(); if (!options?.continue) router.push(`/nodes/${node.id}`) }
 async function removeModule() {
   if (!module.value || !isPm.value || !active.value) return
   try { await ElMessageBox.confirm(`确认删除模块「${module.value.name}」？含工作项或待审批申请时不能删除。`, '删除模块', { type: 'warning' }) } catch { return }
@@ -58,14 +58,14 @@ async function removeModule() {
       <el-alert v-else-if="auth.isViewer" title="当前为只读观察账号，可查看工作项和下载文件。" type="info" :closable="false" class="section-gap" />
       <div v-else-if="canRequest" class="surface request-entry section-gap"><div><strong>{{ pendingRequest ? '变更申请待审批' : '需要调整这个模块？' }}</strong><p>{{ pendingRequest ? '申请通过前，模块内容保持原样。' : '可申请修改名称、描述或负责人，由项目经理审批。' }}</p></div><el-button v-if="pendingRequest" @click="router.push(`/projects/${projectId}/settings?tab=requests&requestId=${pendingRequest.id}`)">查看我的申请</el-button><el-button v-else @click="requestDialog = true">申请变更模块</el-button></div>
       <section class="section-gap">
-        <div class="section-heading"><div><h2>模块工作项</h2><p class="muted">已交付 {{ deliveryCounts.done }}/{{ deliveryCounts.total }} 项功能；每项有自己的负责人和计划日期。</p></div><el-button v-if="canManage" type="primary" @click="workItemDialog = true">新建工作项</el-button></div>
+        <div class="section-heading"><div><h2>模块工作项</h2><p class="muted"><template v-if="module.nodes?.length">已交付 {{ deliveryCounts.done }}/{{ deliveryCounts.total }} 项功能</template><template v-else>尚未拆分工作项</template>；每项有自己的负责人和计划日期。</p></div><el-button v-if="canManage" type="primary" @click="workItemDialog = true">新建工作项</el-button></div>
         <div v-if="module.nodes?.length" class="work-item-grid">
           <section v-for="item in module.nodes || []" :key="item.id" class="surface work-item-card" @click="openNode(item)">
             <div class="work-item-head"><h3><RouterLink :to="`/nodes/${item.id}`" @click.stop>{{ item.name }}</RouterLink></h3><el-tag size="small" :type="NODE_STATUS_TYPES[item.status]">{{ NODE_STATUS_LABELS[item.status] }}</el-tag></div>
             <p class="work-item-type">{{ WORK_ITEM_TYPE_LABELS[item.type] }}</p>
             <dl class="work-item-meta">
-              <div><dt>负责人</dt><dd>{{ item.ownerName }}</dd></div>
-              <div><dt>计划</dt><dd>{{ item.planStart }} ~ {{ item.planEnd || '未定' }}</dd></div>
+              <div><dt>负责人</dt><dd>{{ item.ownerName || '未分配' }}</dd></div>
+              <div><dt>计划</dt><dd>{{ item.planEnd ? `${item.planStart || '开始未定'} ~ ${item.planEnd}` : '待排期' }}</dd></div>
               <div><dt>交付资料</dt><dd>{{ item.deliverableTotal ? `${item.deliverableProvided || 0}/${item.deliverableTotal} 已提供` : '未设交付要求' }}</dd></div>
             </dl>
           </section>

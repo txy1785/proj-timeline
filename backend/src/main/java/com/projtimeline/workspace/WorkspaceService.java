@@ -32,7 +32,7 @@ public class WorkspaceService {
             """;
     private static final String NODE_FROM = """
             FROM nodes n JOIN projects p ON p.id=n.project_id
-            JOIN users u ON u.id=n.owner_id LEFT JOIN modules m ON m.id=n.module_id AND m.project_id=p.id
+            LEFT JOIN users u ON u.id=n.owner_id LEFT JOIN modules m ON m.id=n.module_id AND m.project_id=p.id
             """;
     private static final String NODE_COLUMNS = """
             SELECT n.*,p.name project_name,p.status project_status,u.name owner_name,

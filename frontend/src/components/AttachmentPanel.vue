@@ -17,20 +17,30 @@ const props = withDefaults(defineProps<{
   archived?: boolean
   showCategoryNav?: boolean
   hint?: string
-}>(), { archived: false, showCategoryNav: true, hint: '' })
+  title?: string
+  embedded?: boolean
+}>(), { archived: false, showCategoryNav: true, hint: '', title: '附件', embedded: false })
+const emit = defineEmits<{ changed: [] }>()
 
 const categories = ref<AttachmentCategory[]>([])
 const files = ref<Attachment[]>([])
 const loading = ref(false)
 const activeCode = ref('')
+const showAllCategories = ref(false)
 const dialog = ref(false)
 const uploading = ref(false)
 const { previewOpen, previewItem, openPreview } = useAttachmentPreview()
 const form = reactive({ code: '', title: '', remark: '', fileName: '', raw: null as File | null })
+let categoriesTask: Promise<void> | null = null
 
 const ownCategories = computed(() => categories.value.filter(item => item.ownerType === props.ownerType))
 const groups = computed(() => Array.from(new Set(ownCategories.value.map(item => item.group))))
 const groupCategories = (group: string) => ownCategories.value.filter(item => item.group === group)
+const categoryCount = (code: string) => files.value.filter(file => file.category === code).length
+const navCategories = computed(() => ownCategories.value.filter(item =>
+  showAllCategories.value || item.code === activeCode.value || categoryCount(item.code) > 0))
+const navGroups = computed(() => Array.from(new Set(navCategories.value.map(item => item.group))))
+const navGroupCategories = (group: string) => navCategories.value.filter(item => item.group === group)
 const visibleFiles = computed(() => activeCode.value ? files.value.filter(item => item.category === activeCode.value) : files.value)
 const canUpload = computed(() => props.canManage && !props.archived)
 const activeName = computed(() => ownCategories.value.find(item => item.code === activeCode.value)?.name || '全部文件')
@@ -47,21 +57,36 @@ async function load() {
   }
 }
 
-async function loadCategories() {
-  if (categories.value.length) return
+async function fetchCategories() {
   try {
     categories.value = await api<AttachmentCategory[]>('GET', '/attachments/categories')
   } catch (error) {
+    categoriesTask = null
     ElMessage.error((error as Error).message)
   }
 }
 
+function loadCategories() {
+  categoriesTask ??= fetchCategories()
+  return categoriesTask
+}
+
 function pickCategory(code: string) { activeCode.value = activeCode.value === code ? '' : code }
 
-function openUpload() {
-  const fallback = activeCode.value || ownCategories.value[0]?.code || ''
-  Object.assign(form, { code: fallback, title: '', remark: '', fileName: '', raw: null })
+async function openUpload() {
+  Object.assign(form, { code: activeCode.value, title: '', remark: '', fileName: '', raw: null })
   dialog.value = true
+  await loadCategories()
+  if (!form.code) form.code = ownCategories.value[0]?.code || ''
+}
+
+function guardClose(done: () => void) {
+  if (!uploading.value) done()
+}
+
+function openRow(row: Attachment) {
+  if (previewKind(row.originalName) !== 'none') openPreview(row)
+  else void save(row)
 }
 
 function onPick(file: UploadFile) {
@@ -85,7 +110,9 @@ async function submit() {
   try {
     await upload<Attachment>('/attachments', body)
     ElMessage.success('文件已上传')
+    uploading.value = false
     dialog.value = false
+    emit('changed')
     await load()
   } catch (error) {
     ElMessage.error((error as Error).message)
@@ -108,6 +135,7 @@ async function remove(row: Attachment) {
   try {
     await api<void>('DELETE', `/attachments/${row.id}`)
     ElMessage.success('已删除')
+    emit('changed')
     await load()
   } catch (error) {
     ElMessage.error((error as Error).message)
@@ -120,16 +148,18 @@ onMounted(() => {
   void load()
   if (props.showCategoryNav || props.canManage) void loadCategories()
 })
+
+defineExpose({ openUpload, reload: load })
 </script>
 
 <template>
   <div v-loading="loading" class="attachment-panel">
     <div class="attachment-head">
       <div>
-        <h2>文档与文件</h2>
-        <p class="muted">{{ hint || '按分类归档设计文档、过程记录和交付物；同名文件再次上传会保留历史版本。' }}</p>
+        <h2>{{ title }}</h2>
+        <p v-if="hint" class="muted">{{ hint }}</p>
       </div>
-      <el-button v-if="canUpload" type="primary" @click="openUpload">上传文件</el-button>
+      <el-button v-if="canUpload" :type="embedded ? 'default' : 'primary'" @click="openUpload">上传文件</el-button>
     </div>
 
     <el-alert v-if="archived" title="项目已归档，文件只能查看和下载" type="warning" :closable="false" style="margin-bottom:14px" />
@@ -137,13 +167,14 @@ onMounted(() => {
     <div class="attachment-body">
       <aside v-if="showCategoryNav" class="attachment-nav">
         <button class="doc-all" :class="{ active: !activeCode }" @click="activeCode = ''">全部文件（{{ files.length }}）</button>
-        <div v-for="group in groups" :key="group" class="doc-group">
+        <div v-for="group in navGroups" :key="group" class="doc-group">
           <strong>{{ group }}</strong>
-          <button v-for="item in groupCategories(group)" :key="item.code" class="doc-link" :class="{ active: activeCode === item.code }" @click="pickCategory(item.code)">
+          <button v-for="item in navGroupCategories(group)" :key="item.code" class="doc-link" :class="{ active: activeCode === item.code }" @click="pickCategory(item.code)">
             {{ item.name }}
-            <span class="doc-count">{{ files.filter(file => file.category === item.code).length }}</span>
+            <span class="doc-count">{{ categoryCount(item.code) }}</span>
           </button>
         </div>
+        <button v-if="ownCategories.length" class="doc-all doc-toggle" @click="showAllCategories = !showAllCategories">{{ showAllCategories ? '仅显示有文件的分类' : '全部分类' }}</button>
       </aside>
 
       <div class="attachment-list">
@@ -151,7 +182,7 @@ onMounted(() => {
         <el-table :data="visibleFiles" empty-text="暂无文件">
           <el-table-column prop="title" label="标题" min-width="200">
             <template #default="scope">
-              {{ scope.row.title }}
+              <el-button link type="primary" class="title-link" :title="previewKind(scope.row.originalName) !== 'none' ? '预览' : '下载'" @click="openRow(scope.row)">{{ scope.row.title }}</el-button>
               <el-tag size="small" type="info" style="margin-left:6px">v{{ scope.row.version }}</el-tag>
             </template>
           </el-table-column>
@@ -171,7 +202,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <el-dialog v-model="dialog" title="上传文件" width="560">
+    <el-dialog v-model="dialog" title="上传文件" width="560" :close-on-click-modal="!uploading" :close-on-press-escape="!uploading" :show-close="!uploading" :before-close="guardClose">
       <el-form label-position="top">
         <el-form-item label="文档分类" required>
           <el-select v-model="form.code" style="width:100%" filterable>
@@ -194,7 +225,7 @@ onMounted(() => {
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialog = false">取消</el-button>
+        <el-button :disabled="uploading" @click="dialog = false">取消</el-button>
         <el-button type="primary" :loading="uploading" @click="submit">上传</el-button>
       </template>
     </el-dialog>
@@ -216,5 +247,7 @@ onMounted(() => {
 .doc-group { margin-top: 10px; }
 .doc-group strong { display: block; padding: 4px 8px; font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
 .doc-count { font-size: 12px; opacity: 0.65; }
+.doc-toggle { margin-top: 10px; color: var(--blue); }
+.title-link { white-space: normal; text-align: left; }
 .upload-hint { font-size: 14px; color: var(--navy); }
 </style>

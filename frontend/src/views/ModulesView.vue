@@ -28,7 +28,7 @@ const projectLevelCount = computed(() => workItemCounts(project.value?.projectWo
       </section>
       <div v-else class="module-grid">
         <section v-for="module in project.modules" :key="module.id" class="surface module-card">
-          <div class="module-card-heading"><h2><RouterLink :to="`/projects/${projectId}/modules/${module.id}`">{{ module.name }}</RouterLink></h2><span class="module-count">{{ workItemCounts(module.nodes || []).done }}/{{ workItemCounts(module.nodes || []).total }} 已交付</span></div>
+          <div class="module-card-heading"><h2><RouterLink :to="`/projects/${projectId}/modules/${module.id}`">{{ module.name }}</RouterLink></h2><span class="module-count"><template v-if="module.nodes?.length">{{ workItemCounts(module.nodes).done }}/{{ workItemCounts(module.nodes).total }} 已交付</template><template v-else>尚未拆分</template></span></div>
           <p class="module-description">{{ module.description || '暂无模块说明' }}</p>
           <div class="module-card-footer"><span>负责人 {{ module.ownerName }} · {{ module.nodes?.length || 0 }} 个工作项</span><RouterLink :to="`/projects/${projectId}/modules/${module.id}`">进入模块 →</RouterLink></div>
         </section>

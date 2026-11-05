@@ -1,5 +1,15 @@
 # 项目记忆
 
+## 2026-11-05 UX报告改造当前状态
+
+已按报告实现并在隔离环境验收。产品代码由用户指定Claude Code路由编写，Codex设计、审查及运行验证。后端135项、前端70项回归及lint/typecheck/build通过；真实HTTP13组、MySQL并发2组、V16到V17保留升级和浏览器文档/目标/重开/批量流程通过。前后端独立复审均可合并。证据见docs/UX验收-2026-11-05/README.md。
+
+- 基线4219bb5，功能分支feature/ux-review-20261105，按审核流程集成develop；最终提交信息见交付记录。
+- 仅隔离库proj_timeline_ux_20261105_test已升级V17；用户库未升级，58080旧服务保持。测试58181/41732使用合成数据。
+- 新口径覆盖旧规则：仅标题必填、可空计划/负责人、历史实际日期、受控纠错/移动、进行中要求有理由修订、已登记范围统计、草稿恢复、四主导航与计划页目标维护。模块仍无阶段日期，项目开始日必填，任务独立详情保留。
+- V17产生空字段后不得只回退旧应用，需匹配数据库/文件备份或前向修复。不自动修正用户已有134–139等数据。
+- 截图已保存但工具无法显示图像；视觉验收依据真实操作与DOM量测，不声称逐像素验证。
+
 本文件记录当前已确认的产品决定、代码现状和开发上下文。每次需求改变后更新对应条目；实施过程和旧版本验证记录保留在 [PLAN.md](PLAN.md)，不要把历史记录当成当前契约。
 
 ## 项目定位
@@ -19,18 +29,18 @@
 5. “本周实际人天”按每日工时明细的 `work_date` 在自然周内汇总。更正未发布周的工时会改变实时周报；已发布周报保留发布时的 JSON 快照。
 6. **2026-10-27 用户批准功能交付模型，覆盖旧任务完成率规则**：工作项负责人开始并确认交付，不要求创建子任务，不由旧任务/交付资料数量阻断交付；状态 DONE=已交付，兼容 progress=100，其他状态 progress=0，进行中不再估算50%。模块/项目按未取消工作项的已交付数 ÷ 总数计算完成率，界面优先显示已交付x/y。阶段目标量化进度仍独立。
 7. **产品定位不做 OKR**（2026-10 明确）。团队按项目交付为主、项目结束后进入维护期，管理方式是排期抓进度，目前没有季度量化目标、评分与对齐流程，负责人也不熟悉 OKR。因此不引入 Objective/KeyResult、周期、评分、对齐等概念；`阶段性目标` 仍是“带日期的项目里程碑”，不升级为 O。重新评估的触发条件：真正按季度定 3–5 条量化目标且有人维护、目标达成度要跨部门比较或与绩效挂钩、超过 10 人需要逐层对齐——满足两条以上再讨论。
-8. **交付资料**：功能页统一展示交付要求及实际文件，复用原 node_deliverables 和 NODE 附件。清单项可选关联同一工作项的未删除文件（V16 起**每条记录可关联多个文件**，关联表 `node_deliverable_attachments`；交付物弹窗内可一次选多个本地文件批量上传，全部成功后才保存记录），不新建文件体系，不作为自动完成门槛。**交付要求是发布工作时就约定的承诺**（2026-10-31 用户确认口径 A）：创建工作项时一次性填写，工作项一开始（进行中）就只允许改状态、备注与关联文件，改名/改派/改排序/新增/删除一律 409；未开始时仍可自由维护，已交付/取消只剩改状态。负责人按约定检查资料后确认交付；文件按原权限保留上传、预览和版本记录（文件本体不随清单锁定）。
+8. **交付资料**：复用node_deliverables与NODE附件、多文件关联和原权限。未开始自由维护；进行中新增/删除/改名/改派/排序须changeReason（删除reason查询参数），保留开工基线与完整前后快照；状态/备注/文件无需原因。已交付/取消仍仅改状态。要求与文件数不作为交付门槛、不换算进度。覆盖2026-10-31完全冻结决定。
 9. **阶段性目标的量化指标是“可选附件式”扩展，不是 OKR**：`metricName / metricUnit / metricTarget / metricCurrent` 四列全空就是原来的日期型里程碑；填了才由 `ProgressRules.metricProgress` 派生 `progress`（当前值 ÷ 目标值，四舍五入，夹 0–100，超额按 100）。指标不参与项目/模块/工作项进度聚合，不进周报，没有周期、评分、对齐、信心指数。这样回答“季度目标达成多少”但不需要引入 OKR 的方法论。
 10. **模块变更申请**（成员改别人模块的唯一通道）：只覆盖模块的**名称 / 描述 / 负责人**，没有模块编辑权限的项目成员（非 VIEWER）提交并可填申请说明，PM/ADMIN 审批。同一模块同时只允许一个待审批申请（`pending_module_id` 生成列 + 唯一键兜底）；通过时在**同一事务**内改模块并记录审批人/时间，驳回必须填原因；申请人可撤回自己待审批的申请。已有直接编辑权限的人（PM、该模块负责人）调用提交接口返回 409。审批结果与待审批各发一条站内通知（通知枚举扩到 7 类）。
 11. **独立 Bug**：成员报告必须关联同项目工作项，未开始/进行中/已交付均可，已取消不可新报；默认执行人为功能负责人。不再自动寻找进行中的项目级 BUGFIX。已交付功能的 Bug 可继续修复、改派、记录和附件，保留功能交付状态与日期。Bug 复用 TODO/DOING/DONE（待修复/修复中/已解决），接口/storage 保留 tasks.kind=BUG；旧分流 Bug 的有效同项目 related_node_id 作为业务来源，否则回退 node_id。来源职务及执行人决定能力，不得跨项目追溯；归档与 VIEWER 只读。
 
-12. **体验主线**：USER 登录默认“我的工作”，展示本人负责的功能工作项和本人待处理 Bug；ADMIN/VIEWER 默认项目总览。工作项详情默认功能说明、交付资料、Bug、活动记录，有旧任务时才显示历史任务入口。旧任务/看板/通知深链仍可读，默认不再新建通用子任务。阶段目标在项目设置、模块只作功能分组；新建空模块默认可见。2026-10-28 恢复独立“模块”导航和列表页，项目概览直接显示模块卡片，明确项目 → 模块 → 工作项。
+12. **体验主线**：USER 登录默认“我的工作”，展示本人负责的功能工作项和本人待处理 Bug；ADMIN/VIEWER 默认项目总览。工作项详情默认功能说明、交付资料、Bug、活动记录，有旧任务时才显示历史任务入口。旧任务/看板/通知深链仍可读，默认不再新建通用子任务。阶段目标在计划页就近维护、设置保留兼容入口；模块只作功能分组；新建空模块默认可见。2026-10-28 恢复独立“模块”导航和列表页，项目概览直接显示模块卡片，明确项目 → 模块 → 工作项。
 13. **当前风险与负载**：当前延期/受阻仅计未关闭功能；人员负载主要展示有效项目的未交付/进行中/延期/本周到期工作项和未解决/逾期 Bug，数字与展开同范围。旧任务人天字段/API和已发布周报快照保留历史兼容，不用 Bug 或资料数换算功能进度。
 
 14. **进展记录是命名的 Markdown 文件**（2026-10-28 用户指定）：Bug/历史任务修复区的记录编辑区支持 Markdown，保存时命名并生成一份 `.md` 记录（缺后缀自动补），一个任务可保存多份，按时间倒序展示。粘贴/拖入的图片与文件立即上传为**本任务附件**（分类 `TASK_RECORD`「进展记录附件」），正文只保存 `attachment:{id}`：图片用 Blob 内联预览，其他文件显示为可点击超链接（预览或下载），并同步出现在「附件」页签。**编辑区为单栏所见即所得**：直接显示渲染后的标题、列表、图片与文件名链接，输入时由 turndown 序列化回 Markdown，需要手写语法时可切「源码」；不再保留编辑/预览分栏。编辑区列出本次上传并可移除（同时软删除任务附件、去掉正文占位）；非文件拖放不拦截。**已保存记录可由作者本人或任务管理者再编辑标题与正文**（原地更新，记录最后编辑人/时间，不新增记录）；删除限作者本人或管理者。初始 Markdown 渲染固定 `html:false`，不允许原始 HTML；粘贴 HTML 经 DOMPurify 白名单清洗。正文上限 20000 字，记录名 ≤120 字且禁止路径字符。附件仍按任务权限校验，不改四层文件体系。
 15. **最小单位任务详情使用独立页面**（2026-10-28 用户指定）：Bug 与历史任务不再用右侧抽屉，点击任务名称/查看详情直接进入 `/nodes/:nodeId/tasks/:taskId` 页面；工作项列表、看板、我的工作、人员负载统一用 `router.push` 进入。页面保留说明、进展记录、附件、状态操作、编辑 Bug、草稿与未保存离开提示；旧 `/nodes/:id?task=...` 深链自动重定向到新页面。
 
-16. **进度对照计划**（2026-10-30 用户同意按推荐执行）：项目进度以“已过计划完成日的未取消工作项 = 已交付 + 延期”表达，结论标签为 落后 N 项（N=当前延期数）/按计划进行/全部已交付/尚无有效工作项，并并列交付进度与时间进度；“今天”只取 `/context` 业务日期，进行中仍不估算完成量（不加手填百分比）。概览、时间线、项目卡片共用 `utils/progress.ts`。后续体验收敛按顺序：② 项目内入口收敛为 进度/工作项/设置、Bug 进入工作项列表、全局单一“新建”；③ 列表内直接改状态、快速新建只填名称/负责人/截止日、隐藏低频功能（模块变更申请、目标量化指标、历史任务、看板、工时）但保留数据。
+16. **进度对照计划**：仅描述已登记未取消工作项，DONE计1其余0；待排期计分母但不计延期。结论优先延期、待排期、按计划；全交付限定已登记范围。统计含unscheduled/unassigned/emptyModules。主导航概览/工作/计划/资料，其他在更多；列表紧凑分组、快速/批量操作，旧路由数据保留。
 
 17. **工作项也有进展记录**（2026-10-30 用户要求“工作项也需要记录编辑功能，能产出文件”）：工作项详情新增「进展记录」页签，形态与第 14 条完全一致（命名 .md、单栏所见即所得、粘贴文件即上传、可再编辑/删除/下载）。表 `node_notes`（V15），接口 `GET/POST /nodes/{id}/notes`、`PUT/DELETE /node-notes/{id}`；粘贴文件为**工作项附件**（分类 `NODE_RECORD`），同时出现在「交付资料」文件列表。写入限工作项负责人/模块负责人/PM/ADMIN（同工作项级附件），改删限作者本人或上述管理者；已交付/取消的工作项仍可补记录，归档与 VIEWER 只读。前后端分别复用 `WorkService.noteTitle/noteContent` 与 `NoteRecords` 组件；草稿由页面 `useNoteDraft` 持有，重新加载失败时出错页仍显示草稿并保留离开提示。
 
@@ -61,8 +71,8 @@
 
 - 后端：Java 17、Spring Boot 3.5.16、MyBatis-Plus 3.5.17、Spring Security、Flyway、MySQL 8。
 - 前端：Vue 3、TypeScript、Vite、Vue Router、Pinia、Element Plus、Axios；使用 npm 和 `package-lock.json`。文件预览额外依赖 `docx-preview` 与 `read-excel-file`（按需动态加载，不进入主包）；Markdown 渲染依赖 `markdown-it`（`html:false`，随任务详情页加载），单栏编辑区额外依赖 `turndown`/`turndown-plugin-gfm`（DOM→Markdown）与 `dompurify`（粘贴 HTML 清洗）。
-- 当前 Flyway 版本为 V16。V1 建表，V2 将项目开始日期设为必填并过渡性增加模块日期，V3 建立 `project_stage_targets` 并移除模块日期，V4 建立 `attachments` 文档附件表，V5 只修正 `owner_type` 注释（V4 已应用到环境，不得再改写），V6 建立 `task_notes` 并让 `attachments.owner_type` 支持 TASK，V7 只把 `nodes.progress` 列注释改为「已弃用」（进度改为任务完成率派生，保留列与历史值，不删列），V8 给 `tasks` 增加 `situation`/`handling` 并为 `node_logs.action` 增加 `TASK_UPDATE`/`TASK_DELETE`，V9 建立 `node_deliverables` 并为 `node_logs.action` 增加 `DELIVERABLE_ADD`/`DELIVERABLE_UPDATE`/`DELIVERABLE_DELETE`，V10 给 `project_stage_targets` 增加四个可空指标列（`metric_name/metric_unit/metric_target/metric_current`），V11 建立 `module_change_requests` 并把 `notifications.type` 扩到 7 类，V12 让 `nodes.module_id` 可空、增加 `nodes.type`，给 `tasks` 增加 `kind` 和 `related_node_id`，V13 给 `task_notes` 增加 `title`（默认「进展记录.md」）并把 `content` 扩为 `MEDIUMTEXT` 存 Markdown，V14 给 `task_notes` 增加 `updated_by`/`updated_at` 支持再编辑，V15 建立 `node_notes`（工作项进展记录），V16 建立 `node_deliverable_attachments`（一条交付记录可关联多个工作项文件；先把 `node_deliverables.attachment_id` 的历史值回填成关联行，再把该列标注弃用、不删列）。已有迁移文件不能改写；新变更追加 V17 及以后版本。
-- 当前 OpenAPI 有 80 个 `/api` 操作：2026-10-30 新增工作项进展记录 4 个接口（#77–80），其余路径沿用。前端 `frontend/src/api/schema.d.ts` 已由运行中的新版后端生成；默认脚本端口 8080，本机服务其他端口需显式指定。2026-10-31 交付物多文件只改请求/响应字段口径（`attachmentIds`/`attachments`），没有新增或删除端点，操作数仍为 80，`schema.d.ts` 无需重新生成。
+- 当前代码Flyway版本V17，用户库仍V16。V1 建表，V2 将项目开始日期设为必填并过渡性增加模块日期，V3 建立 `project_stage_targets` 并移除模块日期，V4 建立 `attachments` 文档附件表，V5 只修正 `owner_type` 注释（V4 已应用到环境，不得再改写），V6 建立 `task_notes` 并让 `attachments.owner_type` 支持 TASK，V7 只把 `nodes.progress` 列注释改为「已弃用」（进度改为任务完成率派生，保留列与历史值，不删列），V8 给 `tasks` 增加 `situation`/`handling` 并为 `node_logs.action` 增加 `TASK_UPDATE`/`TASK_DELETE`，V9 建立 `node_deliverables` 并为 `node_logs.action` 增加 `DELIVERABLE_ADD`/`DELIVERABLE_UPDATE`/`DELIVERABLE_DELETE`，V10 给 `project_stage_targets` 增加四个可空指标列（`metric_name/metric_unit/metric_target/metric_current`），V11 建立 `module_change_requests` 并把 `notifications.type` 扩到 7 类，V12 让 `nodes.module_id` 可空、增加 `nodes.type`，给 `tasks` 增加 `kind` 和 `related_node_id`，V13 给 `task_notes` 增加 `title`（默认「进展记录.md」）并把 `content` 扩为 `MEDIUMTEXT` 存 Markdown，V14 给 `task_notes` 增加 `updated_by`/`updated_at` 支持再编辑，V15 建立 `node_notes`（工作项进展记录），V16 建立 `node_deliverable_attachments`（一条交付记录可关联多个工作项文件；先把 `node_deliverables.attachment_id` 的历史值回填成关联行，再把该列标注弃用、不删列）。已有迁移文件不能改写；V17允许计划/负责人为空并增加historical（补录或人工纠正）；后续从V18追加。
+- 当前OpenAPI为83个/api操作；新增reopen、actual-dates、move；schema.d.ts已从运行中的58181新版服务生成。
 - 认证为 8 小时 JWT，仅保存用户 ID；每次请求重新检查账号启用状态与角色。浏览器会话存于 `sessionStorage`。
 - 日期判定使用注入的 `Clock`，默认业务时区 `Asia/Shanghai`。延期和临近到期由服务端实时计算。
 - 演示数据只在显式执行 `docs/demo_seed.sql` 时导入；不属于 Flyway 正式迁移。根目录 `.env` 和本机数据库凭据不得写入文档或提交。
@@ -76,11 +86,11 @@
 - 默认流程不再新建通用任务；现有非 BUG 任务、工时、说明、记录、附件保留历史入口。历史任务关闭父项后仍沿原限制不能改内容/状态。Bug 在来源功能已交付后仍可独立修改内容/状态；来源取消后内容/状态禁止修改，记录/附件沿原权限。
 - 工作项与 Bug 快捷状态带 expectedStatus；服务端行锁校验，冲突返回409并刷新，文字草稿保留。Bug内容编辑不可悄悄改变关联功能或脱离Bug类型。
 - 文档内容类型由服务端按扩展名推导，不采用客户端声明；仅 PDF 与图片内联展示，其余强制下载，并带 `X-Content-Type-Options: nosniff`。
-- 在线预览在浏览器内完成，不新增服务端接口、不引入转换服务：PDF/图片用浏览器原生能力，txt/md/csv 用只读文本，docx 用 docx-preview，xlsx 用 read-excel-file；`doc/xls/ppt` 等旧格式与压缩包只提供下载。
+- 在线预览在浏览器内完成，不新增服务端接口、不引入转换服务：PDF/图片用浏览器原生能力，txt/csv只读文本、md用html:false安全渲染，docx 用 docx-preview，xlsx 用 read-excel-file；`doc/xls/ppt` 等旧格式与压缩包只提供下载。
 - 进展记录（`task_notes`）的 Markdown 渲染固定在浏览器完成，`markdown-it` 以 `html:false` 配置转义用户 HTML；单栏编辑区初始渲染同样走 `renderMarkdown`，输入时用 `turndown` 序列化回 Markdown，粘贴 HTML 只经 DOMPurify 白名单进入编辑区（允许段落、标题、列表、表格、代码、链接、图片等，禁止脚本/事件属性），不把 token 放进 URL。正文中的 `attachment:{id}` 只由前端解析成本任务附件的 Blob 或下载链接，服务端不解析、不执行 Markdown。记录的再编辑与删除限作者本人或任务管理者（工作项负责人/模块负责人/PM/ADMIN），归档项目与 VIEWER 只读；编辑为原地更新并记录最后编辑人/时间，不新增记录、不写 `node_logs`。
 - 预览的安全边界：SVG 不提供预览（blob: 文档继承应用源，脚本可在新标签页执行）；docx 渲染必须保持 `renderAltChunks/renderChanges/renderComments: false`（altChunk 会把内嵌 HTML 渲染成同源 iframe），渲染后还要清洗超链接（只留 http(s)/mailto/锚点）。PDF 走浏览器内置阅读器（独立扩展源），未加 iframe `sandbox`，原因与待验证项见 PLAN。改动这两个库的选项前先看 PLAN 里的 PoC 记录；Markdown 渲染器同理不得开启原始 HTML。
 - 模块变更申请是成员改别人模块的**唯一通道**：只覆盖名称/描述/负责人，PM/ADMIN 审批，通过后同一事务内生效；同一模块同时只有一个待审批；撤回仅申请人。审批时会重新校验负责人是项目内有效且非 VIEWER 的成员。
-- 工作项交付物清单的写入权限与工作项级附件一致（工作项负责人/模块负责人/PM，VIEWER 与归档项目只读）；关联文件必须是同一工作项未删除的附件，但**只在真的改关联时才校验**——文件被软删除后，清单仍可只改状态（否则关闭工作项上文件下拉禁用会让该项永远标不成“已提供”）。一条记录可关联多个文件（V16 关联表 `node_deliverable_attachments`），提交用 `attachmentIds`：不传保留原有全部关联、传 `null` 或 `[]` 清空、去重后最多 20 个；关联集合变化（仅顺序不同不算）按“换文件”处理。**交付要求三档锁**（口径见第 8 条）：未开始可新增/改名/改派/改排序/关联文件/删除；进行中只允许 `status`、`remark`、`attachmentIds`，其余变化 409「工作项已开始，交付要求只能更新状态、备注和关联文件」，新增 409「工作项已开始，不能新增交付要求」、删除 409「工作项已开始，不能删除交付要求」；已完成/已取消只允许改 `status`（文案沿用「工作项已完成或已取消，只能更新交付物状态」）。三档在 `DeliverableRules` 里是包含关系（已结束 ⊂ 进行中），不要写成互不相干的两套判断。完全无变化的更新直接返回、不写日志；清单是物理删除并同一事务先删关联行，不删除关联文件。
+- 验收要求写入用requireNodeManager；进行中结构变化须原因，完整快照写node_logs；关闭仅status。附件限同工作项，旧软删除关联不阻止纯状态更新。相关写事务READ_COMMITTED+节点行锁+锁后复核，避免MySQL RR旧快照。
 - 项目/模块交付完成率只计未取消工作项；DONE已交付计1，进行中不估算完成量。兼容百分比由ProgressRules派生，界面显示交付计数；工作项的资料/Bug/历史任务均不改变功能进度。周报按周一至周日归周，已发布快照不改。
 
 ## 验证与已知边界
@@ -93,7 +103,7 @@
 - 2026-10-28 任务详情页轮次验证：按用户要求把 Bug/历史任务从右侧抽屉改为独立页面 `/nodes/:nodeId/tasks/:taskId`；前端 `lint`/`typecheck`/`build` 通过，Playwright **45 项**通过（含直接打开/刷新任务 URL、从 Bug 列表点击进入、返回工作项、草稿与上传保护、旧 `?task=` 重定向、移动端无横向溢出）；本轮无后端/接口/迁移变更，58080/5173 保持运行。独立审核 `313c2f5`“可合并”、无 P1/P2，清理 P3 后提交 `c23cae5`，以合并提交 `24b71aa` 集成 develop 并推送，功能分支已删除。
 - 2026-10-31 交付物多文件 + 模块工作项卡片轮次验证：Maven **83 项**通过（含新增 `DeliverableAttachmentTest` 6 项、`DeliverableRulesTest` 关联集合比较用例）；前端 `lint`/`typecheck`/`build` 通过；Playwright 单跑「交付资料」用例通过（mock 已改为 `attachments` 数组）。在本机隔离库 `proj_timeline_v16_verify` 重放 V1–V16 验证迁移：回填使有 `attachment_id` 的记录生成 1 条关联、无文件的不生成，旧列注释改为“已弃用”且历史值保留，唯一键拦住重复关联，验证后删库。修复独立审核的 2 条 P2（`attachmentIds` 小数曾被静默截断、弹窗上传中被关闭后仍写库）后，Maven **85 项**通过。用户确认后已重启本机 58080 后端，Flyway 应用 V16（`Successfully applied 1 migration ... now at version v16`），`/actuator/health` UP、5173 返回 200、库内新表已存在；`git push origin develop` 首次因网络中断失败，重试成功，origin/develop 已到 `7050b21`。
 - 2026-10-31 交付要求三档锁轮次验证：Maven **96 项**通过（`DeliverableAttachmentTest` 17 项）；前端 `lint`/`typecheck`/`build` 通过；Playwright `task-flow.spec.mjs` **27 项**通过。独立审核「可合并、无 P1」，3 条 P2 + 7 条 P3 全部处置。已提交 `4a96cad` 以合并提交 `81ca12d` 集成 develop 并推送；本机 58080 已重启（`Schema proj_timeline is up to date. No migration necessary`，健康接口 UP）。本轮零迁移、零表结构变更。
-- `PLAN.md` 中早期接口/页面/表数量是历史快照。当前接口 80 个、表 18 张（含 flyway_schema_history）；V15 新建 `node_notes`，V16 新建 `node_deliverable_attachments`。
+- PLAN.md旧数字为历史快照。当前83个API，V17不新增表；用户库升级状态须实时核对。
 - 已知限制：工作项页重新加载时若项目上下文刷新失败（两次请求之间失去项目权限），App 外壳会直接替换页面，未保存的工作项记录草稿不经提示丢失；触发窗口很窄，暂不处理。
 - 当前工作站此前未运行 Docker Compose 的真实构建；部署仍需在具备 Docker 的目标环境验证。
 - 文件存储当前用本地磁盘（`app.storage.root` 默认 `./data/files`，容器内 `/app/data/files` 挂 `file-data` 卷）。未接入 MinIO/对象存储：存储层已抽成 `FileStorage` 接口，切换时只加实现并改配置。单文件上限 50MB，Nginx 侧 `client_max_body_size 60m`，后端 `spring.servlet.multipart` 与 `app.storage.max-file-bytes` 同步。

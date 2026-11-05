@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import type { Attachment } from '../api/types'
 import { downloadAttachment, fetchAttachmentBlob, previewKind } from '../utils/attachment'
 import type { PreviewKind } from '../utils/attachment'
+import { renderMarkdown } from '../utils/markdown'
 
 const props = defineProps<{ modelValue: boolean; attachment: Attachment | null }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void }>()
@@ -20,6 +21,7 @@ const tooLarge = ref(false)
 const kind = ref<PreviewKind>('none')
 const blobUrl = ref('')
 const text = ref('')
+const markdownHtml = ref('')
 const docxHost = ref<HTMLElement | null>(null)
 const sheets = ref<{ name: string; rows: string[][] }[]>([])
 const activeSheet = ref('0')
@@ -47,7 +49,9 @@ async function load(file: Attachment) {
     } else if (kind.value === 'text') {
       const content = await blob.text()
       if (token !== loadToken) return
-      text.value = content.slice(0, MAX_TEXT)
+      const sliced = content.slice(0, MAX_TEXT)
+      if (file.originalName.toLowerCase().endsWith('.md')) markdownHtml.value = describeAttachmentRefs(renderMarkdown(sliced))
+      else text.value = sliced
     } else if (kind.value === 'docx') {
       await nextTick()
       const { renderAsync } = await import('docx-preview')
@@ -92,6 +96,7 @@ function cleanup() {
   if (blobUrl.value) URL.revokeObjectURL(blobUrl.value)
   blobUrl.value = ''
   text.value = ''
+  markdownHtml.value = ''
   error.value = ''
   tooLarge.value = false
   sheets.value = []
@@ -115,6 +120,25 @@ function sanitizeLinks(host: HTMLElement) {
   })
 }
 
+// 独立 .md 文件里的 attachment: 引用没有所属记录可解析，替换为说明文字，避免永久加载或假链接
+function describeAttachmentRefs(html: string): string {
+  const template = document.createElement('template')
+  template.innerHTML = html
+  // 倒序即子节点先于父节点处理，嵌套引用不会被父节点替换时连带丢弃
+  const refs = Array.from(template.content.querySelectorAll('.md-image, .md-file')).reverse()
+  refs.forEach(node => {
+    const dataName = node.getAttribute('data-name')?.trim()
+    // .md-image 的文本是加载占位，不能当作名称
+    const fallback = node.classList.contains('md-file') ? node.textContent?.trim() : ''
+    const name = dataName || fallback || '附件'
+    const note = document.createElement('span')
+    note.className = 'md-image-state'
+    note.textContent = `${name}（附件需在原记录中查看）`
+    node.replaceWith(note)
+  })
+  return template.innerHTML
+}
+
 onBeforeUnmount(cleanup)
 
 async function save() {
@@ -136,12 +160,14 @@ watch(
 </script>
 
 <template>
-  <el-dialog v-model="visible" :title="attachment?.title || '文件预览'" width="900px" top="5vh" destroy-on-close @closed="cleanup">
+  <el-dialog v-model="visible" :title="attachment?.title || '文件预览'" width="900px" destroy-on-close @closed="cleanup">
     <div v-loading="loading" class="preview-body">
       <el-alert v-if="error" :title="error" type="error" :closable="false" />
       <el-alert v-else-if="tooLarge" type="warning" :closable="false" title="文件较大，在线预览可能卡顿甚至卡死页面" description="建议下载后用本地软件打开；下面的「下载原文件」可直接保存。" />
       <img v-else-if="kind === 'image'" :src="blobUrl" class="preview-image" :alt="attachment?.originalName" />
       <iframe v-else-if="kind === 'pdf'" :src="blobUrl" class="preview-frame" :title="attachment?.originalName" />
+      <!-- eslint-disable-next-line vue/no-v-html -- renderMarkdown 使用 html:false 转义全部用户 HTML，链接协议也由 markdown-it 校验 -->
+      <div v-else-if="kind === 'text' && markdownHtml" class="markdown-body" v-html="markdownHtml" />
       <pre v-else-if="kind === 'text'" class="preview-text">{{ text }}</pre>
       <div v-else-if="kind === 'docx'" ref="docxHost" class="preview-docx" />
       <template v-else-if="kind === 'xlsx'">
@@ -170,7 +196,8 @@ watch(
 </template>
 
 <style scoped>
-.preview-body { height: 68vh; overflow: auto; }
+/* 预留弹窗头部、底部与内边距，使外层弹窗正文不再出现第二层滚动 */
+.preview-body { height: max(160px, min(68vh, calc(100dvh - 200px))); overflow: auto; }
 .preview-image { display: block; max-width: 100%; margin: 0 auto; }
 .preview-frame { width: 100%; height: 100%; border: 1px solid var(--line); border-radius: 8px; }
 .preview-text { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.7; }

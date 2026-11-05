@@ -55,7 +55,8 @@ public class ProjectService {
                 LEFT JOIN project_members pm ON pm.project_id=p.id AND pm.project_role='PM'
                 LEFT JOIN users manager ON manager.id=pm.user_id
                 """ + filter + " ORDER BY p.status,p.created_at DESC,p.id DESC LIMIT :offset,:size", params);
-        rows.forEach(this::decorateProject);
+        Map<Long, Long> emptyModules = emptyModuleCounts(rows.stream().map(row -> number(row.get("id"))).toList());
+        rows.forEach(row -> decorateProject(row, emptyModules.getOrDefault(number(row.get("id")), 0L)));
         return new PageResponse<>(rows, total, page, size);
     }
 
@@ -94,14 +95,15 @@ public class ProjectService {
     public Map<String, Object> timeline(long projectId) {
         permissions.requireProjectRead(projectId);
         Map<String, Object> project = projectDetail(projectId);
-        List<Map<String, Object>> modules = db.list("SELECT m.id,m.name,m.description,m.owner_id,u.name owner_name,m.sort_order FROM modules m JOIN users u ON u.id=m.owner_id WHERE m.project_id=:project ORDER BY m.sort_order,m.id", Map.of("project", projectId));
+        List<Map<String, Object>> modules = db.list("SELECT m.id,m.project_id,m.name,m.description,m.owner_id,u.name owner_name,m.sort_order FROM modules m JOIN users u ON u.id=m.owner_id WHERE m.project_id=:project ORDER BY m.sort_order,m.id", Map.of("project", projectId));
         List<Map<String, Object>> nodes = db.list("""
-                SELECT n.*,u.name owner_name,
+                SELECT m.owner_id module_owner_id,n.*,u.name owner_name,
                        (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id) total_tasks,
                        (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id AND t.status='DONE') done_tasks,
                        (SELECT COUNT(*) FROM node_deliverables d WHERE d.node_id=n.id) deliverable_total,
                        (SELECT COUNT(*) FROM node_deliverables d WHERE d.node_id=n.id AND d.status='PROVIDED') deliverable_provided
-                FROM nodes n JOIN users u ON u.id=n.owner_id WHERE n.project_id=:project ORDER BY n.plan_start,n.sort_order,n.id
+                FROM nodes n LEFT JOIN modules m ON m.id=n.module_id AND m.project_id=n.project_id
+                LEFT JOIN users u ON u.id=n.owner_id WHERE n.project_id=:project ORDER BY n.plan_start,n.sort_order,n.id
                 """, Map.of("project", projectId));
         nodes.forEach(this::decorateNode);
         for (Map<String, Object> module : modules) {
@@ -287,27 +289,48 @@ public class ProjectService {
 
     private Map<String, Object> projectDetail(long id) {
         Map<String, Object> row = db.one("SELECT p.*,u.name creator_name FROM projects p LEFT JOIN users u ON u.id=p.created_by WHERE p.id=:id", Map.of("id", id), "项目不存在");
-        decorateProject(row); return row;
+        decorateProject(row, emptyModuleCounts(List.of(id)).getOrDefault(id, 0L)); return row;
     }
 
-    private void decorateProject(Map<String, Object> project) {
+    /** 一次查询取多个项目的空模块数（没有未取消工作项的模块），避免项目列表逐行查询。 */
+    private Map<Long, Long> emptyModuleCounts(List<Long> projectIds) {
+        Map<Long, Long> counts = new HashMap<>();
+        if (projectIds.isEmpty()) return counts;
+        db.list("""
+                SELECT m.project_id,COUNT(*) empty_modules FROM modules m
+                WHERE m.project_id IN (:projects)
+                  AND NOT EXISTS(SELECT 1 FROM nodes n WHERE n.module_id=m.id AND n.status<>'CANCELLED')
+                GROUP BY m.project_id
+                """, Map.of("projects", projectIds))
+                .forEach(row -> counts.put(number(row.get("projectId")), number(row.get("emptyModules"))));
+        return counts;
+    }
+
+    private void decorateProject(Map<String, Object> project, long emptyModules) {
         List<Map<String, Object>> nodes = db.list("""
-                SELECT n.status,n.plan_end,n.blocked,
+                SELECT n.status,n.plan_end,n.blocked,n.owner_id,
                        (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id) total_tasks,
                        (SELECT COUNT(*) FROM tasks t WHERE t.node_id=n.id AND t.status='DONE') done_tasks
                 FROM nodes n WHERE n.project_id=:project
                 """, Map.of("project", project.get("id")));
-        int total = nodes.size(), done = 0, inProgress = 0, overdue = 0, blocked = 0, near = 0, progressSum = 0, active = 0;
+        int done = 0, inProgress = 0, overdue = 0, blocked = 0, near = 0, progressSum = 0, active = 0, unscheduled = 0, unassigned = 0;
         for (Map<String, Object> node : nodes) {
             String status = Objects.toString(node.get("status"));
+            boolean open = Set.of("NOT_STARTED", "IN_PROGRESS").contains(status);
             if ("DONE".equals(status)) done++; if ("IN_PROGRESS".equals(status)) inProgress++;
             Map<String, Boolean> flags = flags(status, (LocalDate) node.get("planEnd"), truthy(node.get("blocked")));
             if (flags.get("overdue")) overdue++; if (flags.get("near")) near++;
-            if (Set.of("NOT_STARTED", "IN_PROGRESS").contains(status) && flags.get("blocked")) blocked++;
+            if (open && flags.get("blocked")) blocked++;
+            if (open && node.get("planEnd") == null) unscheduled++;
+            if (open && node.get("ownerId") == null) unassigned++;
             if (!"CANCELLED".equals(status)) { progressSum += nodeProgress(node); active++; }
         }
         project.put("progress", ProgressRules.aggregate(active, progressSum, done));
-        project.put("stats", Map.of("total", active, "done", done, "inProgress", inProgress, "overdue", overdue, "blocked", blocked, "near", near));
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("total", active); stats.put("done", done); stats.put("inProgress", inProgress);
+        stats.put("overdue", overdue); stats.put("blocked", blocked); stats.put("near", near);
+        stats.put("unscheduled", unscheduled); stats.put("unassigned", unassigned); stats.put("emptyModules", emptyModules);
+        project.put("stats", stats);
     }
 
     private void decorateModule(Map<String, Object> module) {
@@ -333,6 +356,8 @@ public class ProjectService {
     public void decorateNode(Map<String, Object> node) {
         node.put("flags", flags(Objects.toString(node.get("status")), (LocalDate) node.get("planEnd"), truthy(node.get("blocked"))));
         node.put("progress", nodeProgress(node));
+        node.put("historical", truthy(node.get("historical")));
+        node.put("planningStatus", node.get("planEnd") == null ? "UNSCHEDULED" : "SCHEDULED");
     }
 
     /** Compatibility progress field now expresses delivered versus not delivered. */

@@ -105,6 +105,7 @@ CREATE TABLE modules (
 -- 5. 工作项（原“节点”；模块内交付单元，也可为项目级）
 --    状态 4 态；受阻/延期为可叠加标记。
 --    延期与临近到期按状态、计划结束日和业务日期计算，不保存过期布尔值。
+--    V17 起计划日期与负责人可空（待排期/待分配），两端日期都有时仍须有序；historical 标记补录的历史工作项。
 -- ------------------------------------------------------------
 CREATE TABLE nodes (
   id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -113,16 +114,17 @@ CREATE TABLE nodes (
   type          ENUM('FEATURE','TEST','MAINTENANCE','BUGFIX','OTHER') NOT NULL DEFAULT 'FEATURE' COMMENT '工作项类型',
   name          VARCHAR(200) NOT NULL,
   description   TEXT NULL,
-  plan_start    DATE NOT NULL,
-  plan_end      DATE NOT NULL,
+  plan_start    DATE NULL COMMENT '计划开始日期；可空表示待排期',
+  plan_end      DATE NULL COMMENT '计划完成日期；可空表示待排期',
   actual_start  DATE NULL,
   actual_end    DATE NULL,
   status        ENUM('NOT_STARTED','IN_PROGRESS','DONE','CANCELLED') NOT NULL DEFAULT 'NOT_STARTED',
+  historical    TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否为补录的历史工作项',
   progress      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '已弃用（V7 起）：工作项进度由任务完成率派生，不再读写该列',
   blocked       TINYINT(1) NOT NULL DEFAULT 0,
   blocked_reason TEXT NULL,
   overdue_reason TEXT NULL,
-  owner_id      BIGINT UNSIGNED NOT NULL COMMENT '工作项负责人（默认继承模块负责人）',
+  owner_id      BIGINT UNSIGNED NULL COMMENT '工作项负责人；可空表示未指派',
   sort_order    INT NOT NULL DEFAULT 0,
   created_by    BIGINT UNSIGNED NULL,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

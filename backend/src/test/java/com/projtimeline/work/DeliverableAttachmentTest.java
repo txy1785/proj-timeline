@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.*;
 class DeliverableAttachmentTest {
     /** 交付要求只能在「未开始」时约定与增删，清单用例先建这个未开始的工作项。 */
     private static final long NOT_STARTED_NODE = 105;
+    private static final String REASON_REQUIRED = "工作项已开始，调整交付要求必须填写变更原因";
     private UxDatabaseFixture f;
     @BeforeEach void setup(){f=new UxDatabaseFixture();}
     @AfterEach void clear(){SecurityContextHolder.clearContext();}
@@ -211,33 +212,110 @@ class DeliverableAttachmentTest {
         assertThat(f.work.deliverables(((Number)f.work.createNode(10,withoutRequirements()).get("id")).longValue())).isEmpty();
     }
 
-    /** ②③ 进行中改名、改派（以及改排序）一律 409，名单与归属保持不变。 */
-    @Test void startedWorkItemRejectsRenamingReassigningAndReordering(){
+    /** ②③ 进行中改名、改派（以及改排序）未填变更原因一律 409，名单与归属保持不变。 */
+    @Test void startedWorkItemRejectsRenamingReassigningAndReorderingWithoutReason(){
         f.login(3,"USER");
         long node=notStartedNode();
         long id=id(f.work.createDeliverable(node,Map.of("name","接口文档","ownerId",3L)));
         f.work.changeNodeStatus(node,"IN_PROGRESS");
         assertThatThrownBy(()->f.work.updateDeliverable(id,Map.of("name","接口文档 v2")))
-                .isInstanceOf(BusinessException.class).hasMessage("工作项已开始，交付要求只能更新状态、备注和关联文件");
-        // 负责人 2 是项目内有效成员：409 来自"已开始"规则而不是负责人参数校验
+                .isInstanceOf(BusinessException.class).hasMessage(REASON_REQUIRED);
+        // 负责人 2 是项目内有效成员：409 来自"缺少变更原因"而不是负责人参数校验
         assertThatThrownBy(()->f.work.updateDeliverable(id,Map.of("ownerId",2L)))
-                .isInstanceOf(BusinessException.class).hasMessage("工作项已开始，交付要求只能更新状态、备注和关联文件");
-        assertThatThrownBy(()->f.work.updateDeliverable(id,Map.of("sortOrder",7)))
-                .isInstanceOf(BusinessException.class).hasMessage("工作项已开始，交付要求只能更新状态、备注和关联文件");
+                .isInstanceOf(BusinessException.class).hasMessage(REASON_REQUIRED);
+        assertThatThrownBy(()->f.work.updateDeliverable(id,Map.of("sortOrder",7,"changeReason","   ")))
+                .isInstanceOf(BusinessException.class).hasMessage(REASON_REQUIRED);
         assertThat(f.work.deliverables(node).get(0))
                 .containsEntry("name","接口文档").containsEntry("ownerId",3L).containsEntry("sortOrder",0);
     }
 
-    /** ④⑤ 进行中不能追加、不能删除交付要求。 */
-    @Test void startedWorkItemRejectsAddingAndDeletingRequirements(){
+    /** ④⑤ 进行中未填变更原因不能追加、不能删除交付要求。 */
+    @Test void startedWorkItemRejectsAddingAndDeletingRequirementsWithoutReason(){
         f.login(3,"USER");
         long node=notStartedNode();
         long id=id(f.work.createDeliverable(node,Map.of("name","交付物")));
         f.work.changeNodeStatus(node,"IN_PROGRESS");
         assertThatThrownBy(()->f.work.createDeliverable(node,Map.of("name","开工后追加")))
-                .isInstanceOf(BusinessException.class).hasMessage("工作项已开始，不能新增交付要求");
+                .isInstanceOf(BusinessException.class).hasMessage(REASON_REQUIRED);
         assertThatThrownBy(()->f.work.deleteDeliverable(id))
-                .isInstanceOf(BusinessException.class).hasMessage("工作项已开始，不能删除交付要求");
+                .isInstanceOf(BusinessException.class).hasMessage(REASON_REQUIRED);
+        assertThatThrownBy(()->f.work.deleteDeliverable(id," "))
+                .isInstanceOf(BusinessException.class).hasMessage(REASON_REQUIRED);
+        assertThat(f.work.deliverables(node)).hasSize(1);
+    }
+
+    /** 开工时把整份交付要求记成基线：每条带名称、状态、负责人、备注、排序与关联文件。 */
+    @Test void startingWorkItemLogsFullRequirementBaseline(){
+        f.login(3,"USER");
+        long node=notStartedNode();
+        long file=f.nodeAttachment(node,10,"接口文档 v1","api.pdf");
+        long first=id(f.work.createDeliverable(node,Map.of("name","接口文档","ownerId",3L,"remark","共享盘","attachmentIds",List.of(file))));
+        long second=id(f.work.createDeliverable(node,Map.of("name","联调记录")));
+        f.work.changeNodeStatus(node,"IN_PROGRESS");
+        Map<String,Object> started=latestLog(node,"STATUS_CHANGE");
+        assertThat(value(started,"beforeValue")).containsEntry("status","NOT_STARTED");
+        Map<String,Object> after=value(started,"afterValue");
+        assertThat(after).containsEntry("status","IN_PROGRESS");
+        List<Map<String,Object>> baseline=asList(after.get("requirements"));
+        assertThat(baseline).hasSize(2);
+        assertSnapshot(baseline.get(0),first,"接口文档","WANTED",3L,"共享盘",0,List.of(file));
+        assertSnapshot(baseline.get(1),second,"联调记录","WANTED",null,null,1,List.of());
+        // 完成不是约定生效点，不重复写基线
+        f.work.changeNodeStatus(node,"DONE","IN_PROGRESS");
+        assertThat(value(latestLog(node,"COMPLETE"),"afterValue")).doesNotContainKey("requirements");
+    }
+
+    /** 进行中带原因可改名、改派、改排序；日志前后都是完整快照并附原因。 */
+    @Test void startedWorkItemAcceptsStructuralRevisionWithReason(){
+        f.login(3,"USER");
+        long node=notStartedNode();
+        long file=f.nodeAttachment(node,10,"接口文档 v1","api.pdf");
+        long id=id(f.work.createDeliverable(node,Map.of("name","接口文档","ownerId",3L,"remark","共享盘","attachmentIds",List.of(file))));
+        f.work.changeNodeStatus(node,"IN_PROGRESS");
+        Map<String,Object> revised=f.work.updateDeliverable(id,Map.of("name","接口文档 v2","ownerId",2L,"sortOrder",7,"changeReason"," 客户追加鉴权章节 "));
+        assertThat(revised).containsEntry("name","接口文档 v2").containsEntry("ownerId",2L).containsEntry("sortOrder",7);
+        Map<String,Object> logged=latestLog(node,"DELIVERABLE_UPDATE");
+        assertSnapshot(value(logged,"beforeValue"),id,"接口文档","WANTED",3L,"共享盘",0,List.of(file));
+        Map<String,Object> after=value(logged,"afterValue");
+        assertSnapshot(after,id,"接口文档 v2","WANTED",2L,"共享盘",7,List.of(file));
+        assertThat(after).containsEntry("reason","客户追加鉴权章节");
+        assertThat(value(logged,"beforeValue")).doesNotContainKey("reason");
+    }
+
+    /** 进行中带原因可追加、删除交付要求；删除原因可选的入口在未开始时照常放行。 */
+    @Test void startedWorkItemAddsAndDeletesRequirementsWithReason(){
+        f.login(3,"USER");
+        long node=notStartedNode();
+        long draft=id(f.work.createDeliverable(node,Map.of("name","草稿项")));
+        assertThat(value(latestLog(node,"DELIVERABLE_ADD"),"afterValue")).doesNotContainKey("reason");
+        f.work.changeNodeStatus(node,"IN_PROGRESS");
+        long added=id(f.work.createDeliverable(node,Map.of("name","上线检查单","ownerId",2L,"changeReason","运维要求补检查单")));
+        Map<String,Object> addLog=latestLog(node,"DELIVERABLE_ADD");
+        assertThat(addLog.get("beforeValue")).isNull();
+        Map<String,Object> addAfter=value(addLog,"afterValue");
+        assertSnapshot(addAfter,added,"上线检查单","WANTED",2L,null,1,List.of());
+        assertThat(addAfter).containsEntry("reason","运维要求补检查单");
+        f.work.deleteDeliverable(draft,"需求合并到上线检查单");
+        Map<String,Object> deleteLog=latestLog(node,"DELIVERABLE_DELETE");
+        assertSnapshot(value(deleteLog,"beforeValue"),draft,"草稿项","WANTED",null,null,0,List.of());
+        assertThat(value(deleteLog,"afterValue")).containsEntry("reason","需求合并到上线检查单");
+        assertThat(f.work.deliverables(node)).extracting(row->String.valueOf(row.get("name"))).containsExactly("上线检查单");
+    }
+
+    /** 原因超过 500 字按 400 拒绝，且不落库。 */
+    @Test void revisionReasonLongerThan500IsRejected(){
+        f.login(3,"USER");
+        long node=notStartedNode();
+        long id=id(f.work.createDeliverable(node,Map.of("name","接口文档")));
+        f.work.changeNodeStatus(node,"IN_PROGRESS");
+        String tooLong="因".repeat(501);
+        assertThatThrownBy(()->f.work.updateDeliverable(id,Map.of("name","改名","changeReason",tooLong)))
+                .isInstanceOf(BusinessException.class).hasMessage("变更原因不能超过 500 字");
+        assertThatThrownBy(()->f.work.createDeliverable(node,Map.of("name","追加","changeReason",tooLong)))
+                .isInstanceOf(BusinessException.class).hasMessage("变更原因不能超过 500 字");
+        assertThatThrownBy(()->f.work.deleteDeliverable(id,tooLong))
+                .isInstanceOf(BusinessException.class).hasMessage("变更原因不能超过 500 字");
+        assertThat(f.work.updateDeliverable(id,Map.of("name","改名","changeReason","因".repeat(500)))).containsEntry("name","改名");
         assertThat(f.work.deliverables(node)).hasSize(1);
     }
 
@@ -302,6 +380,13 @@ class DeliverableAttachmentTest {
                 .isInstanceOf(BusinessException.class).hasMessage("工作项已完成或已取消，只能更新交付物状态");
         assertThatThrownBy(()->f.work.updateDeliverable(id,Map.of("sortOrder",5)))
                 .isInstanceOf(BusinessException.class).hasMessage("工作项已完成或已取消，只能更新交付物状态");
+        // 变更原因只放开进行中的修订，已关闭工作项带原因也不行
+        assertThatThrownBy(()->f.work.updateDeliverable(id,Map.of("name","事后改名","changeReason","补救")))
+                .isInstanceOf(BusinessException.class).hasMessage("工作项已完成或已取消，只能更新交付物状态");
+        assertThatThrownBy(()->f.work.createDeliverable(node,Map.of("name","事后追加","changeReason","补救")))
+                .isInstanceOf(BusinessException.class).hasMessage("工作项已完成或已取消，不能新增交付要求");
+        assertThatThrownBy(()->f.work.deleteDeliverable(id,"补救"))
+                .isInstanceOf(BusinessException.class).hasMessage("工作项已完成或已取消，不能删除交付要求");
         assertThat(f.work.updateDeliverable(id,Map.of("status","PROVIDED"))).containsEntry("status","PROVIDED");
         assertThat(f.work.deliverables(node).get(0))
                 .containsEntry("name","交付物").containsEntry("ownerId",3L).containsEntry("sortOrder",0);
@@ -361,5 +446,22 @@ class DeliverableAttachmentTest {
     private static List<Map<String,Object>> asList(Object value){return (List<Map<String,Object>>)value;}
     private long linkCount(long deliverableId){
         return f.jdbc.queryForObject("SELECT COUNT(*) FROM node_deliverable_attachments WHERE deliverable_id=?",Long.class,deliverableId);
+    }
+
+    /** logs() 按时间倒序且同秒按 id 倒序，第一条匹配即最新一条。 */
+    private Map<String,Object> latestLog(long node,String action){
+        return f.work.logs(node).stream().filter(row->action.equals(row.get("action"))).findFirst().orElseThrow();
+    }
+    @SuppressWarnings("unchecked")
+    private static Map<String,Object> value(Map<String,Object> log,String key){return (Map<String,Object>)log.get(key);}
+    private static Long longOrNull(Object value){return value==null?null:((Number)value).longValue();}
+
+    private static void assertSnapshot(Map<String,Object> snapshot,long id,String name,String status,Long owner,String remark,int sort,List<Long> attachmentIds){
+        assertThat(snapshot).containsKeys("deliverableId","name","status","ownerId","remark","sortOrder","attachmentIds");
+        assertThat(longOrNull(snapshot.get("deliverableId"))).isEqualTo(id);
+        assertThat(snapshot).containsEntry("name",name).containsEntry("status",status).containsEntry("remark",remark);
+        assertThat(longOrNull(snapshot.get("ownerId"))).isEqualTo(owner);
+        assertThat(((Number)snapshot.get("sortOrder")).intValue()).isEqualTo(sort);
+        assertThat(((List<?>)snapshot.get("attachmentIds")).stream().map(DeliverableAttachmentTest::longOrNull).toList()).isEqualTo(attachmentIds);
     }
 }

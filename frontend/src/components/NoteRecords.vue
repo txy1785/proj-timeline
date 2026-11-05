@@ -50,6 +50,12 @@ const pending = computed(() => !!props.busy || saving.value || deleting.value > 
 const hasDraft = props.draft.hasDraft
 /** 切换新建/编辑或换记录时重建编辑器，复位源码模式与「本次上传」chips。 */
 const editorKey = computed(() => `note-editor-${props.ownerType}-${props.ownerId}-${draft.editingId ?? 'new'}`)
+/** 名称输入框隐藏 .md 后缀；保存时仍由 markdownFileName 统一补齐。与原名仅差后缀时保留原名，避免误判为已修改。 */
+const stripMd = (value: string) => value.replace(/\.md$/i, '')
+const titleInput = computed({
+  get: () => stripMd(draft.title),
+  set: (value: string) => { draft.title = stripMd(value) === stripMd(draft.originalTitle) ? draft.originalTitle : value }
+})
 
 async function load() {
   const current = ++generation
@@ -85,7 +91,7 @@ async function save(): Promise<boolean> {
   const content = draft.text.trim()
   if (!content) { ElMessage.warning('请先填写记录内容'); return false }
   if (content.length > 20000) { ElMessage.warning('记录不能超过 20000 字'); return false }
-  const title = markdownFileName(draft.title)
+  const title = markdownFileName(draft.title.trim() || nextTitle())
   if (title.length > 120) { ElMessage.warning('记录名称不能超过 120 字（含 .md）'); return false }
   if (/[\\/:*?"<>|]/.test(title)) { ElMessage.warning('记录名称不能包含 \\ / : * ? " < > | 等文件名字符'); return false }
   saving.value = true
@@ -95,7 +101,7 @@ async function save(): Promise<boolean> {
       ElMessage.success('记录已更新')
     } else {
       await api('POST', props.listPath, { title, content })
-      ElMessage.success('进展记录已保存为 Markdown 文件')
+      ElMessage.success('进展已更新')
     }
     props.draft.reset()
     await load()
@@ -152,23 +158,22 @@ defineExpose({ save, uploading, saving, deleting, reload: load })
   <div class="note-records">
     <div v-if="canWrite || draft.editingId !== null" ref="composerRef" class="note-composer">
       <div class="note-file-row">
-        <label class="note-file-label" :for="`note-title-${ownerType}`">{{ draft.editingId ? '编辑记录' : '记录名称' }}</label>
-        <el-input :id="`note-title-${ownerType}`" v-model="draft.title" maxlength="117" placeholder="例如：设计说明.md" aria-label="进展记录名称" />
+        <label class="note-file-label" :for="`note-title-${ownerType}`">{{ draft.editingId ? '编辑记录' : '标题（可选）' }}</label>
+        <el-input :id="`note-title-${ownerType}`" v-model="titleInput" maxlength="117" :placeholder="nextTitle().replace(/\.md$/i, '')" aria-label="进展标题" />
         <span v-if="draft.editingId" class="note-editing-flag">编辑已保存记录</span>
-        <span v-else class="muted">保存为 .md</span>
       </div>
-      <MarkdownEditor :key="editorKey" v-model="draft.text" :owner-type="ownerType" :owner-id="ownerId" :category="category" :can-upload="canUpload" :disabled="saving" :attachments="attachments" aria-label="进展记录内容" placeholder="记录本次进展、问题或结果，支持 Markdown；直接粘贴截图或文件会自动上传" @uploaded="emit('uploaded', $event)" @removed="emit('removed', $event)" @uploading="uploading = $event" />
+      <MarkdownEditor :key="editorKey" v-model="draft.text" compact :owner-type="ownerType" :owner-id="ownerId" :category="category" :can-upload="canUpload" :disabled="saving" :attachments="attachments" aria-label="进展内容" placeholder="写一句本次进展、问题或结果；可直接粘贴截图或文件" @uploaded="emit('uploaded', $event)" @removed="emit('removed', $event)" @uploading="uploading = $event" />
       <div class="note-composer-actions">
-        <span class="muted">{{ draft.editingId ? '保存修改会更新原记录，并记下最后编辑时间。' : '每保存一次生成一份命名的 Markdown 记录；粘贴的文件同时出现在附件中，保存前可在编辑区下方移除。' }}</span>
+        <span class="muted">{{ draft.editingId ? '保存后更新原记录，并记下最后编辑时间。' : '标题默认按日期自动生成，可不填。' }}</span>
         <div class="note-composer-buttons">
           <el-button v-if="draft.editingId" :disabled="pending" @click="cancelEdit">取消编辑</el-button>
-          <el-button type="primary" :loading="saving" :disabled="(pending && !saving) || (draft.editingId !== null && !hasDraft)" @click="save">{{ draft.editingId ? '保存修改' : '保存记录' }}</el-button>
+          <el-button type="primary" :loading="saving" :disabled="(pending && !saving) || (draft.editingId !== null && !hasDraft)" @click="save">{{ draft.editingId ? '保存' : '更新进展' }}</el-button>
         </div>
       </div>
     </div>
     <div v-else-if="draft.text.trim()" class="note-composer"><p class="muted">{{ readOnlyHint }}未保存的草稿仍保留在这里，可复制后保存到其他位置。</p><el-input :model-value="draft.text" type="textarea" :rows="4" readonly aria-label="未保存的记录草稿" /></div>
     <el-alert v-if="loadError" :title="`记录暂时无法加载：${loadError}`" type="error" :closable="false" />
-    <div v-else-if="!notes.length" class="empty">暂无记录<template v-if="canWrite">，可写一份 Markdown 记录补充进展或处理结果。</template></div>
+    <div v-else-if="!notes.length" class="empty">暂无记录<template v-if="canWrite">，在上方写一句进展即可更新。</template></div>
     <article v-for="note in notes" :key="note.id" class="task-note">
       <div class="note-meta">
         <span class="note-file">📄 {{ note.title || '进展记录.md' }}</span>

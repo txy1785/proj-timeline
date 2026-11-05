@@ -11,6 +11,7 @@ import { MAX_ATTACHMENT_BYTES } from '../utils/attachment'
 const MAX_LINKED_FILES = 20
 /** 列表里直接展示的文件名条数，其余折成 +N。 */
 const SHOWN_FILE_TAGS = 3
+const MAX_REASON_LENGTH = 500
 
 const props=withDefaults(defineProps<{
   nodeId:number
@@ -29,28 +30,42 @@ const fileOptions=ref<{id:number;label:string}[]>([])
 const pendingFiles=ref<File[]>([])
 const uploadProgress=ref('')
 const form=reactive({name:'',status:'WANTED' as DeliverableStatus,ownerId:undefined as number|undefined,remark:'',attachmentIds:[] as number[]})
+const changeReason=ref('')
+/** 删除失败时保留已填原因，重试同一项时回填。 */
+const deleteDraft=reactive({id:0,reason:''})
 
 const total=computed(()=>props.items.length)
 const provided=computed(()=>props.items.filter(item=>item.status==='PROVIDED').length)
 const providedPercent=computed(()=>total.value?Math.round(provided.value/total.value*100):0)
-/** 三档锁：未开始全可改；进行中只能改状态/备注/关联文件；已完成或已取消只能改状态。 */
+/** 三档锁：未开始全可改；进行中结构调整需填原因；已完成或已取消只能改状态。 */
 const started=computed(()=>props.nodeStatus==='IN_PROGRESS')
 const closed=computed(()=>props.nodeStatus==='DONE'||props.nodeStatus==='CANCELLED')
-const canCreate=computed(()=>props.canManage&&!props.archived&&props.nodeStatus==='NOT_STARTED')
+const canCreate=computed(()=>props.canManage&&!props.archived&&!closed.value)
 const canEdit=computed(()=>props.canManage&&!props.archived)
-const canDelete=computed(()=>props.canManage&&!props.archived&&props.nodeStatus==='NOT_STARTED')
+const canDelete=computed(()=>props.canManage&&!props.archived&&!closed.value)
 const memberOptions=computed(()=>selectableMembers(props.members))
 const editing=computed(()=>props.items.find(item=>item.id===editingId.value))
-/** 名称与负责人是发布时的约定，工作项一开始就锁定；备注在完成后才锁。 */
-const nameLocked=computed(()=>started.value||closed.value)
+const nameLocked=computed(()=>closed.value)
 const remarkLocked=computed(()=>closed.value)
 /** 已完成/已取消或归档时文件只读，但状态仍可改。 */
 const fileLocked=computed(()=>closed.value||props.archived)
-/** 空表文案：归档时先说明只读；否则未开始可直接新增，进行中与已结束都不允许新增，进行中额外说明原因。 */
+function memberName(id:number|undefined|null){return id?memberOptions.value.find(user=>user.id===id)?.name||`#${id}`:'未指定'}
+/** 进行中的结构变更（新增、改名、换负责人）需要留痕。 */
+const structureChanges=computed(()=>{
+  if(!started.value)return []
+  const current=editing.value
+  if(!current)return [`新增：${form.name.trim()||'（未填写名称）'}`]
+  const changes:string[]=[]
+  if(form.name.trim()!==current.name)changes.push(`名称：${current.name} → ${form.name.trim()||'（空）'}`)
+  if((form.ownerId??null)!==(current.ownerId??null))changes.push(`负责人：${current.ownerName||'未指定'} → ${memberName(form.ownerId)}`)
+  return changes
+})
+const reasonRequired=computed(()=>structureChanges.value.length>0)
+const reasonSubmitted=ref(false)
+const reasonError=computed(()=>reasonSubmitted.value&&reasonRequired.value&&!changeReason.value.trim()?'请填写调整原因':'')
 const emptyText=computed(()=>{
   if(props.archived)return '项目已归档，交付要求只读'
   if(closed.value)return '本工作项没有交付要求'
-  if(started.value)return '本工作项没有交付要求；工作项已开始，不能再新增'
   return '尚未约定交付资料，可直接在下方上传文件'
 })
 
@@ -86,6 +101,8 @@ async function loadFiles(){
 function openCreate(){
   editingId.value=0
   Object.assign(form,{name:'',status:'WANTED',ownerId:undefined,remark:'',attachmentIds:[]})
+  changeReason.value=''
+  reasonSubmitted.value=false
   pendingFiles.value=[]
   uploadProgress.value=''
   dialog.value=true
@@ -95,6 +112,8 @@ function openCreate(){
 function openEdit(item:Deliverable){
   editingId.value=item.id
   Object.assign(form,{name:item.name,status:item.status,ownerId:item.ownerId,remark:item.remark||'',attachmentIds:linkedFiles(item).map(file=>file.id)})
+  changeReason.value=''
+  reasonSubmitted.value=false
   pendingFiles.value=[]
   uploadProgress.value=''
   dialog.value=true
@@ -153,6 +172,8 @@ async function submit(){
   if(saving.value)return
   if(!form.name.trim()){ElMessage.warning('请填写交付物名称');return}
   if(form.attachmentIds.length+pendingFiles.value.length>MAX_LINKED_FILES){ElMessage.warning(`一条交付记录最多关联 ${MAX_LINKED_FILES} 个文件`);return}
+  const reason=changeReason.value.trim()
+  if(reasonRequired.value&&!reason){reasonSubmitted.value=true;ElMessage.warning('请填写调整原因');return}
   saving.value=true
   try{
     // 全部新文件上传成功后再提交交付物，失败时弹窗保持打开可继续重试
@@ -160,22 +181,49 @@ async function submit(){
     // 上传期间弹窗可能已被遮罩/ESC/× 关闭：关掉就不再写库
     if(!dialog.value)return
     // 编辑时显式传 null 表示清空负责人；attachmentIds 传空数组即清空关联，不传则保留原有关联
-    const payload:{name:string;status:DeliverableStatus;ownerId:number|null;remark:string;attachmentIds?:number[]}={name:form.name.trim(),status:form.status,ownerId:form.ownerId??null,remark:form.remark.trim()}
+    const payload:{name:string;status:DeliverableStatus;ownerId:number|null;remark:string;attachmentIds?:number[];changeReason?:string}={name:form.name.trim(),status:form.status,ownerId:form.ownerId??null,remark:form.remark.trim()}
     // 已完成/已取消的工作项只能改状态，不传文件关联由服务端保留原值
     if(!closed.value)payload.attachmentIds=form.attachmentIds
+    if(reasonRequired.value)payload.changeReason=reason
     if(editingId.value)await api('PUT',`/deliverables/${editingId.value}`,payload)
     else await api('POST',`/nodes/${props.nodeId}/deliverables`,payload)
     dialog.value=false
-    ElMessage.success(editingId.value?'交付物已更新':'交付物已新增')
+    ElMessage.success(editingId.value?'验收项已更新':'验收项已新增')
     emit('refresh')
   }catch(e){ElMessage.error((e as Error).message)}finally{saving.value=false;uploadProgress.value=''}
 }
 
-async function remove(item:Deliverable){
-  try{await ElMessageBox.confirm(`确认删除交付物「${item.name}」？关联文件不会被删除。`,'删除交付物',{type:'warning'})}catch{return}
+/** 进行中删除需填原因并留痕；失败时保留原因便于重试。 */
+async function askDeleteReason(item:Deliverable):Promise<string|null>{
+  const initial=deleteDraft.id===item.id?deleteDraft.reason:''
   try{
-    await api<void>('DELETE',`/deliverables/${item.id}`)
-    ElMessage.success('交付物已删除')
+    const {value}=await ElMessageBox.prompt(`删除「${item.name}」，关联文件不会被删除。`,'删除验收项',{
+      type:'warning',inputValue:initial,inputType:'textarea',inputPlaceholder:'调整原因（必填）',
+      inputValidator:(value:string)=>{
+        const text=(value||'').trim()
+        if(!text)return '请填写调整原因'
+        return text.length<=MAX_REASON_LENGTH||`原因不超过 ${MAX_REASON_LENGTH} 字`
+      },
+    })
+    return value.trim()
+  }catch{return null}
+}
+
+async function remove(item:Deliverable){
+  let reason=''
+  if(started.value){
+    const answered=await askDeleteReason(item)
+    if(answered===null)return
+    reason=answered
+    Object.assign(deleteDraft,{id:item.id,reason})
+  }else{
+    try{await ElMessageBox.confirm(`确认删除「${item.name}」？关联文件不会被删除。`,'删除验收项',{type:'warning'})}catch{return}
+  }
+  try{
+    if(reason)await api<void>('DELETE',`/deliverables/${item.id}`,undefined,{reason})
+    else await api<void>('DELETE',`/deliverables/${item.id}`)
+    Object.assign(deleteDraft,{id:0,reason:''})
+    ElMessage.success('验收项已删除')
     emit('refresh')
   }catch(e){ElMessage.error((e as Error).message)}
 }
@@ -184,14 +232,13 @@ async function remove(item:Deliverable){
   <div class="deliverable-panel">
     <div class="deliverable-head">
       <div>
-        <h2>交付要求</h2>
-        <p class="muted">工作项发布时约定的交付内容；工作项开始后只能更新状态、备注与关联文件。一条要求可关联本工作项的多个文件，也可在弹窗里直接上传；资料数量不换算成功能进度。</p>
-        <p v-if="started&&!archived" class="muted lock-hint">工作项进行中：不能新增或删除交付要求，名称与负责人已锁定。</p>
-        <p v-else-if="closed&&!archived" class="muted lock-hint">工作项已完成或已取消：只能更新交付物状态，关联文件只读。</p>
+        <h2>验收清单</h2>
+        <p v-if="started&&!archived" class="muted">进行中：新增、删除、改名或换负责人需填写调整原因。</p>
+        <p v-else-if="closed&&!archived" class="muted">已结束：只能更新状态。</p>
       </div>
       <div class="deliverable-actions">
         <el-tag :type="total&&provided===total?'success':'info'">已提供 {{provided}}/{{total}}</el-tag>
-        <el-button v-if="canCreate" type="primary" plain @click="openCreate">新增交付要求</el-button>
+        <el-button v-if="canCreate" type="primary" plain @click="openCreate">新增验收项</el-button>
       </div>
     </div>
     <el-progress v-if="total" :percentage="providedPercent" :stroke-width="8" :show-text="false" style="margin:0 0 12px" />
@@ -226,9 +273,8 @@ async function remove(item:Deliverable){
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="dialog" :title="editingId?'编辑交付物':'新增交付物'" width="560" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
-      <el-alert v-if="closed" title="工作项已完成或已取消，只能修改交付物状态" type="info" :closable="false" style="margin-bottom:14px" />
-      <el-alert v-else-if="started" title="工作项进行中：只能修改状态、备注与关联文件，名称与负责人不可改" type="info" :closable="false" style="margin-bottom:14px" />
+    <el-dialog v-model="dialog" :title="editingId?'编辑验收项':'新增验收项'" width="560" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
+      <el-alert v-if="closed" title="工作项已结束，只能修改状态" type="info" :closable="false" style="margin-bottom:14px" />
       <el-form label-position="top">
         <el-form-item label="交付物名称" required>
           <el-input v-model="form.name" maxlength="200" :disabled="nameLocked" placeholder="例如：接口文档 v1、联调记录、测试报告" />
@@ -264,6 +310,14 @@ async function remove(item:Deliverable){
         <el-form-item label="备注">
           <el-input v-model="form.remark" type="textarea" maxlength="500" :disabled="remarkLocked" placeholder="资料位置、版本说明或注意事项" />
         </el-form-item>
+        <template v-if="reasonRequired">
+          <ul class="change-summary">
+            <li v-for="change in structureChanges" :key="change">{{ change }}</li>
+          </ul>
+          <el-form-item label="调整原因" required :error="reasonError">
+            <el-input v-model="changeReason" type="textarea" :maxlength="MAX_REASON_LENGTH" show-word-limit :disabled="saving" placeholder="将记入变更记录，例如：客户追加要求" />
+          </el-form-item>
+        </template>
       </el-form>
       <template #footer>
         <span v-if="uploadProgress" class="muted upload-progress">{{ uploadProgress }}</span>
@@ -276,8 +330,8 @@ async function remove(item:Deliverable){
 <style scoped>
 .deliverable-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
 .deliverable-head h2{margin:0 0 4px}
+.deliverable-head h2:only-child{margin-bottom:14px}
 .deliverable-head p{margin:0 0 14px;font-size:13px}
-.lock-hint{margin-top:-8px}
 .deliverable-actions{display:flex;align-items:center;gap:10px;flex:none}
 .linked-files{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .linked-file{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border:1px solid var(--line);border-radius:6px;background:#f8fafc;font-size:12px;overflow-wrap:anywhere}
@@ -285,4 +339,5 @@ async function remove(item:Deliverable){
 .upload-progress{margin-right:12px;font-size:13px}
 .pending-files{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;width:100%}
 .pending-file{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--line);border-radius:6px;font-size:12px}
+.change-summary{margin:0 0 10px;padding:8px 12px 8px 28px;border:1px solid var(--line);border-radius:6px;background:#f8fafc;font-size:13px;overflow-wrap:anywhere}
 </style>
