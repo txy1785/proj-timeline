@@ -164,7 +164,7 @@ defineExpose({ save, uploading, saving, deleting, reload: load })
       </div>
       <MarkdownEditor :key="editorKey" v-model="draft.text" compact :owner-type="ownerType" :owner-id="ownerId" :category="category" :can-upload="canUpload" :disabled="saving" :attachments="attachments" aria-label="进展内容" placeholder="写一句本次进展、问题或结果；可直接粘贴截图或文件" @uploaded="emit('uploaded', $event)" @removed="emit('removed', $event)" @uploading="uploading = $event" />
       <div class="note-composer-actions">
-        <span class="muted">{{ draft.editingId ? '保存后更新原记录，并记下最后编辑时间。' : '标题默认按日期自动生成，可不填。' }}</span>
+
         <div class="note-composer-buttons">
           <el-button v-if="draft.editingId" :disabled="pending" @click="cancelEdit">取消编辑</el-button>
           <el-button type="primary" :loading="saving" :disabled="(pending && !saving) || (draft.editingId !== null && !hasDraft)" @click="save">{{ draft.editingId ? '保存' : '更新进展' }}</el-button>
@@ -173,7 +173,7 @@ defineExpose({ save, uploading, saving, deleting, reload: load })
     </div>
     <div v-else-if="draft.text.trim()" class="note-composer"><p class="muted">{{ readOnlyHint }}未保存的草稿仍保留在这里，可复制后保存到其他位置。</p><el-input :model-value="draft.text" type="textarea" :rows="4" readonly aria-label="未保存的记录草稿" /></div>
     <el-alert v-if="loadError" :title="`记录暂时无法加载：${loadError}`" type="error" :closable="false" />
-    <div v-else-if="!notes.length" class="empty">暂无记录<template v-if="canWrite">，在上方写一句进展即可更新。</template></div>
+    <div v-else-if="!notes.length" class="empty">暂无记录</div>
     <article v-for="note in notes" :key="note.id" class="task-note">
       <div class="note-meta">
         <span class="note-file">📄 {{ note.title || '进展记录.md' }}</span>
@@ -193,7 +193,7 @@ defineExpose({ save, uploading, saving, deleting, reload: load })
 .note-composer{margin:8px 0 22px}.note-file-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
 .note-file-label{font-size:14px;color:var(--muted);flex:none}.note-file-row .el-input{flex:1 1 240px;max-width:380px}
 .note-editing-flag{font-size:12px;color:var(--blue);background:#eef3fe;padding:1px 8px;border-radius:10px}
-.note-composer-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:10px}.note-composer-actions .muted{font-size:12px}
+.note-composer-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap;margin-top:10px}
 .note-composer-buttons{display:flex;align-items:center;gap:8px}
 .task-note{padding:18px 0;border-bottom:1px solid var(--line)}.note-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:14px}.note-meta time{color:var(--muted)}
 .note-edited{font-size:13px;color:var(--blue)}

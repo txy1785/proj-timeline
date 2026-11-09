@@ -401,7 +401,7 @@ onBeforeUnmount(() => { window.removeEventListener('beforeunload', onBeforeUnloa
   <div v-loading="loading">
     <el-alert v-if="error" :title="error" type="error" :closable="false"><el-button link type="primary" @click="refresh">重新加载</el-button></el-alert>
     <template v-if="project">
-      <header class="page-head work-head"><div><h1>工作项</h1><p>明确每项交付的负责人、日期与下一步，按功能模块分组。</p></div><div class="page-actions">
+      <header class="page-head work-head"><div><h1>工作项</h1></div><div class="page-actions">
         <template v-if="!compact"><el-button @click="router.push(`/projects/${id}/modules`)">查看功能模块</el-button><el-button v-if="canReportBug" @click="bugDialog = true">报告 Bug</el-button><el-button v-if="canQuickCreate" @click="openBatch">批量录入</el-button></template>
         <el-dropdown v-else trigger="click" @command="onHeadAction"><el-button>更多</el-button><template #dropdown><el-dropdown-menu>
           <el-dropdown-item command="modules">查看功能模块</el-dropdown-item><el-dropdown-item v-if="canReportBug" command="bug">报告 Bug</el-dropdown-item><el-dropdown-item v-if="canQuickCreate" command="batch">批量录入</el-dropdown-item>

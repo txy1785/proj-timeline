@@ -354,7 +354,6 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
       </div>
       <el-form-item v-if="isLink" label="链接或仓库路径" required>
         <el-input v-model="form.link" :disabled="locked" placeholder="https://… 或 docs/design/plan.md" />
-        <p class="muted doc-tip">只保存为文本记录，系统不会访问该链接。</p>
       </el-form-item>
       <el-form-item v-else label="正文" required>
         <div v-loading="loadingBody" class="doc-editor">

@@ -18,7 +18,7 @@ const projectLevelCount = computed(() => workItemCounts(project.value?.projectWo
     <el-alert v-if="error" :title="error" type="error" :closable="false"><el-button link type="primary" @click="refresh">重新加载</el-button></el-alert>
     <template v-if="project">
       <header class="page-head">
-        <div><h1>功能模块</h1><p>按项目的功能区域组织工作。进入模块后查看小功能、负责人和过程文件。</p></div>
+        <div><h1>功能模块</h1></div>
         <div class="page-actions"><el-button v-if="isPm && active" type="primary" @click="moduleDialog = true">新建模块</el-button><RouterLink :to="`/projects/${projectId}/work-items`"><el-button>查看全部工作项</el-button></RouterLink></div>
       </header>
       <section v-if="!project.modules.length" class="surface empty">
@@ -34,7 +34,7 @@ const projectLevelCount = computed(() => workItemCounts(project.value?.projectWo
         </section>
       </div>
       <section v-if="project.projectWorkItems.length" class="surface project-level">
-        <div><h2>项目级工作项</h2><p>跨模块的测试、维护和上线保障直接归属项目。</p></div>
+        <div><h2>项目级工作项</h2></div>
         <RouterLink :to="`/projects/${projectId}/work-items?moduleId=project`">{{ projectLevelCount.done }}/{{ projectLevelCount.total }} 已交付 · 查看工作项 →</RouterLink>
       </section>
       <ModuleFormDialog v-model="moduleDialog" :project-id="projectId" :members="members" :default-owner-id="pmId" @saved="refresh" />

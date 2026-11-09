@@ -98,7 +98,7 @@ async function saved(node?:NodeItem,options?:{continue?:boolean}){await refresh(
 
 <template>
   <div>
-    <header class="page-head"><div><h1>交付排期</h1><p>对照今天的位置，看每个模块是否按计划交付。</p></div><div class="page-actions"><el-button v-if="project" :aria-expanded="targetsOpen" @click="targetsOpen=!targetsOpen">{{targetsOpen?'收起阶段目标':canManageTargets?'管理阶段目标':'查看阶段目标'}}</el-button><el-button v-if="!auth.isViewer&&project?.status==='ACTIVE'&&nodes.some(node=>node.status!=='CANCELLED')" @click="bugDialog=true">报告 Bug</el-button><el-button v-if="canCreateWorkItem" type="primary" @click="workDialog=true">新建工作项</el-button></div></header>
+    <header class="page-head"><div><h1>交付排期</h1></div><div class="page-actions"><el-button v-if="project" :aria-expanded="targetsOpen" @click="targetsOpen=!targetsOpen">{{targetsOpen?'收起阶段目标':canManageTargets?'管理阶段目标':'查看阶段目标'}}</el-button><el-button v-if="!auth.isViewer&&project?.status==='ACTIVE'&&nodes.some(node=>node.status!=='CANCELLED')" @click="bugDialog=true">报告 Bug</el-button><el-button v-if="canCreateWorkItem" type="primary" @click="workDialog=true">新建工作项</el-button></div></header>
     <div v-if="targetsOpen&&project" class="section-gap"><StageTargetsPanel :project="project" :can-manage="canManageTargets" @saved="refresh"/></div>
     <ProgressSummary v-if="nodes.length" class="section-gap" :progress="progress" :project-id="id" :today="businessDate"/>
     <section class="surface schedule-surface">
@@ -116,7 +116,7 @@ async function saved(node?:NodeItem,options?:{continue?:boolean}){await refresh(
         </div>
       </div>
       <div v-if="!nodes.length" class="empty"><h2>还没有安排交付工作</h2><p>先建立工作项，再查看每项工作的排期。</p><el-button v-if="canCreateWorkItem" type="primary" @click="workDialog=true">建立首个工作项</el-button><RouterLink :to="'/projects/'+id+'/overview'"><el-button>返回项目概览</el-button></RouterLink></div>
-      <p class="muted schedule-footnote">计划条覆盖开始与结束两日：灰色未开始、蓝色进行中、绿色已交付、红色已过计划完成日仍未交付。延期不会自动延长计划。</p>
+
     </section>
     <BugReportDialog v-model="bugDialog" :project-id="id" @saved="refresh"/>
     <WorkItemFormDialog v-model="workDialog" :project-id="id" :members="members" :modules="allowedModules" :can-create-project-level="isPm" :business-date="businessDate" :default-owner-id="pmId" :default-plan-start="project?.planStart" @saved="saved"/>
@@ -142,6 +142,6 @@ async function saved(node?:NodeItem,options?:{continue?:boolean}){await refresh(
 .goal-marker{position:absolute;z-index:2;color:var(--blue);font-size:12px}.goal-symbol{position:absolute;left:-5px;top:0}.goal-caption{margin-left:10px;white-space:nowrap;display:block;max-width:235px;overflow:hidden;text-overflow:ellipsis}.goal-caption.before{margin-left:0;transform:translateX(calc(-100% - 10px))}
 .outside-range{position:absolute;left:14px;top:24px;font-size:12px;color:var(--muted)}
 .schedule-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px}.schedule-legend>span{display:flex;gap:5px;align-items:center}.schedule-legend i{height:10px;width:10px;display:inline-block;border-radius:50%;background:#b5bfce}.schedule-legend .in-progress{background:var(--blue)}.schedule-legend .done{background:#218262}
-.schedule-footnote{font-size:12px;margin:16px 0 0}
+
 @media(max-width:600px){.schedule-surface{padding:12px}.schedule-scroll{max-height:65vh}}
 </style>

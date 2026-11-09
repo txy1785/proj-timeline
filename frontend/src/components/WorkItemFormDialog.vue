@@ -339,7 +339,7 @@ async function save(continueNext = false) {
             <el-date-picker v-model="form.actualEnd" value-format="YYYY-MM-DD" :disabled-date="isAfterBusinessDate" placeholder="选择日期" style="width:100%" />
           </el-form-item>
         </div>
-        <small class="field-hint historical-hint">实际完成日期用于周报归周；原计划日期未填写时保持未知，不会用实际日期补齐。</small>
+        <details class="context-help historical-help"><summary>历史日期说明</summary><p>实际完成日期用于周报归周；未知的计划日期请留空。</p></details>
       </template>
       <el-form-item label="所属位置">
         <el-select v-if="chooseLocation" :model-value="location < 0 ? undefined : location" placeholder="选择功能模块或项目级位置" style="width:100%" @update:model-value="location = Number($event)" @change="changeLocation">
@@ -347,7 +347,7 @@ async function save(continueNext = false) {
           <el-option v-if="projectLevelAllowed" label="项目级工作项" :value="0" />
         </el-select>
         <el-input v-else :model-value="locationName" disabled />
-        <small class="field-hint">{{ form.id ? '已有工作项的所属位置保持不变。' : '功能工作选择功能模块；跨模块测试、维护和上线保障选择项目级工作项。' }}</small>
+
       </el-form-item>
       <el-form-item label="说明"><el-input v-model="form.description" type="textarea" :rows="3" placeholder="补充交付范围或验收说明（可选）" /></el-form-item>
       <el-form-item label="负责人" :required="historicalMode && form.status === 'IN_PROGRESS'" :error="ownerError">
@@ -386,10 +386,10 @@ async function save(continueNext = false) {
 </template>
 
 <style scoped>
-.field-hint{display:block;width:100%;margin-top:6px;line-height:1.6;color:var(--muted)}
+
 .draft-alert{margin-bottom:16px}
 .draft-time{margin:0 0 8px}
-.historical-hint{margin:-8px 0 18px}
+.historical-help{margin:-8px 0 18px}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .requirement-rows{display:grid;gap:8px;width:100%}
 .requirement-row{display:flex;align-items:flex-start;gap:8px}

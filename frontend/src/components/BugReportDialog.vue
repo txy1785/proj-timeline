@@ -77,7 +77,7 @@ function openSubmitted() {
 
 <template>
   <el-dialog :model-value="modelValue" :title="receipt ? 'Bug已报告' : '报告 Bug'" width="min(620px, calc(100vw - 28px))" :before-close="requestClose" :close-on-click-modal="false" :show-close="!saving" :close-on-press-escape="!saving" @update:model-value="emit('update:modelValue', $event)">
-    <template v-if="receipt"><el-result icon="success" title="Bug已报告" :sub-title="`已关联「${receipt.routedNodeName}」${receipt.assigneeName ? '，由' + receipt.assigneeName + '处理。' : '。'}`" /><p class="muted">可继续补充复现截图、修复记录与验证资料。</p></template>
+    <template v-if="receipt"><el-result icon="success" title="Bug已报告" :sub-title="`已关联「${receipt.routedNodeName}」${receipt.assigneeName ? '，由' + receipt.assigneeName + '处理。' : '。'}`" /></template>
     <el-form v-else label-position="top" :disabled="saving" @submit.prevent="submit">
       <el-form-item label="Bug标题" required><el-input v-model="form.name" maxlength="200" placeholder="一句话说明出现的问题" /></el-form-item>
       <el-form-item label="关联功能" required><el-input v-if="nodeId" :model-value="related?.name || routing?.nodeName || '正在读取关联功能'" readonly /><el-select v-else :model-value="form.relatedNodeId || undefined" filterable placeholder="选择出现问题的工作项" style="width:100%" @update:model-value="form.relatedNodeId = Number($event)" @change="refreshRouting"><el-option v-for="item in workItems" :key="item.id" :value="item.id" :label="`${item.moduleName || '项目级'} / ${item.name} · ${NODE_STATUS_LABELS[item.status]}`" /></el-select><small v-if="listError" class="error-text">工作项读取失败：{{ listError }}</small></el-form-item>

@@ -194,3 +194,9 @@ a:focus-visible,button:focus-visible,.el-button:focus-visible,.el-link:focus-vis
   /* Element Plus 仅在有默认插槽时渲染 span，无 span 即纯图标按钮 */
   .el-button:not(:has(> span)) { min-width:44px; }
 }
+
+/* Low-frequency help stays available without competing with work content. */
+.context-help { font-size:13px; color:var(--muted); }
+.context-help > summary { width:fit-content; max-width:100%; cursor:pointer; padding:4px 0; }
+.context-help > p { margin:6px 0 0; line-height:1.6; }
+@media(max-width:600px) { .context-help > summary { min-height:44px; padding:12px 0; line-height:20px; } }

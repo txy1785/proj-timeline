@@ -64,7 +64,7 @@ onMounted(()=>{void Promise.all([loadList(),loadManagement(),loadProjects()])})
 
 <template>
  <div>
-  <header class="page-head"><div><h1>我的工作</h1><p>推进负责的功能交付，跟进待处理 Bug。</p></div><el-button @click="updated">刷新</el-button></header>
+  <header class="page-head"><div><h1>我的工作</h1></div><el-button @click="updated">刷新</el-button></header>
   <div v-if="data&&tab!=='management'&&!isHistory" class="count-strip"><span><strong>{{data.counts.open}}</strong>{{isDelivery?'项待交付':'个待处理 Bug'}}</span><span><strong>{{data.counts.doing}}</strong>{{isDelivery?'项进行中':'个修复中'}}</span><span class="danger"><strong>{{data.counts.overdue}}</strong>{{isDelivery?'项已延期':'个已逾期'}}</span></div>
   <el-tabs v-model="tab"><el-tab-pane label="我的工作项" name="deliveries"/><el-tab-pane label="我的 Bug" name="bugs"/><el-tab-pane v-if="hasManagement" :label="`管理事项${managementCount?' · '+managementCount:''}`" name="management"/><el-tab-pane label="历史任务" name="history"/></el-tabs>
   <section v-if="tab!=='management'" class="surface">
@@ -81,7 +81,7 @@ onMounted(()=>{void Promise.all([loadList(),loadManagement(),loadProjects()])})
     <div v-if="data&&!data.list.length&&!error" class="empty"><h2>{{filtered?'当前筛选下没有结果':isHistory?'暂无历史任务':isDelivery?(scope==='OPEN'?'当前没有你负责的待交付工作项':scope==='DONE'?'暂无已交付工作项':'暂无工作项记录'):(scope==='OPEN'?'当前没有分配给你的待处理 Bug':scope==='DONE'?'暂无已解决 Bug':'暂无 Bug 记录')}}</h2><p v-if="managementCount">另有 {{managementCount}} 项管理事项待查看。</p><p v-else-if="!filtered">可以进入项目查看交付安排与资料。</p><el-button v-if="filtered" @click="clearFilters">清除筛选</el-button><el-button v-if="managementCount" type="primary" @click="tab='management'">查看管理事项</el-button><RouterLink to="/projects"><el-button>查看项目</el-button></RouterLink></div>
     <el-pagination v-if="data&&data.total>20" v-model:current-page="page" :page-size="20" :total="data.total" layout="prev,pager,next,total" @current-change="loadList"/>
    </div>
-   <p v-if="data?.list.length" class="muted list-hint">{{isDelivery?'工作项是一次功能交付。点击名称查看功能说明、交付资料与关联 Bug。':isHistory?'已有说明、记录和附件均保留；历史任务不参与新的交付完成率。':'Bug 独立跟踪修复；关联功能已交付后仍可按权限继续处理。'}}</p>
+
   </section>
   <template v-else>
         <el-alert v-if="managementError" :title="managementError" type="error" :closable="false"><el-button @click="loadManagement">重试</el-button></el-alert>

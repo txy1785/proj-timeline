@@ -176,7 +176,7 @@ async function openWorkItem() {
       <template v-else-if="task && node">
         <div class="task-meta"><el-tag :type="TASK_STATUS_TYPES[task.status]">{{ stateLabel }}</el-tag><span>{{ isBug ? '负责人' : '执行人' }} {{ task.assigneeName }}</span><span>截止 {{ task.dueDate || '未设置' }}</span></div>
         <el-alert v-if="archived" title="项目已归档，任务、记录与附件只读" type="info" :closable="false" />
-        <el-alert v-else-if="isBug && origin?.status === 'DONE'" title="关联功能已交付，此Bug仍可继续修复；原交付记录保持不变。" type="info" :closable="false" /><el-alert v-else-if="origin?.status === 'CANCELLED' || (!isBug && isNodeClosed(node))" title="关联工作项已关闭，内容和状态不可修改；记录与附件仍按原有权限处理。" type="info" :closable="false" />
+        <el-alert v-else-if="origin?.status === 'CANCELLED' || (!isBug && isNodeClosed(node))" title="关联工作项已关闭，内容和状态不可修改；记录与附件仍按原有权限处理。" type="info" :closable="false" />
         <div v-if="canChangeStatus || canEdit" class="task-detail-actions">
           <el-button v-if="canChangeStatus && nextAction" type="primary" :loading="savingStatus" :disabled="pending && !savingStatus" @click="changeStatus(nextAction.next)">{{ isBug ? nextAction.label : task.status === 'DOING' ? '标记完成' : task.status === 'TODO' ? '开始任务' : '重新开始' }}</el-button>
           <el-button v-if="canEdit" :disabled="pending" @click="openEdit">{{ isBug ? '编辑Bug' : '编辑任务' }}</el-button>
@@ -190,7 +190,7 @@ async function openWorkItem() {
             <el-alert v-if="filesError" class="files-warning" title="附件列表暂时无法加载，记录中的图片和文件链接可能显示为已删除；请稍后重新打开。" type="warning" :closable="false" />
             <NoteRecords ref="records" owner-type="TASK" :owner-id="task.id" :draft="noteDraft" :busy="savingStatus" :list-path="`/tasks/${task.id}/notes`" item-path="/task-notes" category="TASK_RECORD" :title-prefix="isBug ? '修复记录' : '进展记录'" :attachments="attachments" :can-write="canAct" :can-upload="canAct && !archived" :can-manage="canManageNote" read-only-hint="当前任务不可写入。" @uploaded="onUploaded" @removed="onAttachmentRemoved" @count="noteCount = $event" />
           </el-tab-pane>
-          <el-tab-pane label="附件" name="files" lazy><AttachmentPanel :key="`${task.id}-${filesVersion}`" owner-type="TASK" :owner-id="task.id" :can-manage="canAct" :archived="archived" :show-category-nav="false" :hint="isBug ? '上传复现截图、修复说明与验证资料；进展记录里粘贴的文件也会出现在这里。' : '历史任务的交付物与参考资料；进展记录里粘贴的文件也会出现在这里。'" /></el-tab-pane>
+          <el-tab-pane label="附件" name="files" lazy><AttachmentPanel :key="`${task.id}-${filesVersion}`" owner-type="TASK" :owner-id="task.id" :can-manage="canAct" :archived="archived" :show-category-nav="false" /></el-tab-pane>
         </el-tabs>
         <div class="task-detail-parent"><span class="muted">{{ isBug ? '关联功能' : '所属工作项' }}</span><el-button link type="primary" @click="openWorkItem">{{ origin?.name || node.name }} →</el-button></div>
         <TaskFormDialog v-model="editing" :node-id="node.id" :task="task" :members="members" :default-owner-id="node.ownerId || undefined" :work-items="relatedWorkItems" @saved="afterEdit" />
