@@ -54,7 +54,7 @@ async function readAll(){
 onMounted(load)
 </script>
 <template>
-  <div><header class="page-head"><div><h1>通知中心</h1><p>查看分配给你的工作、项目风险、周报和模块变更提醒。</p></div><el-button :loading="busy" :disabled="!data?.list.length" @click="readAll">全部标为已读</el-button></header>
+  <div><header class="page-head"><div><h1>通知中心</h1></div><el-button :loading="busy" :disabled="!data?.list.length" @click="readAll">全部标为已读</el-button></header>
     <section class="surface"><el-alert v-if="error" :title="error" type="error" :closable="false"><el-button @click="load">重试</el-button></el-alert><el-skeleton v-if="loading&&!data" :rows="6" animated/>
       <div v-else v-loading="loading">
         <div v-if="data?.list.length" class="notification-filters"><el-select v-model="typeFilter" clearable placeholder="全部类型" aria-label="按类型筛选当前页"><el-option v-for="type in pageTypes" :key="type" :label="notificationLabel(type)" :value="type"/></el-select><el-checkbox v-model="unreadOnly">只看未读</el-checkbox><el-input v-model="keyword" clearable placeholder="搜索项目名、标题或内容" aria-label="在当前页搜索"/><span class="muted">当前页筛选：仅作用于本页已加载的 {{data.list.length}} 条，不含其他页<template v-if="hasFilter">，匹配 {{visible.length}} 条</template></span></div>

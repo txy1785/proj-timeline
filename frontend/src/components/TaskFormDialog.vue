@@ -93,7 +93,7 @@ async function save() {
 
 <template>
   <el-dialog :model-value="modelValue" :title="isBug ? '编辑Bug' : task ? '编辑任务' : '新建任务'" width="min(600px, calc(100vw - 28px))" :before-close="requestClose" :close-on-click-modal="false" @update:model-value="emit('update:modelValue', $event)">
-    <p class="muted task-form-context">{{ isBug ? '独立跟踪问题修复，关联功能和Bug类型保持不变。' : '保留历史任务信息；补充信息可以稍后完善。' }}</p>
+
     <el-form label-position="top" :disabled="saving" @submit.prevent="save">
       <el-form-item :label="isBug ? 'Bug标题' : '任务名称'" required>
         <el-input v-model="form.name" maxlength="200" placeholder="例如：验证库存不足分支" />
@@ -104,7 +104,7 @@ async function save() {
             <el-option v-if="unavailableAssignee" :value="form.assigneeId" :label="`${task?.assigneeName || '原执行人'}（已不可指派）`" disabled />
             <el-option v-for="member in options" :key="member.id" :value="member.id" :label="member.name" />
           </el-select>
-          <small v-if="!task" class="muted">默认继承工作项负责人</small>
+
         </el-form-item>
         <el-form-item label="截止日期（可选）">
           <el-date-picker v-model="form.dueDate" value-format="YYYY-MM-DD" clearable placeholder="选择日期" style="width:100%" />

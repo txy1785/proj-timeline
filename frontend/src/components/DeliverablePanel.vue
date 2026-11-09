@@ -233,8 +233,8 @@ async function remove(item:Deliverable){
     <div class="deliverable-head">
       <div>
         <h2>验收清单</h2>
-        <p v-if="started&&!archived" class="muted">进行中：新增、删除、改名或换负责人需填写调整原因。</p>
-        <p v-else-if="closed&&!archived" class="muted">已结束：只能更新状态。</p>
+
+
       </div>
       <div class="deliverable-actions">
         <el-tag :type="total&&provided===total?'success':'info'">已提供 {{provided}}/{{total}}</el-tag>
@@ -298,7 +298,7 @@ async function remove(item:Deliverable){
         <el-form-item label="上传文件">
           <el-upload :auto-upload="false" multiple :show-file-list="false" :disabled="fileLocked||saving" :on-change="onFilesPicked">
             <el-button :disabled="fileLocked||saving">选择本地文件</el-button>
-            <template #tip><div class="muted upload-tip">可一次选多个文件，单个不超过 50MB；提交时先逐个上传，全部成功后再保存交付物。</div></template>
+            <template #tip><div class="muted upload-tip">可多选，单个不超过 50MB。</div></template>
           </el-upload>
           <div v-if="pendingFiles.length" class="pending-files">
             <span v-for="(file,index) in pendingFiles" :key="`${index}-${file.name}`" class="pending-file">

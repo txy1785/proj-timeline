@@ -72,11 +72,11 @@ onMounted(loadFiles)
 
 <template>
   <div v-loading="loading">
-    <header class="page-head"><div><h1>项目文档</h1><p>在一个位置查找项目、模块、功能工作项、Bug及历史任务的文件，保留来源与版本。</p></div><div v-if="canManage" class="doc-actions"><el-button type="primary" @click="openDoc('new')">新建文档</el-button><el-button @click="openDoc('link')">添加链接</el-button><el-button @click="startUpload">上传文件</el-button></div></header>
+    <header class="page-head"><div><h1>项目文档</h1></div><div v-if="canManage" class="doc-actions"><el-button type="primary" @click="openDoc('new')">新建文档</el-button><el-button @click="openDoc('link')">添加链接</el-button><el-button @click="startUpload">上传文件</el-button></div></header>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <el-tabs v-if="project" v-model="tab">
       <el-tab-pane label="全部文件" name="all"><section v-loading="filesLoading" class="surface">
-        <div class="files-toolbar"><div><h2>全项目文件 <small>{{ visibleFiles.length }}</small></h2><p class="muted">点击归属可返回对应工作位置；上传文件仍按各层负责人权限管理。</p></div><div class="file-filters"><el-input v-model="search" clearable placeholder="搜索标题、文件名或归属" aria-label="搜索文件" /><el-select v-model="sourceType" aria-label="文件来源"><el-option v-for="source in sources" :key="source.value" :label="source.label" :value="source.value" /></el-select></div></div>
+        <div class="files-toolbar"><div><h2>全项目文件 <small>{{ visibleFiles.length }}</small></h2></div><div class="file-filters"><el-input v-model="search" clearable placeholder="搜索标题、文件名或归属" aria-label="搜索文件" /><el-select v-model="sourceType" aria-label="文件来源"><el-option v-for="source in sources" :key="source.value" :label="source.label" :value="source.value" /></el-select></div></div>
         <el-alert v-if="filesError" :title="filesError" type="error" :closable="false"><el-button link type="primary" @click="loadFiles">重新加载文件</el-button></el-alert>
         <el-table v-else :data="visibleFiles" :empty-text="search || sourceType ? '当前筛选下没有文件' : '暂无文件，可在对应项目、模块、工作项或Bug中上传'">
           <el-table-column prop="title" label="标题" min-width="180"><template #default="scope">{{ scope.row.title }} <el-tag size="small" type="info">v{{ scope.row.version }}</el-tag></template></el-table-column>
@@ -90,7 +90,7 @@ onMounted(loadFiles)
         </el-table>
         <div v-if="!filesError && (search || sourceType) && !visibleFiles.length" class="clear-files"><el-button link type="primary" @click="search = ''; sourceType = ''">清除筛选</el-button></div>
       </section></el-tab-pane>
-      <el-tab-pane label="项目级文档" name="project" lazy><el-alert :title="canManage ? `当前上传位置：项目「${project.name}」。模块、工作项及Bug文件请进入对应位置上传。` : '项目级文档由项目经理上传，你可以查看和下载。'" type="info" :closable="false" class="section-gap" /><section class="surface"><AttachmentPanel ref="panelRef" owner-type="PROJECT" :owner-id="projectId" :can-manage="canManage" :archived="project.status === 'ARCHIVED'" embedded @changed="loadFiles" /></section></el-tab-pane>
+      <el-tab-pane label="项目级文档" name="project" lazy><section class="surface"><AttachmentPanel ref="panelRef" owner-type="PROJECT" :owner-id="projectId" :can-manage="canManage" :archived="project.status === 'ARCHIVED'" embedded @changed="loadFiles" /></section></el-tab-pane>
     </el-tabs>
     <AttachmentPreview v-model="previewOpen" :attachment="previewItem" />
     <ProjectDocumentDialog v-model="docOpen" :project-id="projectId" :mode="docMode" :attachment="docTarget" :can-manage="canManage" @saved="onDocSaved" />

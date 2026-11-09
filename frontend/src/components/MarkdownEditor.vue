@@ -617,11 +617,10 @@ onBeforeUnmount(() => {
       </span>
     </div>
 
-    <p v-if="!canUpload" class="md-editor-hint">{{ compact ? '需要排版时点「格式」；' : '选中文字可用工具栏排版；' }}需要手写 Markdown 时可切到「源码」。</p>
-    <p v-else-if="compact" class="md-editor-hint">可直接 Ctrl+V 粘贴截图或文件；需要排版时点「格式」。</p>
-    <p v-else class="md-editor-hint">
-      选中文字可用工具栏排版；直接 <strong>Ctrl+V 粘贴截图或文件</strong> 会自动上传并插入正文。需要手写 Markdown 时可切到「源码」。
-    </p>
+    <details class="context-help md-editor-help">
+      <summary>编辑帮助</summary>
+      <p>{{ compact ? '点「格式」展开排版工具，' : '选中文字可使用排版工具，' }}切到「源码」可直接编辑 Markdown。<template v-if="canUpload">粘贴或拖入截图、文件会立即上传并插入正文。</template></p>
+    </details>
     <p v-if="uploading" class="md-editor-uploading" role="status">正在上传 {{ uploading }} 个文件…</p>
 
     <input ref="fileInputRef" type="file" multiple class="md-editor-file" @change="onPickFiles">
@@ -665,7 +664,7 @@ onBeforeUnmount(() => {
 .md-upload-remove { border:0; background:transparent; color:var(--muted); cursor:pointer; padding:0 4px; font-size:14px; line-height:1; }
 .md-upload-remove:hover:not(:disabled) { color:var(--danger); }
 .md-upload-remove:disabled { opacity:.5; cursor:not-allowed; }
-.md-editor-hint { margin:0; padding:0 18px 10px; font-size:12px; color:var(--muted); line-height:1.6; }
+.md-editor-help { padding:0 18px 10px; }
 .md-editor-uploading { margin:0; padding:0 18px 10px; font-size:12px; color:var(--blue); }
 .md-editor-file { display:none; }
 </style>

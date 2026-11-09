@@ -58,7 +58,7 @@ async function removeModule() {
       <el-alert v-else-if="auth.isViewer" title="当前为只读观察账号，可查看工作项和下载文件。" type="info" :closable="false" class="section-gap" />
       <div v-else-if="canRequest" class="surface request-entry section-gap"><div><strong>{{ pendingRequest ? '变更申请待审批' : '需要调整这个模块？' }}</strong><p>{{ pendingRequest ? '申请通过前，模块内容保持原样。' : '可申请修改名称、描述或负责人，由项目经理审批。' }}</p></div><el-button v-if="pendingRequest" @click="router.push(`/projects/${projectId}/settings?tab=requests&requestId=${pendingRequest.id}`)">查看我的申请</el-button><el-button v-else @click="requestDialog = true">申请变更模块</el-button></div>
       <section class="section-gap">
-        <div class="section-heading"><div><h2>模块工作项</h2><p class="muted"><template v-if="module.nodes?.length">已交付 {{ deliveryCounts.done }}/{{ deliveryCounts.total }} 项功能</template><template v-else>尚未拆分工作项</template>；每项有自己的负责人和计划日期。</p></div><el-button v-if="canManage" type="primary" @click="workItemDialog = true">新建工作项</el-button></div>
+        <div class="section-heading"><div><h2>模块工作项</h2><p class="muted"><template v-if="module.nodes?.length">已交付 {{ deliveryCounts.done }}/{{ deliveryCounts.total }} 项功能</template><template v-else>尚未拆分工作项</template></p></div><el-button v-if="canManage" type="primary" @click="workItemDialog = true">新建工作项</el-button></div>
         <div v-if="module.nodes?.length" class="work-item-grid">
           <section v-for="item in module.nodes || []" :key="item.id" class="surface work-item-card" @click="openNode(item)">
             <div class="work-item-head"><h3><RouterLink :to="`/nodes/${item.id}`" @click.stop>{{ item.name }}</RouterLink></h3><el-tag size="small" :type="NODE_STATUS_TYPES[item.status]">{{ NODE_STATUS_LABELS[item.status] }}</el-tag></div>
@@ -72,7 +72,7 @@ async function removeModule() {
         </div>
         <div v-else class="surface empty module-empty"><h2>本模块还没有工作项</h2><p>建立本模块的第一个小功能，明确交付内容与负责人。</p><el-button v-if="canManage" type="primary" @click="workItemDialog = true">建立首个工作项</el-button></div>
       </section>
-      <section class="surface"><AttachmentPanel owner-type="MODULE" :owner-id="moduleId" :can-manage="canManage" :archived="!active" :show-category-nav="false" hint="本模块的设计、流程与开发过程文件。" /></section>
+      <section class="surface"><AttachmentPanel owner-type="MODULE" :owner-id="moduleId" :can-manage="canManage" :archived="!active" :show-category-nav="false" /></section>
       <ModuleFormDialog v-model="moduleDialog" :project-id="projectId" :module="module" :members="members" @saved="refresh" />
       <WorkItemFormDialog v-model="workItemDialog" :project-id="projectId" :module-id="moduleId" :modules="project?.modules" :members="members" :default-owner-id="module.ownerId" :default-plan-start="project?.planStart" :business-date="businessDate" @saved="created" />
       <ChangeRequestDialog v-model="requestDialog" :module="module" :members="members" @saved="pendingRequest = $event" />

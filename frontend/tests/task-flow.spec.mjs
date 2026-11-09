@@ -511,7 +511,7 @@ test('delivery requirements entered when publishing need a reason for structural
   // 进行中：名称与负责人仍可改，但结构调整必须填写原因
   await page.goto('/nodes/106')
   await page.getByRole('tab',{name:'交付资料',exact:true}).click()
-  await expect(panel.getByText('进行中：新增、删除、改名或换负责人需填写调整原因。',{exact:true})).toBeVisible()
+  await expect(panel.getByText('进行中：新增、删除、改名或换负责人需填写调整原因。',{exact:true})).toHaveCount(0)
   await expect(panel.getByRole('button',{name:'新增验收项',exact:true})).toBeVisible()
   await panel.getByRole('button',{name:'编辑',exact:true}).click()
   const dialog=page.getByRole('dialog',{name:'编辑验收项',exact:true})
@@ -550,7 +550,7 @@ test('delivery requirements entered when publishing need a reason for structural
   state.status='DONE'
   await page.goto('/nodes/106')
   await page.getByRole('tab',{name:'交付资料',exact:true}).click()
-  await expect(panel.getByText('已结束：只能更新状态。',{exact:true})).toBeVisible()
+  await expect(panel.getByText('已结束：只能更新状态。',{exact:true})).toHaveCount(0)
   await expect(panel.getByRole('button',{name:'新增验收项',exact:true})).toHaveCount(0)
   await expect(panel.getByRole('button',{name:'删除',exact:true})).toHaveCount(0)
   await panel.getByRole('button',{name:'编辑',exact:true}).click()
